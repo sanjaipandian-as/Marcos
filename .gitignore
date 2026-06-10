@@ -1,0 +1,10 @@
+# Repository-level ignores
+# Ignore Node.js dependencies in any package
+node_modules/
+**/node_modules/
+
+# Environment files
+.env
+*.env
+**/.env
+**/*.env
