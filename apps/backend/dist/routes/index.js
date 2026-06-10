@@ -1,0 +1,32 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const auth_routes_js_1 = __importDefault(require("./auth.routes.js"));
+const product_routes_js_1 = __importDefault(require("./product.routes.js"));
+const measurement_routes_js_1 = __importDefault(require("./measurement.routes.js"));
+const appointment_routes_js_1 = __importDefault(require("./appointment.routes.js"));
+const visit_routes_js_1 = __importDefault(require("./visit.routes.js"));
+const billing_routes_js_1 = __importDefault(require("./billing.routes.js"));
+const admin_routes_js_1 = __importDefault(require("./admin.routes.js"));
+const notification_routes_js_1 = __importDefault(require("./notification.routes.js"));
+const banner_routes_js_1 = __importDefault(require("./banner.routes.js"));
+const ticket_routes_js_1 = __importDefault(require("./ticket.routes.js"));
+const order_routes_js_1 = __importDefault(require("./order.routes.js"));
+const category_routes_js_1 = __importDefault(require("./category.routes.js"));
+const router = (0, express_1.Router)();
+router.use('/auth', auth_routes_js_1.default);
+router.use('/products', product_routes_js_1.default); // Maps both `/products` and `/cart` since they are combined
+router.use('/measurements', measurement_routes_js_1.default);
+router.use('/appointments', appointment_routes_js_1.default);
+router.use('/visits', visit_routes_js_1.default);
+router.use('/billing', billing_routes_js_1.default);
+router.use('/admin', admin_routes_js_1.default);
+router.use('/notifications', notification_routes_js_1.default);
+router.use('/banners', banner_routes_js_1.default);
+router.use('/tickets', ticket_routes_js_1.default);
+router.use('/orders', order_routes_js_1.default);
+router.use('/categories', category_routes_js_1.default);
+exports.default = router;

@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+:root {
+  --brand-50: #f0fdf4;
+  --brand-100: #dcfce7;
+  --brand-200: #bbf7d0;
+  --brand-300: #86efac;
+  --brand-400: #4ade80;
+  --brand-500: #006241;
+  --brand-600: #048b57;
+  --brand-700: #15803d;
+  --brand-800: #166534;
+  --brand-900: #14532d;
+  --brand-glow: rgba(4, 139, 87, 0.15);
+  
+  --bg-main: #f4f5f7;
+  --bg-card: #ffffff;
+  --bg-hover: #f9fafb;
+}
+
+[data-theme='ezmart'] {
+  --brand-50: #fff7ed;
+  --brand-100: #ffedd5;
+  --brand-200: #fed7aa;
+  --brand-300: #fdba74;
+  --brand-400: #fb923c;
+  --brand-500: #f97316;
+  --brand-600: #ea580c;
+  --brand-700: #c2410c;
+  --brand-800: #9a3412;
+  --brand-900: #7c2d12;
+  --brand-glow: rgba(249, 115, 22, 0.15);
+
+  --bg-main: #f5ece2;
+  --bg-card: #ffffff;
+  --bg-hover: #fefcf9;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+.transition-theme {
+  transition: background-color 0.4s ease, border-color 0.4s ease, color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}

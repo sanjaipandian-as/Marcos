@@ -1,0 +1,422 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/@prisma/client"
+}
+
+enum Role {
+  CUSTOMER
+  STAFF
+  ADMIN
+  SUPERADMIN
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  RESCHEDULED
+}
+
+enum AppointmentType {
+  MEASUREMENT
+  CONSULTATION
+  PRODUCT_SELECTION
+}
+
+enum VisitStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum BannerLocation {
+  HOME_SLIDER
+  PROMOTIONAL_SECTION
+  OFFER_SECTION
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum StockStatus {
+  IN_STOCK
+  OUT_OF_STOCK
+  LOW_STOCK
+}
+
+enum NotificationType {
+  APPOINTMENT_REMINDER
+  PROMOTIONAL_BLAST
+  ORDER_UPDATE
+}
+
+model User {
+  id                String            @id @default(uuid())
+  email             String            @unique
+  phoneNumber       String            @unique
+  passwordHash      String
+  fullName          String
+  gender            String?
+  address           String?
+  fcmToken          String?
+  role              Role              @default(CUSTOMER)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  // Loyalty & Referrals
+  pointsBalance     Int               @default(0)
+  referralCode      String            @unique
+  referredById      String?
+  referredBy        User?             @relation("UserReferrals", fields: [referredById], references: [id])
+  referrals         User[]            @relation("UserReferrals")
+  
+  // Relations
+  measurementProfiles MeasurementProfile[]
+  appointments       Appointment[]
+  visitRequests      StoreVisit[]      @relation("CustomerVisits")
+  assignedVisits     StoreVisit[]      @relation("StaffVisits")
+  orders             Order[]
+  supportTickets     SupportTicket[]
+  pointTransactions  PointTransaction[]
+  notifications      NotificationRecipient[]
+  auditLogs          AuditLog[]
+  cartItems          CartItem[]
+  favorites          Favorite[]
+  couponsUsed        UserCoupon[]
+  visitReports       VisitReport[]     @relation("StaffReports")
+}
+
+model MeasurementProfile {
+  id                String            @id @default(uuid())
+  userId            String
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profileName       String            // e.g., "Self", "Mother", "Sister"
+  
+  // Women Measurements
+  fullLength        Decimal?          @db.Decimal(5, 2)
+  shoulderWidth     Decimal?          @db.Decimal(5, 2)
+  upperChest        Decimal?          @db.Decimal(5, 2)
+  bust              Decimal?          @db.Decimal(5, 2)
+  waist             Decimal?          @db.Decimal(5, 2)
+  hip               Decimal?          @db.Decimal(5, 2)
+  armLength         Decimal?          @db.Decimal(5, 2)
+  sleeveLength      Decimal?          @db.Decimal(5, 2)
+  neck              Decimal?          @db.Decimal(5, 2)
+  seat              Decimal?          @db.Decimal(5, 2)
+  skirtLength       Decimal?          @db.Decimal(5, 2)
+  pantLength        Decimal?          @db.Decimal(5, 2)
+  
+  tailorNotes       String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  history           MeasurementHistory[]
+}
+
+model MeasurementHistory {
+  id                String            @id @default(uuid())
+  profileId         String
+  profile           MeasurementProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  changedBy         String            // Admin User ID
+  previousValues    Json              // Store snapshots of measurements changed
+  newValues         Json
+  changedAt         DateTime          @default(now())
+}
+
+model Category {
+  id                String            @id @default(uuid())
+  name              String            @unique
+  slug              String            @unique
+  order             Int               @default(0)
+  products          Product[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+}
+
+model Product {
+  id                String            @id @default(uuid())
+  name              String
+  description       String
+  price             Decimal           @db.Decimal(10, 2)
+  materialInfo      String?
+  images            String[]          // Array of verified S3/R2 URLs
+  categoryId        String
+  category          Category          @relation(fields: [categoryId], references: [id])
+  isTrending        Boolean           @default(false)
+  trendingScheduledAt DateTime?
+  
+  // Inventory tracking
+  inventoryQty      Int               @default(0)
+  stockStatus       StockStatus       @default(IN_STOCK)
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  orderItems        OrderItem[]
+  cartItems         CartItem[]
+  favorites         Favorite[]
+}
+
+model CartItem {
+  id                String            @id @default(uuid())
+  userId            String
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId         String
+  product           Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity          Int               @default(1)
+  createdAt         DateTime          @default(now())
+
+  @@unique([userId, productId])
+}
+
+model Favorite {
+  id                String            @id @default(uuid())
+  userId            String
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId         String
+  product           Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt         DateTime          @default(now())
+
+  @@unique([userId, productId])
+}
+
+model Coupon {
+  id                String            @id @default(uuid())
+  code              String            @unique
+  discountPercent   Int               @default(0)
+  discountFlat      Decimal           @default(0.00) @db.Decimal(10, 2)
+  maxDiscount       Decimal?          @db.Decimal(10, 2)
+  expiryDate        DateTime
+  isActive          Boolean           @default(true)
+  
+  // Usage tracking
+  maxUses           Int               @default(100)
+  usedCount         Int               @default(0)
+  
+  createdAt         DateTime          @default(now())
+  redemptions       UserCoupon[]
+}
+
+model UserCoupon {
+  id                String            @id @default(uuid())
+  userId            String
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  couponId          String
+  coupon            Coupon            @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  usedAt            DateTime          @default(now())
+
+  @@unique([userId, couponId])
+}
+
+model Appointment {
+  id                String            @id @default(uuid())
+  userId            String
+  user              User              @relation(fields: [userId], references: [id])
+  date              DateTime
+  timeSlot          String            // e.g., "10:00 - 11:00"
+  productType       String
+  type              AppointmentType
+  status            AppointmentStatus @default(PENDING)
+  notes             String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+}
+
+model StoreVisit {
+  id                String            @id @default(uuid())
+  customerId        String
+  customer          User              @relation("CustomerVisits", fields: [customerId], references: [id])
+  assignedStaffId   String?
+  assignedStaff     User?             @relation("StaffVisits", fields: [assignedStaffId], references: [id])
+  preferredDate     DateTime
+  confirmedDate     DateTime?
+  address           String
+  requirements      String
+  status            VisitStatus       @default(PENDING)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  report            VisitReport?
+}
+
+model VisitReport {
+  id              String            @id @default(uuid())
+  visitId         String            @unique
+  visit           StoreVisit        @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  staffId         String
+  staff           User              @relation("StaffReports", fields: [staffId], references: [id])
+  completionNotes String
+  mediaUrls       String[]          // Photo attachments taken during visit
+  createdAt       DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+}
+
+model PointTransaction {
+  id                String            @id @default(uuid())
+  userId            String
+  user              User              @relation(fields: [userId], references: [id])
+  points            Int               // Positive for earn, negative for redeem
+  reason            String            // e.g., "Purchase", "Referral", "Campaign Bonus"
+  createdAt         DateTime          @default(now())
+}
+
+model Order {
+  id                String            @id @default(uuid())
+  userId            String?           // Optional for offline guest purchases (manual sales)
+  user              User?             @relation(fields: [userId], references: [id])
+  status            OrderStatus       @default(PENDING)
+  totalAmount       Decimal           @db.Decimal(10, 2)
+  taxAmount         Decimal           @db.Decimal(10, 2)
+  discountAmount    Decimal           @default(0.00) @db.Decimal(10, 2)
+  payableAmount     Decimal           @db.Decimal(10, 2)
+  paymentMethod     String            // Cash, Online, Card
+  isOfflineSales    Boolean           @default(false)
+  invoiceNumber     String            @unique
+  
+  // Future proof gateway payment tracking
+  paymentStatus     PaymentStatus     @default(PENDING)
+  transactionId     String?           @unique
+  paymentGateway    String?           // e.g. "STRIPE", "RAZORPAY"
+  gatewayResponse   Json?             // Raw gateway response payload
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  orderItems        OrderItem[]
+  invoice           Invoice?
+}
+
+model OrderItem {
+  id                String            @id @default(uuid())
+  orderId           String
+  order             Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId         String
+  product           Product           @relation(fields: [productId], references: [id])
+  quantity          Int
+  price             Decimal           @db.Decimal(10, 2)
+}
+
+model Invoice {
+  id                String            @id @default(uuid())
+  orderId           String            @unique
+  order             Order             @relation(fields: [orderId], references: [id])
+  pdfUrl            String            // Cloud storage link
+  createdAt         DateTime          @default(now())
+}
+
+model Banner {
+  id                String            @id @default(uuid())
+  imageUrl          String
+  title             String?
+  targetUrl         String?           // Deep link or web link
+  location          BannerLocation    @default(HOME_SLIDER)
+  scheduledStart    DateTime?
+  scheduledEnd      DateTime?
+  isActive          Boolean           @default(true)
+  clicks            Int               @default(0)
+  order             Int               @default(0)
+  createdAt         DateTime          @default(now())
+}
+
+model Notification {
+  id                String            @id @default(uuid())
+  title             String
+  body              String
+  type              NotificationType
+  isScheduled       Boolean           @default(false)
+  scheduledTime     DateTime?
+  createdAt         DateTime          @default(now())
+  
+  recipients        NotificationRecipient[]
+}
+
+model NotificationRecipient {
+  id                String            @id @default(uuid())
+  notificationId    String
+  notification      Notification      @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  userId            String
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isRead            Boolean           @default(false)
+  readAt            DateTime?
+}
+
+model SupportTicket {
+  id                String            @id @default(uuid())
+  userId            String
+  user              User              @relation(fields: [userId], references: [id])
+  subject           String
+  description       String
+  status            TicketStatus      @default(OPEN)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  messages          SupportTicketMessage[]
+}
+
+model SupportTicketMessage {
+  id              String         @id @default(uuid())
+  ticketId        String
+  ticket          SupportTicket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender          String         // "ADMIN" or "CUSTOMER"
+  senderName      String
+  text            String
+  sentAt          DateTime       @default(now())
+}
+
+
+model AuditLog {
+  id                String            @id @default(uuid())
+  userId            String?           // Admin/Staff who executed the action
+  user              User?             @relation(fields: [userId], references: [id])
+  action            String            // e.g. "UPDATE_MEASUREMENT", "DELETE_PRODUCT"
+  details           Json              // Structured JSON containing a human-readable 'message' and metadata
+  ipAddress         String?
+  createdAt         DateTime          @default(now())
+}
+
+model SystemSettings {
+  id                 String   @id @default("default")
+  lowStockThreshold  Int      @default(10)
+  businessHoursStart String   @default("09:00")
+  businessHoursEnd   String   @default("18:00")
+  pointsEarnRate     Int      @default(10)
+  pointsRedeemRate   Decimal  @default(0.10) @db.Decimal(5, 2)
+  otpCooldownMinutes Int      @default(15)
+  maxOtpFailures     Int      @default(3)
+  updatedAt          DateTime @updatedAt
+}
+
+model AnalyticsEvent {
+  id        String   @id @default(uuid())
+  eventType String   // "PRODUCT_VIEW", "ADD_TO_CART", "CHECKOUT_INITIATED", "PURCHASE_COMPLETED", "CART_ABANDONED"
+  productId String?
+  userId    String?
+  createdAt DateTime @default(now())
+}
+

@@ -1,0 +1,20 @@
+{
+  "name": "marcos-platform",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/backend",
+    "apps/admin-panel",
+    "apps/mobile",
+    "packages/types"
+  ],
+  "scripts": {
+    "install:all": "npm install",
+    "dev:backend": "npm run dev --workspace=apps/backend",
+    "dev:admin": "npm run dev --workspace=apps/admin-panel",
+    "dev:mobile": "npm run start --workspace=apps/mobile"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

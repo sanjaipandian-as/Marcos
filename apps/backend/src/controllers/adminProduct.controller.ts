@@ -1,0 +1,244 @@
+import { Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
+import prisma from '../config/db.js';
+import { StockStatus } from '@prisma/client';
+
+export const productCreateSchema = z.object({
+  body: z.object({
+    name: z.string().min(1),
+    description: z.string().min(1),
+    price: z.coerce.number().positive(),
+    materialInfo: z.string().optional(),
+    images: z.array(z.string()).default([]),
+    categoryId: z.string().uuid(),
+    inventoryQty: z.coerce.number().int().nonnegative().default(0),
+  }),
+});
+
+export const productUpdateSchema = z.object({
+  body: z.object({
+    name: z.string().min(1).optional(),
+    description: z.string().min(1).optional(),
+    price: z.coerce.number().positive().optional(),
+    materialInfo: z.string().optional(),
+    images: z.array(z.string()).optional(),
+    categoryId: z.string().uuid().optional(),
+    inventoryQty: z.coerce.number().int().nonnegative().optional(),
+  }),
+});
+
+export const trendingToggleSchema = z.object({
+  body: z.object({
+    isTrending: z.boolean(),
+    trendingScheduledAt: z.string().datetime().optional().nullable(),
+  }),
+});
+
+export function computeStockStatus(qty: number): StockStatus {
+  if (qty <= 0) return 'OUT_OF_STOCK';
+  if (qty <= 10) return 'LOW_STOCK';
+  return 'IN_STOCK';
+}
+
+export class AdminProductController {
+  /**
+   * POST /admin/products
+   */
+  static async createProduct(req: Request, res: Response, next: NextFunction) {
+    const { name, description, price, materialInfo, images, categoryId, inventoryQty } = req.body;
+
+    try {
+      // Verify category exists
+      const categoryExists = await prisma.category.findUnique({ where: { id: categoryId } });
+      if (!categoryExists) {
+        return res.status(404).json({ success: false, message: 'Category not found' });
+      }
+
+      const stockStatus = computeStockStatus(inventoryQty);
+
+      const product = await prisma.product.create({
+        data: {
+          name,
+          description,
+          price,
+          materialInfo,
+          images,
+          categoryId,
+          inventoryQty,
+          stockStatus,
+        },
+      });
+
+      // Write AuditLog
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user!.id,
+          action: 'PRODUCT_CREATED',
+          ipAddress: req.ip,
+          details: {
+            message: `Product ${name} created by ${req.user!.fullName}`,
+            productId: product.id,
+            name,
+            price,
+            inventoryQty,
+          },
+        },
+      }).catch(err => console.error('Failed to write audit log:', err));
+
+      return res.status(201).json({
+        success: true,
+        message: 'Product created successfully',
+        data: product,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PUT /admin/products/:id
+   */
+  static async updateProduct(req: Request, res: Response, next: NextFunction) {
+    const { id } = req.params;
+    const { name, description, price, materialInfo, images, categoryId, inventoryQty } = req.body;
+
+    try {
+      const existingProduct = await prisma.product.findUnique({ where: { id } });
+      if (!existingProduct) {
+        return res.status(404).json({ success: false, message: 'Product not found' });
+      }
+
+      const updateData: any = {
+        name,
+        description,
+        price,
+        materialInfo,
+        images,
+        categoryId,
+        inventoryQty,
+      };
+
+      // Recalculate stockStatus if inventoryQty is provided
+      if (inventoryQty !== undefined) {
+        updateData.stockStatus = computeStockStatus(inventoryQty);
+      }
+
+      const product = await prisma.product.update({
+        where: { id },
+        data: updateData,
+      });
+
+      // Write AuditLog
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user!.id,
+          action: 'PRODUCT_UPDATED',
+          ipAddress: req.ip,
+          details: {
+            message: `Product ${product.name} updated by ${req.user!.fullName}`,
+            productId: id,
+            updates: updateData,
+          },
+        },
+      }).catch(err => console.error('Failed to write audit log:', err));
+
+      return res.status(200).json({
+        success: true,
+        message: 'Product updated successfully',
+        data: product,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * DELETE /admin/products/:id
+   */
+  static async deleteProduct(req: Request, res: Response, next: NextFunction) {
+    const { id } = req.params;
+
+    try {
+      const existingProduct = await prisma.product.findUnique({ where: { id } });
+      if (!existingProduct) {
+        return res.status(404).json({ success: false, message: 'Product not found' });
+      }
+
+      // Check for associated orders
+      const orderCount = await prisma.orderItem.count({ where: { productId: id } });
+      if (orderCount > 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot delete product because it has associated orders. Consider setting inventoryQty to 0 instead.',
+        });
+      }
+
+      await prisma.product.delete({ where: { id } });
+
+      // Write AuditLog
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user!.id,
+          action: 'PRODUCT_DELETED',
+          ipAddress: req.ip,
+          details: {
+            message: `Product ${existingProduct.name} deleted by ${req.user!.fullName}`,
+            productId: id,
+            name: existingProduct.name,
+          },
+        },
+      }).catch(err => console.error('Failed to write audit log:', err));
+
+      return res.status(200).json({
+        success: true,
+        message: 'Product deleted successfully',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PUT /admin/products/:id/trending
+   */
+  static async toggleTrending(req: Request, res: Response, next: NextFunction) {
+    const { id } = req.params;
+    const { isTrending, trendingScheduledAt } = req.body;
+
+    try {
+      const existingProduct = await prisma.product.findUnique({ where: { id } });
+      if (!existingProduct) {
+        return res.status(404).json({ success: false, message: 'Product not found' });
+      }
+
+      const product = await prisma.product.update({
+        where: { id },
+        data: {
+          isTrending,
+          trendingScheduledAt: trendingScheduledAt ? new Date(trendingScheduledAt) : null,
+        },
+      });
+
+      // Write AuditLog
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user!.id,
+          action: 'TOGGLE_TRENDING_PRODUCT',
+          details: {
+            message: `Product ${product.name} trending status set to ${isTrending} by ${req.user!.fullName}`,
+            productId: id,
+            isTrending,
+          },
+        },
+      }).catch(err => console.error('Failed to write audit log:', err));
+
+      return res.status(200).json({
+        success: true,
+        message: 'Product trending status updated successfully',
+        data: product,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+}
