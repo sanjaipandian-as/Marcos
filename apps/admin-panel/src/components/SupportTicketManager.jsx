@@ -143,20 +143,20 @@ export default function SupportTicketManager() {
 
         <div className="lg:col-span-7">
           {!selectedTicketId ? (
-            <div className="bg-white border border-slate-200/60 rounded-3xl p-20 text-center text-slate-450 shadow-premium font-extrabold text-sm">
+            <div className="bg-white border border-slate-200/60 rounded-3xl p-20 text-center text-slate-400 shadow-premium font-extrabold text-sm">
               Please select a support ticket from the list to initiate resolution chat threads.
             </div>
           ) : (
             <div className="bg-white border border-slate-200/60 rounded-3xl p-6 shadow-premium h-[600px] flex flex-col justify-between">
               
-              <div className="border-b border-slate-150 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+              <div className="border-b border-slate-200 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-brand-50 flex items-center justify-center text-brand-600 font-extrabold">
                     <User className="w-5 h-5" />
                   </div>
                   <div>
                     <h4 className="font-extrabold text-slate-800 text-sm line-clamp-1 leading-snug">{ticketDetails.subject}</h4>
-                    <p className="text-xs text-slate-450">Opened by: <span className="font-bold text-slate-600">{ticketDetails.userName}</span></p>
+                    <p className="text-xs text-slate-400">Opened by: <span className="font-bold text-slate-600">{ticketDetails.userName}</span></p>
                   </div>
                 </div>
 
@@ -179,8 +179,8 @@ export default function SupportTicketManager() {
               </div>
 
               <div className="flex-1 overflow-y-auto py-4 space-y-4 pr-1">
-                <div className="p-4 bg-slate-50/70 rounded-2xl border border-slate-100 text-sm text-slate-655 leading-relaxed">
-                  <p className="font-extrabold text-slate-750 pb-1.5 flex items-center gap-1.5">
+                <div className="p-4 bg-slate-50/70 rounded-2xl border border-slate-100 text-sm text-slate-600 leading-relaxed">
+                  <p className="font-extrabold text-slate-700 pb-1.5 flex items-center gap-1.5">
                     <AlertCircle className="w-4.5 h-4.5 text-brand-500" />
                     <span>Inquiry Description:</span>
                   </p>
@@ -216,7 +216,7 @@ export default function SupportTicketManager() {
                   value={chatMessage}
                   onChange={e => setChatMessage(e.target.value)}
                   placeholder="Type message response details..."
-                  className="flex-1 text-sm border border-slate-205 rounded-xl py-2.5 px-4 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                  className="flex-1 text-sm border border-slate-200 rounded-xl py-2.5 px-4 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
                   required
                 />
                 <button

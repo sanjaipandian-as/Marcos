@@ -8,11 +8,14 @@ import {
   Image, 
   ActivityIndicator,
   Platform,
-  Dimensions
+  Dimensions,
+  ScrollView
 } from 'react-native';
 import { useTheme } from '../../styles/ThemeContext';
 import api from '../../utils/api';
-import { ArrowLeft, Sparkles, ShoppingBag, ShoppingCart, Heart } from 'lucide-react-native';
+import { Alert } from 'react-native';
+import { ArrowLeft, Sparkles, ShoppingBag, ShoppingCart, Heart, SlidersHorizontal } from 'lucide-react-native';
+import { CustomCartAddIcon, CustomCartAddedIcon } from '../../components/CartIcons';
 
 const { width } = Dimensions.get('window');
 
@@ -22,6 +25,8 @@ export default function TrendingProductsScreen({ navigation }) {
   const [favorites, setFavorites] = useState(new Set());
   const [cartItems, setCartItems] = useState(new Set());
   const [loading, setLoading] = useState(true);
+  const [selectedTab, setSelectedTab] = useState('All'); // 'All', 'Men', 'Women', 'Kids', 'Unisex'
+  const [showCategories, setShowCategories] = useState(false);
 
   const loadTrendingData = async () => {
     try {
@@ -83,117 +88,177 @@ export default function TrendingProductsScreen({ navigation }) {
     try {
       const inCart = cartItems.has(productId);
       if (!inCart) {
-        await api.post('/products/cart', { productId, quantity: 1 });
-        setCartItems(prev => {
-          const next = new Set(prev);
-          next.add(productId);
-          return next;
-        });
+        const res = await api.post('/products/cart', { productId, quantity: 1 });
+        if (res.success) {
+          setCartItems(prev => {
+            const next = new Set(prev);
+            next.add(productId);
+            return next;
+          });
+          Alert.alert('Success', 'Added to cart successfully!');
+        }
       } else {
         navigation.navigate('Cart');
       }
     } catch (err) {
-      console.error('Error adding to cart:', err);
+      const errorMsg = err?.message || 'Unable to add item to cart. Please try again.';
+      Alert.alert('Error', errorMsg);
     }
   };
 
-  const renderProductItem = ({ item }) => (
-    <TouchableOpacity 
-      style={[styles.prodCard, shadows.premium]}
-      onPress={() => navigation.navigate('ProductDetails', { productId: item.id })}
-      activeOpacity={0.85}
-    >
-      <View style={styles.prodImageWrapper}>
-        <Image 
-          source={{ uri: (item.images && item.images[0]) || 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?q=80&w=300&auto=format&fit=crop' }} 
-          style={styles.prodImage}
-        />
-        
-        {/* Left corner Favorite Button */}
-        <TouchableOpacity 
-          style={styles.favBtn}
-          onPress={() => toggleFavorite(item.id)}
-          activeOpacity={0.7}
-        >
-          <Heart 
-            size={16} 
-            color={favorites.has(item.id) ? '#ef4444' : '#475569'} 
-            fill={favorites.has(item.id) ? '#ef4444' : 'transparent'} 
-          />
-        </TouchableOpacity>
+  const renderProductItem = ({ item }) => {
+    const isFav = favorites.has(item.id);
+    const inCart = cartItems.has(item.id);
+    const originalPrice = Number(item.price) * 1.5;
 
-        {/* Right corner Hot/Trending badge */}
-        <View style={styles.prodTag}>
-          <Sparkles size={8} color="#ffffff" style={{ marginRight: 4 }} />
-          <Text style={[styles.prodTagText, { fontFamily: fonts.bold }]}>HOT</Text>
+    return (
+      <TouchableOpacity 
+        style={[styles.prodCard, shadows.premium, { backgroundColor: theme.bg.card }]}
+        onPress={() => navigation.navigate('ProductDetails', { productId: item.id })}
+        activeOpacity={0.9}
+      >
+        <View style={styles.prodImageWrapper}>
+          <Image 
+            source={{ uri: (item.images && item.images[0]) || 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?q=80&w=300&auto=format&fit=crop' }} 
+            style={styles.prodImage}
+          />
+          
+          <TouchableOpacity 
+            style={styles.favBtn}
+            onPress={() => toggleFavorite(item.id)}
+            activeOpacity={0.7}
+          >
+            <Heart 
+              size={14} 
+              color={isFav ? '#ef4444' : '#767676'} 
+              fill={isFav ? '#ef4444' : 'transparent'} 
+            />
+          </TouchableOpacity>
+
+          <View style={[styles.newBadge, { backgroundColor: '#ef4444' }]}>
+            <Text style={[styles.newBadgeText, { fontFamily: fonts.bold }]}>HOT</Text>
+          </View>
         </View>
-      </View>
-      <View style={styles.prodInfo}>
-        <Text style={[styles.prodName, { fontFamily: fonts.semiBold }]} numberOfLines={1}>
-          {item.name}
-        </Text>
-        <Text style={[styles.prodMaterial, { fontFamily: fonts.regular }]} numberOfLines={1}>
-          {item.materialInfo || 'Premium Fabric'}
-        </Text>
-        
-        <View style={styles.priceRow}>
-          <Text style={[styles.prodPrice, { fontFamily: fonts.bold, color: '#006241' }]}>
-            ₹{Number(item.price).toLocaleString('en-IN')}
+
+        <View style={styles.prodInfo}>
+          <Text style={[styles.prodName, { fontFamily: fonts.semiBold, color: theme.text.primary }]} numberOfLines={1}>
+            {item.name}
           </Text>
           
-          <View style={styles.cardRightActions}>
+          <View style={styles.priceRow}>
+            <View style={styles.priceContainer}>
+              <Text style={[styles.prodPrice, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                ₹{Number(item.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </Text>
+              <Text style={styles.originalPriceText}>
+                ₹{originalPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </Text>
+            </View>
+            
             <TouchableOpacity 
-              style={styles.cartIconBtn} 
+              style={[
+                styles.cartIconBtn,
+                inCart
+                  ? { backgroundColor: theme.brand[500], borderWidth: 1, borderColor: theme.brand[500] }
+                  : { backgroundColor: '#ffffff', borderWidth: 1, borderColor: theme.brand[500] }
+              ]} 
               onPress={() => handleAddToCart(item.id)}
               activeOpacity={0.7}
             >
-              {cartItems.has(item.id) ? (
-                <ShoppingCart size={15} color="#006241" />
+              {inCart ? (
+                <CustomCartAddedIcon color="#ffffff" size={18} />
               ) : (
-                <ShoppingBag size={15} color="#475569" />
+                <CustomCartAddIcon color={theme.brand[500]} size={18} />
               )}
             </TouchableOpacity>
           </View>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
+
+  const filteredProducts = products.filter(product => {
+    if (selectedTab === 'All') return true;
+    if (selectedTab === 'Men') return product.targetGender === 'MEN';
+    if (selectedTab === 'Women') return product.targetGender === 'WOMEN';
+    if (selectedTab === 'Kids') return product.targetGender === 'KIDS';
+    if (selectedTab === 'Unisex') return product.targetGender === 'UNISEX';
+    return true;
+  });
 
   return (
-    <View style={[styles.container, { backgroundColor: '#ffffff' }]}>
+    <View style={[styles.container, { backgroundColor: theme.bg.main }]}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { borderColor: theme.border }]}>
         <TouchableOpacity 
-          style={styles.backBtn}
+          style={[styles.backBtn, { backgroundColor: theme.bg.card, borderColor: theme.border }]}
           onPress={() => navigation.goBack()}
           activeOpacity={0.7}
         >
-          <ArrowLeft size={22} color="#1e293b" />
+          <ArrowLeft size={22} color={theme.text.primary} />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-          <Text style={[styles.headerTitle, { fontFamily: fonts.bold }]}>
+          <Text style={[styles.headerTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
             Trending Collections
           </Text>
-          <Text style={[styles.headerSubtitle, { fontFamily: fonts.regular }]}>
+          <Text style={[styles.headerSubtitle, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
             Bespoke customer favorites & best sellers
           </Text>
         </View>
+        <TouchableOpacity 
+          style={[styles.filterSettingsBtn, { backgroundColor: showCategories ? theme.brand[500] : theme.bg.card }, shadows.premium]} 
+          activeOpacity={0.7} 
+          onPress={() => setShowCategories(v => !v)}
+        >
+          <SlidersHorizontal size={18} color={showCategories ? '#ffffff' : theme.text.primary} />
+        </TouchableOpacity>
       </View>
+
+      {/* Categories Tabs Row */}
+      {showCategories && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoriesTabsRow}>
+          {['All', 'Men', 'Women', 'Kids', 'Unisex'].map((tab) => {
+            const isActive = selectedTab === tab;
+            return (
+              <TouchableOpacity
+                key={tab}
+                style={[
+                  styles.categoryTab,
+                  isActive ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.card },
+                  shadows.premium
+                ]}
+                activeOpacity={0.8}
+                onPress={() => setSelectedTab(tab)}
+              >
+                <Text
+                  style={[
+                    styles.categoryTabText,
+                    { fontFamily: fonts.medium },
+                    isActive ? { color: '#ffffff' } : { color: theme.text.primary }
+                  ]}
+                >
+                  {tab}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
 
       {/* Product list */}
       {loading ? (
         <View style={styles.loader}>
-          <ActivityIndicator size="large" color="#006241" />
+          <ActivityIndicator size="large" color={theme.brand[500]} />
         </View>
-      ) : products.length === 0 ? (
+      ) : filteredProducts.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={[styles.emptyText, { fontFamily: fonts.medium }]}>
-            No trending products available at the moment.
+          <Text style={[styles.emptyText, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
+            No products found for this category.
           </Text>
         </View>
       ) : (
         <FlatList
-          data={products}
+          data={filteredProducts}
           renderItem={renderProductItem}
           keyExtractor={(item) => item.id}
           numColumns={2}
@@ -219,34 +284,53 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingBottom: 16,
     paddingHorizontal: 20,
-    borderBottomWidth: 0.8,
-    borderColor: '#f1f5f9',
+    borderBottomWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
   },
   backBtn: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f8fafc',
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
-    borderWidth: 0.8,
-    borderColor: '#e2e8f0',
+    marginRight: 16,
+    borderWidth: 1,
   },
   headerTitleContainer: {
     flex: 1,
   },
   headerTitle: {
-    fontSize: 20,
-    color: '#1e293b',
+    fontSize: 22,
     letterSpacing: -0.3,
   },
   headerSubtitle: {
-    fontSize: 11,
-    color: '#64748b',
+    fontSize: 12,
     marginTop: 2,
+  },
+  filterSettingsBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
+  categoriesTabsRow: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 10,
+    maxHeight: 64,
+  },
+  categoryTab: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 12,
+    height: 38,
+    justifyContent: 'center',
+  },
+  categoryTabText: {
+    fontSize: 13,
   },
   gridPadding: {
     paddingHorizontal: 20,
@@ -258,16 +342,13 @@ const styles = StyleSheet.create({
   },
   prodCard: {
     width: '48%',
-    borderRadius: 24,
-    borderWidth: 0.8,
-    borderColor: '#e2e8f0',
+    borderRadius: 20,
     overflow: 'hidden',
     marginBottom: 16,
-    backgroundColor: '#ffffff',
   },
   prodImageWrapper: {
     position: 'relative',
-    height: 170,
+    height: 160,
     width: '100%',
   },
   prodImage: {
@@ -276,80 +357,58 @@ const styles = StyleSheet.create({
   },
   favBtn: {
     position: 'absolute',
-    top: 10,
-    left: 10,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    top: 8,
+    right: 8,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
     zIndex: 5,
   },
-  prodTag: {
+  newBadge: {
     position: 'absolute',
-    top: 10,
-    right: 10,
-    backgroundColor: '#ef4444',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
+    top: 8,
+    left: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
     zIndex: 5,
   },
-  prodTagText: {
+  newBadgeText: {
     color: '#ffffff',
-    fontSize: 8,
+    fontSize: 9,
     letterSpacing: 0.5,
   },
   prodInfo: {
-    padding: 12,
-    gap: 3,
+    padding: 10,
+    gap: 4,
   },
   prodName: {
     fontSize: 13,
-    color: '#1e293b',
-  },
-  prodMaterial: {
-    fontSize: 10.5,
-    color: '#64748b',
   },
   priceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 6,
+  },
+  priceContainer: {
+    flex: 1,
   },
   prodPrice: {
-    fontSize: 13.5,
+    fontSize: 13,
   },
-  cardRightActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  fitTagContainer: {
-    backgroundColor: '#f0fdf4',
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  fitTagText: {
-    fontSize: 8.5,
-    color: '#166534',
-    textTransform: 'uppercase',
+  originalPriceText: {
+    fontSize: 10,
+    color: '#9e9e9e',
+    textDecorationLine: 'line-through',
+    marginTop: 1,
   },
   cartIconBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#f1f5f9',
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -362,6 +421,5 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     textAlign: 'center',
-    color: '#64748b',
   },
 });

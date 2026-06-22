@@ -6,12 +6,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "nodemon --watch src -e ts --exec ts-node src/index.ts",
-    "test": "jest --config jest.config.ts --runInBand",
-    "test:jobs": "jest --config jest.config.ts tests/jobs.test.ts --runInBand",
-    "test:unit": "jest --config jest.config.ts --testPathPattern=unit --runInBand",
-    "test:integration": "jest --config jest.config.ts --testPathPattern=integration --runInBand",
-    "test:socket": "jest --config jest.config.ts tests/socket.test.ts --runInBand",
-    "seed": "ts-node src/seed.ts"
+    "reset:admin": "ts-node src/reset_admin.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.500.0",

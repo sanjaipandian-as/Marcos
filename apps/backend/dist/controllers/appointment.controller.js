@@ -9,6 +9,7 @@ const db_js_1 = __importDefault(require("../config/db.js"));
 const client_1 = require("@prisma/client");
 const socket_handler_js_1 = require("../socket/socket.handler.js");
 const audit_js_1 = require("../utils/audit.js");
+const redis_js_1 = __importDefault(require("../config/redis.js"));
 exports.appointmentCreateSchema = zod_1.z.object({
     body: zod_1.z.object({
         date: zod_1.z.string().datetime(),
@@ -16,6 +17,9 @@ exports.appointmentCreateSchema = zod_1.z.object({
         productType: zod_1.z.string().min(1),
         type: zod_1.z.enum(['MEASUREMENT', 'CONSULTATION', 'PRODUCT_SELECTION']),
         notes: zod_1.z.string().optional(),
+        userId: zod_1.z.string().uuid().optional(),
+        adminOverride: zod_1.z.boolean().optional(),
+        staffId: zod_1.z.string().uuid().optional(),
     }),
 });
 exports.appointmentUpdateSchema = zod_1.z.object({
@@ -86,48 +90,84 @@ class AppointmentController {
      */
     static async createAppointment(req, res, next) {
         const user = req.user;
-        const { date, timeSlot, productType, type, notes } = req.body;
+        const { date, timeSlot, productType, type, notes, userId, adminOverride, staffId } = req.body;
+        const appointmentDate = new Date(date);
+        const lockKey = `lock:appointment:${appointmentDate.toISOString()}:${timeSlot}`;
+        let lockAcquired = false;
         try {
-            const appointmentDate = new Date(date);
-            // Check slot constraint to prevent double-booking
-            const existingAppointment = await db_js_1.default.appointment.findFirst({
+            const settings = await db_js_1.default.systemSettings.findUnique({ where: { id: 'default' } });
+            const maxSlots = settings?.maxBookingsPerSlot || 5;
+            const bypassLimits = adminOverride && (user.role === client_1.Role.ADMIN || user.role === client_1.Role.SUPERADMIN || user.role === client_1.Role.STAFF);
+            if (!bypassLimits) {
+                // Acquire Redis lock
+                for (let attempt = 0; attempt < 5; attempt++) {
+                    const resLock = await redis_js_1.default.set(lockKey, 'locked', 'PX', 3000, 'NX');
+                    if (resLock === 'OK') {
+                        lockAcquired = true;
+                        break;
+                    }
+                    await new Promise((resolve) => setTimeout(resolve, 50 + Math.random() * 100));
+                }
+                if (!lockAcquired) {
+                    return res.status(429).json({
+                        success: false,
+                        message: 'Too many concurrent booking requests for this slot. Please try again.',
+                    });
+                }
+            }
+            // Check slot constraint to allow up to 5 bookings per slot
+            const slotCount = await db_js_1.default.appointment.count({
                 where: {
                     date: appointmentDate,
                     timeSlot,
                     status: { in: ['PENDING', 'CONFIRMED'] },
                 },
             });
-            if (existingAppointment) {
+            if (slotCount >= maxSlots && !bypassLimits) {
+                if (lockAcquired)
+                    await redis_js_1.default.del(lockKey);
                 return res.status(409).json({
                     success: false,
-                    message: 'The requested appointment slot is already booked. Please choose another time.',
+                    message: `The requested appointment slot is fully booked (maximum ${maxSlots} bookings). Please choose another time.`,
                 });
+            }
+            let targetUserId = user.id;
+            if (user.role !== client_1.Role.CUSTOMER) {
+                targetUserId = userId || null;
             }
             const appointment = await db_js_1.default.appointment.create({
                 data: {
-                    userId: user.id,
+                    userId: targetUserId,
                     date: appointmentDate,
                     timeSlot,
                     productType,
                     type: type,
                     notes,
+                    assignedStaffId: staffId,
                 },
-                include: { user: { select: { fullName: true, email: true } } },
+                include: { user: { select: { fullName: true, email: true } }, assignedStaff: { select: { fullName: true } } },
             });
+            if (lockAcquired) {
+                await redis_js_1.default.del(lockKey);
+            }
             // Broadcast appointment:created event to admins
             const io = (0, socket_handler_js_1.getIO)();
             if (io) {
                 io.to('admins').emit('appointment:created', {
                     id: appointment.id,
-                    customerName: appointment.user.fullName,
+                    customerName: appointment.user ? appointment.user.fullName : 'Walk-In Customer',
                     date: appointment.date,
                     timeSlot: appointment.timeSlot,
                     type: appointment.type,
+                    assignedStaff: appointment.assignedStaff ? appointment.assignedStaff.fullName : null,
                 });
             }
             return res.status(201).json({ success: true, data: appointment });
         }
         catch (error) {
+            if (lockAcquired) {
+                await redis_js_1.default.del(lockKey).catch(() => { });
+            }
             next(error);
         }
     }
@@ -138,6 +178,8 @@ class AppointmentController {
         const user = req.user;
         const { id } = req.params;
         const { date, timeSlot, status, notes } = req.body;
+        let lockKey = null;
+        let lockAcquired = false;
         try {
             const appointment = await db_js_1.default.appointment.findUnique({
                 where: { id },
@@ -161,11 +203,27 @@ class AppointmentController {
                     });
                 }
             }
-            // Check double-booking slot constraints if changing date/time
+            // Check double-booking slot constraints if changing date/time (allow up to 5)
             if (date || timeSlot) {
                 const checkDate = date ? new Date(date) : appointment.date;
                 const checkSlot = timeSlot || appointment.timeSlot;
-                const conflict = await db_js_1.default.appointment.findFirst({
+                lockKey = `lock:appointment:${new Date(checkDate).toISOString()}:${checkSlot}`;
+                // Acquire Redis lock
+                for (let attempt = 0; attempt < 5; attempt++) {
+                    const resLock = await redis_js_1.default.set(lockKey, 'locked', 'PX', 3000, 'NX');
+                    if (resLock === 'OK') {
+                        lockAcquired = true;
+                        break;
+                    }
+                    await new Promise((resolve) => setTimeout(resolve, 50 + Math.random() * 100));
+                }
+                if (!lockAcquired) {
+                    return res.status(429).json({
+                        success: false,
+                        message: 'Too many concurrent booking requests for this slot. Please try again.',
+                    });
+                }
+                const slotCount = await db_js_1.default.appointment.count({
                     where: {
                         id: { not: id },
                         date: checkDate,
@@ -173,10 +231,14 @@ class AppointmentController {
                         status: { in: ['PENDING', 'CONFIRMED'] },
                     },
                 });
-                if (conflict) {
+                const settings = await db_js_1.default.systemSettings.findUnique({ where: { id: 'default' } });
+                const maxSlots = settings?.maxBookingsPerSlot || 5;
+                if (slotCount >= maxSlots) {
+                    if (lockAcquired)
+                        await redis_js_1.default.del(lockKey);
                     return res.status(409).json({
                         success: false,
-                        message: 'Slot conflict: The updated time slot is already booked.',
+                        message: `Slot conflict: The updated time slot is fully booked (maximum ${maxSlots} bookings).`,
                     });
                 }
             }
@@ -189,6 +251,9 @@ class AppointmentController {
                     ...(notes !== undefined && { notes }),
                 },
             });
+            if (lockAcquired && lockKey) {
+                await redis_js_1.default.del(lockKey);
+            }
             if ((status === 'CANCELLED' || status === client_1.AppointmentStatus.CANCELLED) && user.role !== client_1.Role.CUSTOMER) {
                 await (0, audit_js_1.createAuditLog)({
                     userId: user.id,
@@ -205,6 +270,9 @@ class AppointmentController {
             return res.status(200).json({ success: true, data: updated });
         }
         catch (error) {
+            if (lockAcquired && lockKey) {
+                await redis_js_1.default.del(lockKey).catch(() => { });
+            }
             next(error);
         }
     }

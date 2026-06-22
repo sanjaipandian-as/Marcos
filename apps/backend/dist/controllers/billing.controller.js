@@ -12,9 +12,11 @@ const product_controller_js_1 = require("./product.controller.js");
 const socket_handler_js_1 = require("../socket/socket.handler.js");
 const crypto_1 = __importDefault(require("crypto"));
 const audit_js_1 = require("../utils/audit.js");
+const redis_js_1 = __importDefault(require("../config/redis.js"));
 exports.invoiceCreateSchema = zod_1.z.object({
     body: zod_1.z.object({
         userId: zod_1.z.string().uuid().optional(), // optional for guest checkout
+        customerName: zod_1.z.string().optional(), // optional guest name
         items: zod_1.z.array(zod_1.z.object({
             productId: zod_1.z.string().uuid(),
             quantity: zod_1.z.coerce.number().int().min(1),
@@ -23,6 +25,13 @@ exports.invoiceCreateSchema = zod_1.z.object({
         discountAmount: zod_1.z.coerce.number().nonnegative().default(0),
         paymentMethod: zod_1.z.enum(['CASH', 'CARD', 'ONLINE']),
         isOfflineSales: zod_1.z.boolean().default(true),
+        status: zod_1.z.enum(['PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED']).optional(),
+        isQuickOrder: zod_1.z.boolean().optional(),
+        quickOrderReason: zod_1.z.string().optional(),
+        quickOrderExpectedDate: zod_1.z.string().optional(),
+    }).refine(data => !data.isQuickOrder || (data.quickOrderReason && data.quickOrderReason.trim().length > 0), {
+        message: "Reason is required for quick orders",
+        path: ["quickOrderReason"]
     }),
 });
 class BillingController {
@@ -31,7 +40,7 @@ class BillingController {
      * Creates an Order, adjusts inventory, and queues BullMQ background tasks.
      */
     static async createInvoice(req, res, next) {
-        const { userId, items, discountAmount, paymentMethod, isOfflineSales } = req.body;
+        const { userId, customerName, items, discountAmount, paymentMethod, isOfflineSales, status, isQuickOrder, quickOrderReason, quickOrderExpectedDate } = req.body;
         try {
             // 1. Process inventory adjust and Order insertion inside a database transaction
             const order = await db_js_1.default.$transaction(async (tx) => {
@@ -41,18 +50,33 @@ class BillingController {
                     if (!product) {
                         throw new Error(`Product ${item.productId} not found`);
                     }
-                    if (product.inventoryQty < item.quantity) {
-                        throw new Error(`Insufficient inventory for ${product.name}. Required: ${item.quantity}, Available: ${product.inventoryQty}`);
-                    }
-                    // Adjust Inventory
-                    const newQty = product.inventoryQty - item.quantity;
-                    await tx.product.update({
-                        where: { id: item.productId },
+                    // Atomic conditional update to prevent concurrent double-booking race conditions
+                    const updateResult = await tx.product.updateMany({
+                        where: {
+                            id: item.productId,
+                            inventoryQty: { gte: item.quantity },
+                        },
                         data: {
-                            inventoryQty: newQty,
-                            stockStatus: (0, product_controller_js_1.computeStockStatus)(newQty),
+                            inventoryQty: { decrement: item.quantity },
+                            salesCount: { increment: item.quantity },
                         },
                     });
+                    if (updateResult.count === 0) {
+                        throw new Error(`Insufficient inventory for ${product.name}. Required: ${item.quantity}, Available: ${product.inventoryQty}`);
+                    }
+                    // Fetch the updated inventory value to set stock status
+                    const updatedProduct = await tx.product.findUnique({
+                        where: { id: item.productId },
+                        select: { inventoryQty: true },
+                    });
+                    if (updatedProduct) {
+                        await tx.product.update({
+                            where: { id: item.productId },
+                            data: {
+                                stockStatus: (0, product_controller_js_1.computeStockStatus)(updatedProduct.inventoryQty),
+                            },
+                        });
+                    }
                     subtotal += Number(item.price) * item.quantity;
                 }
                 // Calculations
@@ -60,12 +84,12 @@ class BillingController {
                 const taxAmount = (subtotal - discountAmount) * taxRate;
                 const totalAmount = subtotal;
                 const payableAmount = (subtotal - discountAmount) + taxAmount;
-                const invoiceNumber = `INV-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+                const invoiceNumber = `INV-${Date.now()}-${crypto_1.default.randomUUID().substring(0, 8).toUpperCase()}`;
                 // Create Order
                 const newOrder = await tx.order.create({
                     data: {
                         userId,
-                        status: 'PAID', // mark as PAID since invoice is generated
+                        status: status || 'PAID', // use provided status or default to PAID
                         paymentStatus: 'COMPLETED',
                         totalAmount,
                         taxAmount,
@@ -74,14 +98,20 @@ class BillingController {
                         paymentMethod,
                         isOfflineSales,
                         invoiceNumber,
+                        gatewayResponse: customerName ? { guestCustomerName: customerName } : undefined,
+                        isQuickOrder: isQuickOrder || false,
+                        quickOrderReason: isQuickOrder ? quickOrderReason : null,
+                        quickOrderExpectedDate: isQuickOrder && quickOrderExpectedDate ? new Date(quickOrderExpectedDate) : null,
+                        quickOrderStatus: isQuickOrder ? 'PENDING' : null,
                     },
                     include: {
                         orderItems: true,
                     },
                 });
                 // Insert Order Items
+                const insertedItems = [];
                 for (const item of items) {
-                    await tx.orderItem.create({
+                    const oi = await tx.orderItem.create({
                         data: {
                             orderId: newOrder.id,
                             productId: item.productId,
@@ -89,7 +119,9 @@ class BillingController {
                             price: item.price,
                         },
                     });
+                    insertedItems.push(oi);
                 }
+                newOrder.orderItems = insertedItems;
                 return newOrder;
             });
             // Log ORDER_CREATED
@@ -241,6 +273,10 @@ class BillingController {
                 where: { id: orderId },
             });
             if (order) {
+                // Idempotency guard: skip if order is already PAID to prevent duplicate processing
+                if (order.paymentStatus === 'COMPLETED' || order.status === 'PAID') {
+                    return res.status(200).json({ success: true, message: 'Webhook already processed (idempotent)' });
+                }
                 const updatedOrder = await db_js_1.default.order.update({
                     where: { id: orderId },
                     data: {
@@ -251,6 +287,11 @@ class BillingController {
                         gatewayResponse: payloadJson,
                     },
                 });
+                // Invalidate admin cache
+                await redis_js_1.default.keys('cache:admin:*').then(keys => {
+                    if (keys.length > 0)
+                        return redis_js_1.default.del(...keys);
+                }).catch(err => console.error('Failed to invalidate admin cache:', err));
                 // 3. Queue jobs
                 await jobs_producer_js_1.default.queueInvoicePdf(order.id);
                 if (order.userId) {

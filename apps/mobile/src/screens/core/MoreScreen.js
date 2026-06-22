@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { useTheme } from '../../styles/ThemeContext';
 import { 
-  Ruler, 
   Calendar, 
   MapPin, 
   Crown, 
@@ -27,12 +26,6 @@ export default function MoreScreen({ navigation, onLogout }) {
   const { theme, fonts, shadows } = useTheme();
 
   const menuItems = [
-    {
-      label: 'Size Profile & Sizing',
-      sublabel: 'View and edit custom measurements',
-      icon: Ruler,
-      route: 'Measurements',
-    },
     {
       label: 'Book Consultation',
       sublabel: 'Reserve fitting sessions with tailor',

@@ -2,6 +2,7 @@ import { Server, Socket } from 'socket.io';
 import { Server as HttpServer } from 'http';
 import jwt from 'jsonwebtoken';
 import env from '../config/env.js';
+import redis from '../config/redis.js';
 import logger from '../utils/logger.js';
 import { createRedisAdapter } from './socket.adapter.js';
 import { Role } from '@prisma/client';
@@ -22,25 +23,30 @@ export function getIO(): Server | null {
 export function initSocket(server: HttpServer) {
   io = new Server(server, {
     cors: {
-      origin: '*', // Enforce restrictive origins in production
+      origin: env.NODE_ENV === 'production'
+        ? ['https://marcos-admin.vercel.app', 'https://marcos.app'] // Restrict to known origins in production
+        : '*',
       methods: ['GET', 'POST'],
       credentials: true,
     },
   });
 
-  // Attach Redis adapter for horizontal scaling unless in testing
-  if (env.NODE_ENV !== 'test') {
+  // Attach Redis adapter for horizontal scaling ONLY in production
+  // In development, the in-memory adapter works fine and avoids thousands of Redis commands/min
+  if (env.NODE_ENV === 'production') {
     try {
       const adapter = createRedisAdapter();
       io.adapter(adapter);
-      logger.info('Socket.io Redis adapter attached.');
+      logger.info('Socket.io Redis adapter attached (production mode).');
     } catch (err: any) {
       logger.error('Failed to attach Socket.io Redis adapter', { metadata: { error: err.message } });
     }
+  } else {
+    logger.info('Socket.io using in-memory adapter (development mode — Redis adapter skipped to save commands).');
   }
 
   // Handshake Token validation Middleware
-  io.use((socket: Socket, next) => {
+  io.use(async (socket: Socket, next) => {
     const token = socket.handshake.query.token as string || socket.handshake.auth.token as string;
     
     if (!token) {
@@ -48,6 +54,12 @@ export function initSocket(server: HttpServer) {
     }
 
     try {
+      // Check Redis blacklist (matches HTTP auth middleware behavior)
+      const isBlacklisted = await redis.get(`blacklist:${token}`);
+      if (isBlacklisted) {
+        return next(new Error('Authentication error: Token is blacklisted'));
+      }
+
       const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as SocketUser;
       socket.data.user = decoded;
       next();

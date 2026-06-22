@@ -3,15 +3,16 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ProductController = exports.couponValidateSchema = exports.cartAddSchema = exports.productQuerySchema = void 0;
+exports.ProductController = exports.favoriteAddSchema = exports.couponValidateSchema = exports.cartAddSchema = exports.productQuerySchema = void 0;
 exports.computeStockStatus = computeStockStatus;
 const zod_1 = require("zod");
 const db_js_1 = __importDefault(require("../config/db.js"));
+const redis_js_1 = __importDefault(require("../config/redis.js"));
 // Product query validation
 exports.productQuerySchema = zod_1.z.object({
     query: zod_1.z.object({
         page: zod_1.z.coerce.number().int().min(1).default(1),
-        limit: zod_1.z.coerce.number().int().min(1).max(100).default(10),
+        limit: zod_1.z.coerce.number().int().min(1).max(1000).default(10),
         category: zod_1.z.string().optional(),
         search: zod_1.z.string().optional(),
         sortBy: zod_1.z.enum(['price', 'createdAt', 'name']).default('createdAt'),
@@ -31,6 +32,12 @@ exports.couponValidateSchema = zod_1.z.object({
         code: zod_1.z.string(),
     }),
 });
+// Favorite item validator schema
+exports.favoriteAddSchema = zod_1.z.object({
+    body: zod_1.z.object({
+        productId: zod_1.z.string().uuid(),
+    }),
+});
 function computeStockStatus(qty) {
     if (qty <= 0)
         return 'OUT_OF_STOCK';
@@ -45,7 +52,12 @@ class ProductController {
     static async getProducts(req, res, next) {
         const { page, limit, category, search, sortBy, sortOrder } = req.query;
         const skip = (page - 1) * limit;
+        const cacheKey = `cache:products:${JSON.stringify(req.query)}`;
         try {
+            const cached = await redis_js_1.default.get(cacheKey);
+            if (cached) {
+                return res.status(200).json(JSON.parse(cached));
+            }
             const where = {};
             if (category) {
                 where.category = {
@@ -68,16 +80,18 @@ class ProductController {
                 }),
                 db_js_1.default.product.count({ where }),
             ]);
-            return res.status(200).json({
+            const responsePayload = {
                 success: true,
                 data: products,
                 pagination: {
-                    page,
-                    limit,
+                    page: Number(page),
+                    limit: Number(limit),
                     total,
-                    pages: Math.ceil(total / limit),
+                    pages: Math.ceil(total / Number(limit)),
                 },
-            });
+            };
+            await redis_js_1.default.set(cacheKey, JSON.stringify(responsePayload), 'EX', 120);
+            return res.status(200).json(responsePayload);
         }
         catch (error) {
             next(error);
@@ -95,6 +109,19 @@ class ProductController {
             });
             if (!product) {
                 return res.status(404).json({ success: false, message: 'Product not found' });
+            }
+            // Log PRODUCT_VIEW event asynchronously to Redis list
+            const userId = req.user?.id || null;
+            try {
+                await redis_js_1.default.rpush('analytics:events', JSON.stringify({
+                    eventType: 'PRODUCT_VIEW',
+                    productId: id,
+                    userId,
+                    createdAt: new Date().toISOString()
+                }));
+            }
+            catch (e) {
+                console.error('Failed to log product view event to Redis:', e);
             }
             return res.status(200).json({ success: true, data: product });
         }
@@ -147,6 +174,18 @@ class ProductController {
                 update: { quantity },
                 create: { userId, productId, quantity },
             });
+            // Log ADD_TO_CART event asynchronously to Redis list
+            try {
+                await redis_js_1.default.rpush('analytics:events', JSON.stringify({
+                    eventType: 'ADD_TO_CART',
+                    productId,
+                    userId,
+                    createdAt: new Date().toISOString()
+                }));
+            }
+            catch (e) {
+                console.error('Failed to log add to cart event to Redis:', e);
+            }
             return res.status(200).json({ success: true, data: cartItem });
         }
         catch (error) {
@@ -194,6 +233,18 @@ class ProductController {
             if (coupon.usedCount >= coupon.maxUses) {
                 return res.status(400).json({ success: false, message: 'Coupon utilization limit reached' });
             }
+            // Check if this user has already used this coupon
+            const userId = req.user?.id;
+            if (userId) {
+                const userCouponExists = await db_js_1.default.userCoupon.findUnique({
+                    where: {
+                        userId_couponId: { userId, couponId: coupon.id },
+                    },
+                });
+                if (userCouponExists) {
+                    return res.status(400).json({ success: false, message: 'You have already used this coupon' });
+                }
+            }
             // Return coupon calculations
             return res.status(200).json({
                 success: true,
@@ -205,6 +256,70 @@ class ProductController {
                     maxDiscount: coupon.maxDiscount,
                 },
             });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    /**
+     * GET /cart/favorites
+     */
+    static async getFavorites(req, res, next) {
+        const userId = req.user?.id;
+        if (!userId)
+            return res.status(401).json({ success: false, message: 'Unauthorized' });
+        try {
+            const items = await db_js_1.default.favorite.findMany({
+                where: { userId },
+                include: { product: true },
+            });
+            return res.status(200).json({ success: true, data: items });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    /**
+     * POST /cart/favorites
+     */
+    static async addToFavorites(req, res, next) {
+        const userId = req.user?.id;
+        if (!userId)
+            return res.status(401).json({ success: false, message: 'Unauthorized' });
+        const { productId } = req.body;
+        try {
+            const product = await db_js_1.default.product.findUnique({ where: { id: productId } });
+            if (!product) {
+                return res.status(404).json({ success: false, message: 'Product not found' });
+            }
+            const favItem = await db_js_1.default.favorite.upsert({
+                where: {
+                    userId_productId: { userId, productId },
+                },
+                update: {}, // Do nothing if already exists
+                create: { userId, productId },
+            });
+            return res.status(200).json({ success: true, data: favItem });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    /**
+     * DELETE /cart/favorites/:productId
+     */
+    static async removeFromFavorites(req, res, next) {
+        const userId = req.user?.id;
+        if (!userId)
+            return res.status(401).json({ success: false, message: 'Unauthorized' });
+        const { productId } = req.params;
+        try {
+            await db_js_1.default.favorite.delete({
+                where: {
+                    userId_productId: { userId, productId },
+                },
+            });
+            return res.status(200).json({ success: true, message: 'Item removed from favorites' });
         }
         catch (error) {
             next(error);

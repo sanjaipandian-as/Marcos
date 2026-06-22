@@ -208,7 +208,7 @@ export default function CustomerManager() {
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               placeholder="Search customer name..."
-              className="w-full pl-9 pr-4 py-1.5 text-xs rounded-xl bg-slate-550/5 border border-slate-200 focus:bg-white focus:outline-none"
+              className="w-full pl-9 pr-4 py-1.5 text-xs rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:outline-none"
             />
             <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
           </div>
@@ -224,8 +224,8 @@ export default function CustomerManager() {
                   className={`
                     w-full text-left p-3 rounded-2xl flex items-center gap-3 transition-colors focus:outline-none
                     ${selectedCustomerId === cust.id 
-                      ? 'bg-brand-55 border border-brand-100/50' 
-                      : 'hover:bg-slate-50 border border-transparent'}
+                      ? 'bg-brand-50 border border-brand-100/50' 
+                      : 'hover:bg-slate-550 border border-transparent'}
                   `}
                 >
                   <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs ${selectedCustomerId === cust.id ? 'bg-brand-500 text-white' : 'bg-slate-100 text-slate-600'}`}>
@@ -250,24 +250,24 @@ export default function CustomerManager() {
             <>
               <div className="bg-white border border-slate-200/60 rounded-3xl p-6 shadow-premium flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                 <div className="flex gap-4 items-center">
-                  <div className="w-12 h-12 rounded-2xl bg-brand-55 flex items-center justify-center text-brand-600 font-extrabold text-lg">
+                  <div className="w-12 h-12 rounded-2xl bg-brand-50 flex items-center justify-center text-brand-600 font-extrabold text-lg">
                     <User className="w-6 h-6" />
                   </div>
                   <div>
                     <h3 className="font-extrabold text-slate-800 text-base">{customerInfo.fullName}</h3>
-                    <p className="text-xs text-slate-505">{customerInfo.email} • {customerInfo.phoneNumber}</p>
+                    <p className="text-xs text-slate-500">{customerInfo.email} • {customerInfo.phoneNumber}</p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-[10px] font-bold bg-slate-100 text-slate-605 py-1 px-3 rounded-full uppercase">
+                  <span className="text-[10px] font-bold bg-slate-100 text-slate-600 py-1 px-3 rounded-full uppercase">
                     Loyalty Balance: {customerInfo.pointsBalance} Pts
                   </span>
                   <span className="text-[9px] text-slate-400">Code: {customerInfo.referralCode}</span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between border-b border-slate-250 pb-2">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                 <div className="flex gap-2 flex-wrap">
                   {profiles.map(p => (
                     <button
@@ -287,7 +287,7 @@ export default function CustomerManager() {
                   {!isAddingProfile ? (
                     <button
                       onClick={() => setIsAddingProfile(true)}
-                      className="flex items-center gap-1 py-1.5 px-3 rounded-xl border border-slate-205 hover:bg-slate-50 text-slate-500 text-xs font-bold"
+                      className="flex items-center gap-1 py-1.5 px-3 rounded-xl border border-slate-200 hover:bg-slate-550 text-slate-500 text-xs font-bold"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>Add Profile</span>
@@ -320,14 +320,14 @@ export default function CustomerManager() {
                       <div className="flex gap-2 self-start sm:self-auto flex-wrap">
                         <button
                           onClick={() => handleDeleteProfile(activeProfile.id)}
-                          className="flex items-center gap-1 text-[11px] font-bold border border-red-250 py-1.5 px-3 rounded-xl hover:bg-red-50 text-red-650"
+                          className="flex items-center gap-1 text-[11px] font-bold border border-red-200 py-1.5 px-3 rounded-xl hover:bg-red-50 text-red-600"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                           <span>Delete Profile</span>
                         </button>
                         <button
                           onClick={() => setIsEditing(true)}
-                          className="flex items-center gap-1 text-[11px] font-bold border border-slate-250 py-1.5 px-3 rounded-xl hover:bg-slate-50 text-slate-650"
+                          className="flex items-center gap-1 text-[11px] font-bold border border-slate-200 py-1.5 px-3 rounded-xl hover:bg-slate-50 text-slate-600"
                         >
                           <Edit className="w-3.5 h-3.5" />
                           <span>Adjust Measurements</span>
@@ -367,7 +367,7 @@ export default function CustomerManager() {
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
                     {sheetTabs[activeSheetTab].map(field => (
-                      <div key={field.key} className="space-y-1 p-3 rounded-xl bg-slate-550/5 border border-slate-100/80 transition-all hover:border-slate-200">
+                      <div key={field.key} className="space-y-1 p-3 rounded-xl bg-slate-50 border border-slate-100/80 transition-all hover:border-slate-200">
                         <span className="text-[9px] font-bold text-slate-400 uppercase block">{field.label}</span>
                         {isEditing ? (
                           <div className="relative flex items-center">
@@ -381,7 +381,7 @@ export default function CustomerManager() {
                             <span className="absolute right-2 text-[10px] text-slate-400 font-bold">in</span>
                           </div>
                         ) : (
-                          <span className="text-xs font-extrabold text-slate-750">
+                          <span className="text-xs font-extrabold text-slate-700">
                             {activeProfile[field.key] ? `${activeProfile[field.key]} inches` : 'Not recorded'}
                           </span>
                         )}
@@ -400,20 +400,20 @@ export default function CustomerManager() {
                         placeholder="Write physical details, styling preferences..."
                       />
                     ) : (
-                      <p className="text-xs text-slate-655 bg-slate-50 rounded-xl p-3 leading-relaxed border border-slate-100">
+                      <p className="text-xs text-slate-600 bg-slate-50 rounded-xl p-3 leading-relaxed border border-slate-100">
                         {activeProfile.tailorNotes || 'No custom tailor notes recorded.'}
                       </p>
                     )}
                   </div>
 
                   <div className="space-y-3 pt-4 border-t border-slate-100">
-                    <h5 className="font-bold text-slate-755 text-xs flex items-center gap-1.5">
+                    <h5 className="font-bold text-slate-700 text-xs flex items-center gap-1.5">
                       <History className="w-4 h-4 text-slate-400" />
                       <span>Sizing Change Logs</span>
                     </h5>
                     
                     {profileHistory.length === 0 ? (
-                      <p className="text-[10px] text-slate-450 italic">No dimensions changes logged yet</p>
+                      <p className="text-[10px] text-slate-400 italic">No dimensions changes logged yet</p>
                     ) : (
                       <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1">
                         {profileHistory.map((h) => {
@@ -435,8 +435,8 @@ export default function CustomerManager() {
                           });
 
                           return (
-                            <div key={h.id} className="p-3 border border-slate-150 rounded-xl bg-slate-550/5 text-[10px] space-y-2">
-                              <div className="flex justify-between font-bold text-slate-550">
+                            <div key={h.id} className="p-3 border border-slate-200 rounded-xl bg-slate-50 text-[10px] space-y-2">
+                              <div className="flex justify-between font-bold text-slate-500">
                                 <span>Modifications by <span className="text-slate-800">{h.changedBy}</span></span>
                                 <span>{new Date(h.changedAt).toLocaleDateString()}</span>
                               </div>
@@ -452,8 +452,8 @@ export default function CustomerManager() {
                                         key={d.key}
                                         className={`inline-flex items-center gap-1 py-1 px-2.5 rounded-full text-[10px] font-bold ${
                                           isInc
-                                            ? 'bg-emerald-50 text-emerald-750 border border-emerald-200'
-                                            : 'bg-rose-50 text-rose-750 border border-rose-200'
+                                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                            : 'bg-rose-50 text-rose-700 border border-rose-200'
                                         }`}
                                       >
                                         {d.label}: {d.prev}" ➔ {d.curr}" ({isInc ? '+' : ''}{d.diff.toFixed(1)}")

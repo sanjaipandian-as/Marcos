@@ -296,7 +296,6 @@ export default function StaffManager() {
                 >
                   <option value="STAFF">Staff (Standard)</option>
                   <option value="ADMIN">Admin (Manager)</option>
-                  <option value="SUPERADMIN">Super Admin (Owner)</option>
                 </select>
               </div>
 
@@ -348,7 +347,6 @@ export default function StaffManager() {
                 >
                   <option value="STAFF">Staff (Standard)</option>
                   <option value="ADMIN">Admin (Manager)</option>
-                  <option value="SUPERADMIN">Super Admin (Owner)</option>
                 </select>
               </div>
 

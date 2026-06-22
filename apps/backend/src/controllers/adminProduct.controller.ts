@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import prisma from '../config/db.js';
 import { StockStatus } from '@prisma/client';
+import redis from '../config/redis.js';
+import { computeStockStatus } from './product.controller.js';
 
 export const productCreateSchema = z.object({
   body: z.object({
@@ -12,6 +14,7 @@ export const productCreateSchema = z.object({
     images: z.array(z.string()).default([]),
     categoryId: z.string().uuid(),
     inventoryQty: z.coerce.number().int().nonnegative().default(0),
+    targetGender: z.enum(['MEN', 'WOMEN', 'KIDS', 'UNISEX']).default('UNISEX'),
   }),
 });
 
@@ -24,6 +27,7 @@ export const productUpdateSchema = z.object({
     images: z.array(z.string()).optional(),
     categoryId: z.string().uuid().optional(),
     inventoryQty: z.coerce.number().int().nonnegative().optional(),
+    targetGender: z.enum(['MEN', 'WOMEN', 'KIDS', 'UNISEX']).optional(),
   }),
 });
 
@@ -34,18 +38,14 @@ export const trendingToggleSchema = z.object({
   }),
 });
 
-export function computeStockStatus(qty: number): StockStatus {
-  if (qty <= 0) return 'OUT_OF_STOCK';
-  if (qty <= 10) return 'LOW_STOCK';
-  return 'IN_STOCK';
-}
+
 
 export class AdminProductController {
   /**
    * POST /admin/products
    */
   static async createProduct(req: Request, res: Response, next: NextFunction) {
-    const { name, description, price, materialInfo, images, categoryId, inventoryQty } = req.body;
+    const { name, description, price, materialInfo, images, categoryId, inventoryQty, targetGender } = req.body;
 
     try {
       // Verify category exists
@@ -66,6 +66,7 @@ export class AdminProductController {
           categoryId,
           inventoryQty,
           stockStatus,
+          targetGender,
         },
       });
 
@@ -85,6 +86,11 @@ export class AdminProductController {
         },
       }).catch(err => console.error('Failed to write audit log:', err));
 
+      // Invalidate products cache
+      await redis.keys('cache:products:*').then(keys => {
+        if (keys.length > 0) return redis.del(...keys);
+      }).catch(err => console.error('Failed to invalidate product cache:', err));
+
       return res.status(201).json({
         success: true,
         message: 'Product created successfully',
@@ -100,7 +106,7 @@ export class AdminProductController {
    */
   static async updateProduct(req: Request, res: Response, next: NextFunction) {
     const { id } = req.params;
-    const { name, description, price, materialInfo, images, categoryId, inventoryQty } = req.body;
+    const { name, description, price, materialInfo, images, categoryId, inventoryQty, targetGender } = req.body;
 
     try {
       const existingProduct = await prisma.product.findUnique({ where: { id } });
@@ -116,6 +122,7 @@ export class AdminProductController {
         images,
         categoryId,
         inventoryQty,
+        targetGender,
       };
 
       // Recalculate stockStatus if inventoryQty is provided
@@ -141,6 +148,11 @@ export class AdminProductController {
           },
         },
       }).catch(err => console.error('Failed to write audit log:', err));
+
+      // Invalidate products cache
+      await redis.keys('cache:products:*').then(keys => {
+        if (keys.length > 0) return redis.del(...keys);
+      }).catch(err => console.error('Failed to invalidate product cache:', err));
 
       return res.status(200).json({
         success: true,
@@ -189,6 +201,11 @@ export class AdminProductController {
         },
       }).catch(err => console.error('Failed to write audit log:', err));
 
+      // Invalidate products cache
+      await redis.keys('cache:products:*').then(keys => {
+        if (keys.length > 0) return redis.del(...keys);
+      }).catch(err => console.error('Failed to invalidate product cache:', err));
+
       return res.status(200).json({
         success: true,
         message: 'Product deleted successfully',
@@ -231,6 +248,11 @@ export class AdminProductController {
           },
         },
       }).catch(err => console.error('Failed to write audit log:', err));
+
+      // Invalidate products cache
+      await redis.keys('cache:products:*').then(keys => {
+        if (keys.length > 0) return redis.del(...keys);
+      }).catch(err => console.error('Failed to invalidate product cache:', err));
 
       return res.status(200).json({
         success: true,

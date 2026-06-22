@@ -9,8 +9,10 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
-  Dimensions
+  Modal
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import LottieView from 'lottie-react-native';
 import { useTheme } from '../../styles/ThemeContext';
 import api from '../../utils/api';
 import {
@@ -21,14 +23,25 @@ import {
   MapPin,
   Save,
   Award,
-  Calendar
+  Calendar,
+  ChevronDown,
+  Check,
+  Edit3,
+  X,
+  Lock
 } from 'lucide-react-native';
 
-const { width } = Dimensions.get('window');
+const GENDER_OPTIONS = [
+  { label: 'Male', value: 'MALE' },
+  { label: 'Female', value: 'FEMALE' },
+  { label: 'Prefer not to say', value: 'OTHER' },
+];
+
+// UPDATED_SVG_XML removed. Using Lottie animation asset instead.
 
 export default function AccountDetailsScreen({ navigation }) {
   const { theme, fonts, shadows } = useTheme();
-  
+
   // Data States
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -37,19 +50,97 @@ export default function AccountDetailsScreen({ navigation }) {
   // Form States
   const [fullName, setFullName] = useState('');
   const [gender, setGender] = useState('');
-  const [address, setAddress] = useState('');
+  const [showGenderPicker, setShowGenderPicker] = useState(false);
+  const [password, setPassword] = useState('');
+  const [isPasswordVerified, setIsPasswordVerified] = useState(false);
+
+  // Edit State & Backup values
+  const [isEditing, setIsEditing] = useState(false);
+  const [backupFullName, setBackupFullName] = useState('');
+  const [backupGender, setBackupGender] = useState('');
+  const [backupStreetAddress, setBackupStreetAddress] = useState('');
+  const [backupLandmark, setBackupLandmark] = useState('');
+  const [backupAlternatePhone, setBackupAlternatePhone] = useState('');
+  const [backupPincode, setBackupPincode] = useState('');
+  const [backupArea, setBackupArea] = useState('');
+  const [backupCity, setBackupCity] = useState('');
+  const [showUpdatedPopup, setShowUpdatedPopup] = useState(false);
+
+  useEffect(() => {
+    if (showUpdatedPopup) {
+      const timer = setTimeout(() => {
+        setShowUpdatedPopup(false);
+      }, 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [showUpdatedPopup]);
+
+  // Split Address States
+  const [streetAddress, setStreetAddress] = useState('');
+  const [landmark, setLandmark] = useState('');
+  const [alternatePhone, setAlternatePhone] = useState('');
+  const [pincode, setPincode] = useState('');
+  const [area, setArea] = useState('');
+  const [city, setCity] = useState('');
+  const [rawAddressArray, setRawAddressArray] = useState([]);
+
+  // Email change flow
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [emailOtp, setEmailOtp] = useState('');
+  const [emailOtpSent, setEmailOtpSent] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
+
+  // Phone change flow
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [newPhone, setNewPhone] = useState('');
+  const [phoneOtp, setPhoneOtp] = useState('');
+  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
+  const [phoneLoading, setPhoneLoading] = useState(false);
 
   const fetchProfile = async () => {
     try {
-      if (!profile) {
-        setLoading(true);
-      }
+      if (!profile) setLoading(true);
       const res = await api.get('/auth/profile');
       if (res.success && res.data) {
         setProfile(res.data);
         setFullName(res.data.fullName || '');
         setGender(res.data.gender || '');
-        setAddress(res.data.address || '');
+        
+        // Parse address structure
+        const addressStr = res.data.address;
+        let parsedList = [];
+        let isJsonArray = false;
+        if (addressStr) {
+          try {
+            const parsed = JSON.parse(addressStr);
+            if (Array.isArray(parsed)) {
+              parsedList = parsed;
+              isJsonArray = true;
+            }
+          } catch (e) {
+            // Legacy plain text address
+          }
+        }
+        
+        setRawAddressArray(parsedList);
+        
+        if (isJsonArray && parsedList.length > 0) {
+          const activeAddr = parsedList.find(a => a.selected) || parsedList[0];
+          setStreetAddress(activeAddr.address || '');
+          setLandmark(activeAddr.landmark || '');
+          setAlternatePhone(activeAddr.phone2 || '');
+          setPincode(activeAddr.pincode || '');
+          setArea(activeAddr.area || '');
+          setCity(activeAddr.city || '');
+        } else {
+          setStreetAddress(addressStr || '');
+          setLandmark('');
+          setAlternatePhone('');
+          setPincode('');
+          setArea('');
+          setCity('');
+        }
       }
     } catch (err) {
       console.error('Error fetching profile detail:', err);
@@ -67,18 +158,60 @@ export default function AccountDetailsScreen({ navigation }) {
       Alert.alert('Required', 'Please enter your full name.');
       return;
     }
+    
+    // Address validation: street address is required if they provide any part of address
+    if ((landmark.trim() || pincode.trim() || area.trim() || city.trim() || alternatePhone.trim()) && !streetAddress.trim()) {
+      Alert.alert('Address Required', 'Please enter the street address/house number.');
+      return;
+    }
 
     setUpdating(true);
     try {
+      let updatedAddressValue = null;
+      if (streetAddress.trim()) {
+        if (rawAddressArray.length > 0) {
+          let activeIndex = rawAddressArray.findIndex(a => a.selected);
+          if (activeIndex === -1) activeIndex = 0;
+          
+          const updatedArray = [...rawAddressArray];
+          updatedArray[activeIndex] = {
+            ...updatedArray[activeIndex],
+            address: streetAddress.trim(),
+            landmark: landmark.trim(),
+            phone2: alternatePhone.trim(),
+            pincode: pincode.trim(),
+            area: area.trim(),
+            city: city.trim(),
+            phone: profile?.phoneNumber || updatedArray[activeIndex].phone || '',
+            name: profile?.fullName || updatedArray[activeIndex].name || 'My Address'
+          };
+          updatedAddressValue = JSON.stringify(updatedArray);
+        } else {
+          const newAddressObj = {
+            id: Date.now().toString(),
+            name: fullName.trim() || profile?.fullName || 'My Address',
+            address: streetAddress.trim(),
+            landmark: landmark.trim(),
+            city: city.trim(),
+            area: area.trim(),
+            pincode: pincode.trim(),
+            phone: profile?.phoneNumber || '',
+            phone2: alternatePhone.trim(),
+            selected: true,
+            type: 'home'
+          };
+          updatedAddressValue = JSON.stringify([newAddressObj]);
+        }
+      }
+
       const res = await api.put('/auth/profile', {
         fullName: fullName.trim(),
-        gender: gender.trim() || null,
-        address: address.trim() || null
+        gender: gender || null,
+        address: updatedAddressValue,
       });
-
       if (res.success) {
-        Alert.alert('Success', 'Profile details updated successfully!');
-        // Refresh details
+        setIsEditing(false);
+        setShowUpdatedPopup(true);
         fetchProfile();
       }
     } catch (err) {
@@ -88,31 +221,177 @@ export default function AccountDetailsScreen({ navigation }) {
     }
   };
 
-  // Format Date Helper
+  // --- Password Verification Stage 1 ---
+  const handleVerifyPassword = async () => {
+    if (!password) {
+      Alert.alert('Required', 'Please enter your account password.');
+      return;
+    }
+    const loadingSetter = editingEmail ? setEmailLoading : setPhoneLoading;
+    loadingSetter(true);
+    try {
+      const res = await api.post('/auth/profile/verify-password', { password });
+      if (res.success) {
+        setIsPasswordVerified(true);
+      }
+    } catch (err) {
+      Alert.alert('Verification Failed', err.message || 'Incorrect password.');
+    } finally {
+      loadingSetter(false);
+    }
+  };
+
+  // --- Email Change Stage 2 & 3 ---
+  const handleSendEmailOtp = async () => {
+    if (!newEmail.trim() || !newEmail.includes('@')) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address.');
+      return;
+    }
+    if (newEmail.trim().toLowerCase() === profile?.email?.toLowerCase()) {
+      Alert.alert('Duplicate Email', 'New email address must be different from your current email.');
+      return;
+    }
+    setEmailLoading(true);
+    try {
+      const res = await api.post('/auth/profile/request-update', { 
+        password,
+        newEmail: newEmail.trim().toLowerCase() 
+      });
+      if (res.success) {
+        setEmailOtpSent(true);
+        Alert.alert('Verification Code Sent', 'A security verification code has been sent to your current email address. Please check your inbox.');
+      }
+    } catch (err) {
+      Alert.alert('Verification Failed', err.message || 'Failed to request update.');
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  const handleVerifyEmailOtp = async () => {
+    if (!emailOtp || emailOtp.length !== 6) {
+      Alert.alert('Invalid Code', 'Please enter the 6-digit verification code.');
+      return;
+    }
+    setEmailLoading(true);
+    try {
+      const res = await api.post('/auth/profile/confirm-update', {
+        code: emailOtp.trim(),
+      });
+      if (res.success) {
+        if (res.accessToken) {
+          await AsyncStorage.setItem('accessToken', res.accessToken);
+        }
+        Alert.alert('✓ Email Updated', 'Your registered email address has been updated successfully.');
+        setEditingEmail(false);
+        setEmailOtpSent(false);
+        setNewEmail('');
+        setEmailOtp('');
+        setPassword('');
+        setIsPasswordVerified(false);
+        fetchProfile();
+      }
+    } catch (err) {
+      Alert.alert('Verification Failed', err.message || 'Verification failed.');
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  // --- Phone Change Stage 2 & 3 ---
+  const handleSendPhoneOtp = async () => {
+    if (!newPhone.trim() || newPhone.length < 8) {
+      Alert.alert('Invalid Phone', 'Please enter a valid phone number.');
+      return;
+    }
+    setPhoneLoading(true);
+    try {
+      const res = await api.post('/auth/profile/request-update', { 
+        password,
+        newPhoneNumber: newPhone.trim() 
+      });
+      if (res.success) {
+        setPhoneOtpSent(true);
+        Alert.alert('Verification Code Sent', 'A security verification code has been sent to your current email address. Please check your inbox.');
+      }
+    } catch (err) {
+      Alert.alert('Verification Failed', err.message || 'Failed to request update.');
+    } finally {
+      setPhoneLoading(false);
+    }
+  };
+
+  const handleVerifyPhoneOtp = async () => {
+    if (!phoneOtp || phoneOtp.length !== 6) {
+      Alert.alert('Invalid Code', 'Please enter the 6-digit verification code.');
+      return;
+    }
+    setPhoneLoading(true);
+    try {
+      const res = await api.post('/auth/profile/confirm-update', {
+        code: phoneOtp.trim(),
+      });
+      if (res.success) {
+        if (res.accessToken) {
+          await AsyncStorage.setItem('accessToken', res.accessToken);
+        }
+        Alert.alert('✓ Phone Updated', 'Your registered phone number has been updated successfully.');
+        setEditingPhone(false);
+        setPhoneOtpSent(false);
+        setNewPhone('');
+        setPhoneOtp('');
+        setPassword('');
+        setIsPasswordVerified(false);
+        fetchProfile();
+      }
+    } catch (err) {
+      Alert.alert('Verification Failed', err.message || 'Verification failed.');
+    } finally {
+      setPhoneLoading(false);
+    }
+  };
+
+  const handleCloseEmailModal = () => {
+    setEditingEmail(false);
+    setEmailOtpSent(false);
+    setNewEmail('');
+    setEmailOtp('');
+    setPassword('');
+    setIsPasswordVerified(false);
+  };
+
+  const handleClosePhoneModal = () => {
+    setEditingPhone(false);
+    setPhoneOtpSent(false);
+    setNewPhone('');
+    setPhoneOtp('');
+    setPassword('');
+    setIsPasswordVerified(false);
+  };
+
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
     return new Date(dateStr).toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
+      day: 'numeric', month: 'long', year: 'numeric',
     });
+  };
+
+  const getGenderLabel = () => {
+    const found = GENDER_OPTIONS.find(o => o.value === gender);
+    return found ? found.label : 'Select gender';
   };
 
   if (loading && !profile) {
     return (
       <View style={[styles.container, { backgroundColor: theme.bg.main }]}>
-        {/* Header Skeleton */}
         <View style={styles.headerBar}>
           <View style={[styles.skeletonBtn, { backgroundColor: theme.border }]} />
           <View style={[styles.skeletonTitle, { backgroundColor: theme.border }]} />
           <View style={[styles.skeletonBtn, { backgroundColor: theme.border }]} />
         </View>
-
         <View style={styles.scrollContent}>
-          {/* Card Skeletons */}
           <View style={[styles.skeletonCard, shadows.premium, { backgroundColor: theme.bg.card }]} />
-          <View style={[styles.skeletonCard, shadows.premium, { backgroundColor: theme.bg.card, height: 180 }]} />
-          <View style={[styles.skeletonCard, shadows.premium, { backgroundColor: theme.bg.card }]} />
+          <View style={[styles.skeletonCard, shadows.premium, { backgroundColor: theme.bg.card, height: 220 }]} />
         </View>
       </View>
     );
@@ -120,7 +399,7 @@ export default function AccountDetailsScreen({ navigation }) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg.main }]}>
-      {/* Header Bar */}
+      {/* Header */}
       <View style={styles.headerBar}>
         <TouchableOpacity style={[styles.headerBtn, shadows.premium]} onPress={() => navigation.goBack()} activeOpacity={0.7}>
           <ChevronLeft size={20} color="#1e1e1e" />
@@ -132,8 +411,8 @@ export default function AccountDetailsScreen({ navigation }) {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        
-        {/* Loyalty & Join Date Summary Card */}
+
+        {/* Summary Card */}
         <View style={[styles.summaryCard, shadows.premium, { backgroundColor: theme.bg.card }]}>
           <View style={styles.summaryItem}>
             <View style={[styles.iconBg, { backgroundColor: theme.brand[50] }]}>
@@ -146,7 +425,7 @@ export default function AccountDetailsScreen({ navigation }) {
               </Text>
             </View>
           </View>
-          <View style={styles.divider} />
+          <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
             <View style={[styles.iconBg, { backgroundColor: theme.brand[50] }]}>
               <Calendar size={20} color={theme.brand[500]} />
@@ -160,7 +439,7 @@ export default function AccountDetailsScreen({ navigation }) {
           </View>
         </View>
 
-        {/* User Info Form */}
+        {/* Personal Details Card */}
         <View style={[styles.formCard, shadows.premium, { backgroundColor: theme.bg.card }]}>
           <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
             Personal Details
@@ -169,102 +448,528 @@ export default function AccountDetailsScreen({ navigation }) {
           {/* Full Name */}
           <View style={styles.inputContainer}>
             <Text style={[styles.inputLabel, { fontFamily: fonts.semiBold, color: theme.text.secondary }]}>FULL NAME</Text>
-            <View style={[styles.inputWrapper, { backgroundColor: theme.bg.input }]}>
-              <User size={18} color={theme.text.muted} style={styles.inputIcon} />
+            <View style={[styles.inputWrapper, { backgroundColor: theme.bg.input }, !isEditing && { opacity: 0.85 }]}>
+              <User size={17} color={theme.text.muted} style={styles.inputIcon} />
               <TextInput
                 style={[styles.input, { fontFamily: fonts.medium, color: theme.text.primary }]}
                 value={fullName}
                 onChangeText={setFullName}
-                placeholder="Enter full name"
+                placeholder="Enter your full name"
                 placeholderTextColor={theme.text.muted}
+                editable={isEditing}
               />
             </View>
           </View>
 
-          {/* Email (Read-Only) */}
-          <View style={styles.inputContainer}>
-            <Text style={[styles.inputLabel, { fontFamily: fonts.semiBold, color: theme.text.secondary }]}>EMAIL ADDRESS (READ-ONLY)</Text>
-            <View style={[styles.inputWrapper, { backgroundColor: '#f0f0f2' }]}>
-              <Mail size={18} color={theme.text.muted} style={styles.inputIcon} />
-              <TextInput
-                style={[styles.input, { fontFamily: fonts.medium, color: theme.text.secondary }]}
-                value={profile?.email}
-                editable={false}
-              />
-            </View>
-          </View>
-
-          {/* Phone (Read-Only) */}
-          <View style={styles.inputContainer}>
-            <Text style={[styles.inputLabel, { fontFamily: fonts.semiBold, color: theme.text.secondary }]}>PHONE NUMBER (READ-ONLY)</Text>
-            <View style={[styles.inputWrapper, { backgroundColor: '#f0f0f2' }]}>
-              <Phone size={18} color={theme.text.muted} style={styles.inputIcon} />
-              <TextInput
-                style={[styles.input, { fontFamily: fonts.medium, color: theme.text.secondary }]}
-                value={profile?.phoneNumber}
-                editable={false}
-              />
-            </View>
-          </View>
-
-          {/* Gender */}
+          {/* Gender Dropdown */}
           <View style={styles.inputContainer}>
             <Text style={[styles.inputLabel, { fontFamily: fonts.semiBold, color: theme.text.secondary }]}>GENDER</Text>
-            <View style={[styles.inputWrapper, { backgroundColor: theme.bg.input }]}>
-              <User size={18} color={theme.text.muted} style={styles.inputIcon} />
+            <TouchableOpacity
+              style={[styles.inputWrapper, styles.dropdownBtn, { backgroundColor: theme.bg.input }, !isEditing && { opacity: 0.85 }]}
+              onPress={() => {
+                if (isEditing) setShowGenderPicker(true);
+              }}
+              disabled={!isEditing}
+              activeOpacity={0.7}
+            >
+              <User size={17} color={theme.text.muted} style={styles.inputIcon} />
+              <Text style={[styles.dropdownText, { fontFamily: fonts.medium, color: gender ? theme.text.primary : theme.text.muted }]}>
+                {getGenderLabel()}
+              </Text>
+              <ChevronDown size={17} color={theme.text.muted} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Address Information Section */}
+          <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary, marginTop: 10 }]}>
+            Shipping Address
+          </Text>
+
+          {/* House No / Street Name */}
+          <View style={styles.inputContainer}>
+            <Text style={[styles.inputLabel, { fontFamily: fonts.semiBold, color: theme.text.secondary }]}>HOUSE NO / STREET NAME</Text>
+            <View style={[styles.inputWrapper, { backgroundColor: theme.bg.input }, !isEditing && { opacity: 0.85 }]}>
+              <MapPin size={17} color={theme.text.muted} style={styles.inputIcon} />
               <TextInput
                 style={[styles.input, { fontFamily: fonts.medium, color: theme.text.primary }]}
-                value={gender}
-                onChangeText={setGender}
-                placeholder="e.g. Male, Female, Other"
+                value={streetAddress}
+                onChangeText={setStreetAddress}
+                placeholder="e.g. 123, Luxury Apartments, Park Street"
                 placeholderTextColor={theme.text.muted}
+                editable={isEditing}
               />
             </View>
           </View>
 
-          {/* Address */}
+          {/* Landmark */}
           <View style={styles.inputContainer}>
-            <Text style={[styles.inputLabel, { fontFamily: fonts.semiBold, color: theme.text.secondary }]}>SHIPPING ADDRESS</Text>
-            <View style={[styles.inputWrapper, { backgroundColor: theme.bg.input, height: 90, alignItems: 'flex-start', paddingTop: 12 }]}>
-              <MapPin size={18} color={theme.text.muted} style={[styles.inputIcon, { marginTop: 2 }]} />
+            <Text style={[styles.inputLabel, { fontFamily: fonts.semiBold, color: theme.text.secondary }]}>LANDMARK (OPTIONAL)</Text>
+            <View style={[styles.inputWrapper, { backgroundColor: theme.bg.input }, !isEditing && { opacity: 0.85 }]}>
+              <MapPin size={17} color={theme.text.muted} style={styles.inputIcon} />
               <TextInput
-                style={[styles.input, { fontFamily: fonts.medium, color: theme.text.primary, height: '100%', textAlignVertical: 'top' }]}
-                value={address}
-                onChangeText={setAddress}
-                placeholder="Enter complete shipping address"
+                style={[styles.input, { fontFamily: fonts.medium, color: theme.text.primary }]}
+                value={landmark}
+                onChangeText={setLandmark}
+                placeholder="e.g. Near City Mall"
                 placeholderTextColor={theme.text.muted}
-                multiline
+                editable={isEditing}
+              />
+            </View>
+          </View>
+
+          {/* Alternate Phone */}
+          <View style={styles.inputContainer}>
+            <Text style={[styles.inputLabel, { fontFamily: fonts.semiBold, color: theme.text.secondary }]}>ALT PHONE NUMBER (OPTIONAL)</Text>
+            <View style={[styles.inputWrapper, { backgroundColor: theme.bg.input }, !isEditing && { opacity: 0.85 }]}>
+              <Phone size={17} color={theme.text.muted} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.input, { fontFamily: fonts.medium, color: theme.text.primary }]}
+                value={alternatePhone}
+                onChangeText={setAlternatePhone}
+                placeholder="e.g. +91 9876543210"
+                placeholderTextColor={theme.text.muted}
+                keyboardType="phone-pad"
+                editable={isEditing}
+              />
+            </View>
+          </View>
+
+          {/* Pincode and Area Row */}
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            {/* Pincode */}
+            <View style={[styles.inputContainer, { flex: 1 }]}>
+              <Text style={[styles.inputLabel, { fontFamily: fonts.semiBold, color: theme.text.secondary }]}>PINCODE</Text>
+              <View style={[styles.inputWrapper, { backgroundColor: theme.bg.input }, !isEditing && { opacity: 0.85 }]}>
+                <TextInput
+                  style={[styles.input, { fontFamily: fonts.medium, color: theme.text.primary }]}
+                  value={pincode}
+                  onChangeText={setPincode}
+                  placeholder="e.g. 90210"
+                  placeholderTextColor={theme.text.muted}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  editable={isEditing}
+                />
+              </View>
+            </View>
+
+            {/* Area */}
+            <View style={[styles.inputContainer, { flex: 1.2 }]}>
+              <Text style={[styles.inputLabel, { fontFamily: fonts.semiBold, color: theme.text.secondary }]}>AREA</Text>
+              <View style={[styles.inputWrapper, { backgroundColor: theme.bg.input }, !isEditing && { opacity: 0.85 }]}>
+                <TextInput
+                  style={[styles.input, { fontFamily: fonts.medium, color: theme.text.primary }]}
+                  value={area}
+                  onChangeText={setArea}
+                  placeholder="e.g. Beverly Hills"
+                  placeholderTextColor={theme.text.muted}
+                  editable={isEditing}
+                />
+              </View>
+            </View>
+          </View>
+
+          {/* City */}
+          <View style={styles.inputContainer}>
+            <Text style={[styles.inputLabel, { fontFamily: fonts.semiBold, color: theme.text.secondary }]}>CITY / STATE</Text>
+            <View style={[styles.inputWrapper, { backgroundColor: theme.bg.input }, !isEditing && { opacity: 0.85 }]}>
+              <TextInput
+                style={[styles.input, { fontFamily: fonts.medium, color: theme.text.primary }]}
+                value={city}
+                onChangeText={setCity}
+                placeholder="e.g. Los Angeles, CA"
+                placeholderTextColor={theme.text.muted}
+                editable={isEditing}
               />
             </View>
           </View>
         </View>
 
-        {/* Save Button */}
-        <TouchableOpacity
-          style={[styles.saveBtn, { backgroundColor: theme.brand[500] }]}
-          onPress={handleUpdate}
-          disabled={updating}
-          activeOpacity={0.8}
-        >
-          {updating ? (
-            <ActivityIndicator color="#ffffff" size="small" />
-          ) : (
-            <>
-              <Save size={18} color="#ffffff" />
-              <Text style={[styles.saveBtnText, { fontFamily: fonts.bold }]}>SAVE DETAILS</Text>
-            </>
-          )}
-        </TouchableOpacity>
+        {/* Edit Details / Save & Cancel Button Row */}
+        {!isEditing ? (
+          <TouchableOpacity
+            style={[styles.saveBtn, { backgroundColor: theme.brand[500] }, shadows.premium]}
+            onPress={() => {
+              setBackupFullName(fullName);
+              setBackupGender(gender);
+              setBackupStreetAddress(streetAddress);
+              setBackupLandmark(landmark);
+              setBackupAlternatePhone(alternatePhone);
+              setBackupPincode(pincode);
+              setBackupArea(area);
+              setBackupCity(city);
+              setIsEditing(true);
+            }}
+            activeOpacity={0.85}
+          >
+            <Edit3 size={18} color="#ffffff" />
+            <Text style={[styles.saveBtnText, { fontFamily: fonts.bold }]}>EDIT DETAILS</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ flexDirection: 'row', gap: 12, marginBottom: 6 }}>
+            <TouchableOpacity
+              style={[styles.saveBtn, { flex: 1, backgroundColor: '#f1f5f9' }, shadows.premium]}
+              onPress={() => {
+                setFullName(backupFullName);
+                setGender(backupGender);
+                setStreetAddress(backupStreetAddress);
+                setLandmark(backupLandmark);
+                setAlternatePhone(backupAlternatePhone);
+                setPincode(backupPincode);
+                setArea(backupArea);
+                setCity(backupCity);
+                setIsEditing(false);
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.saveBtnText, { fontFamily: fonts.bold, color: '#475569' }]}>CANCEL</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.saveBtn, { flex: 1.5, backgroundColor: theme.brand[500] }, shadows.premium]}
+              onPress={handleUpdate}
+              disabled={updating}
+              activeOpacity={0.85}
+            >
+              {updating ? (
+                <ActivityIndicator color="#ffffff" size="small" />
+              ) : (
+                <>
+                  <Save size={18} color="#ffffff" />
+                  <Text style={[styles.saveBtnText, { fontFamily: fonts.bold }]}>SAVE CHANGES</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Contact Details Card */}
+        <View style={[styles.formCard, shadows.premium, { backgroundColor: theme.bg.card }]}>
+          <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+            Contact Information
+          </Text>
+          <Text style={[styles.sectionSubtitle, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
+            Changing these requires OTP verification to keep your account secure.
+          </Text>
+
+          {/* Email Section */}
+          <View style={styles.inputContainer}>
+            <Text style={[styles.inputLabel, { fontFamily: fonts.semiBold, color: theme.text.secondary }]}>EMAIL ADDRESS</Text>
+            <View style={[styles.inputWrapper, { backgroundColor: theme.bg.input, justifyContent: 'space-between' }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10 }}>
+                <Mail size={17} color={theme.text.muted} style={styles.inputIcon} />
+                <Text style={{ fontFamily: fonts.medium, color: theme.text.primary, fontSize: 14, flex: 1 }} numberOfLines={1} ellipsizeMode="tail">
+                  {profile?.email || '—'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.editContactBtn, { backgroundColor: theme.brand[50] }]}
+                onPress={() => { setEditingEmail(true); setEmailOtpSent(false); setNewEmail(''); setEmailOtp(''); setPassword(''); }}
+                activeOpacity={0.7}
+              >
+                <Edit3 size={13} color={theme.brand[500]} />
+                <Text style={[styles.editContactText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>Change</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Phone Section */}
+          <View style={styles.inputContainer}>
+            <Text style={[styles.inputLabel, { fontFamily: fonts.semiBold, color: theme.text.secondary }]}>PHONE NUMBER</Text>
+            <View style={[styles.inputWrapper, { backgroundColor: theme.bg.input, justifyContent: 'space-between' }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10 }}>
+                <Phone size={17} color={theme.text.muted} style={styles.inputIcon} />
+                <Text style={{ fontFamily: fonts.medium, color: theme.text.primary, fontSize: 14, flex: 1 }} numberOfLines={1} ellipsizeMode="tail">
+                  {profile?.phoneNumber || '—'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.editContactBtn, { backgroundColor: theme.brand[50] }]}
+                onPress={() => { setEditingPhone(true); setPhoneOtpSent(false); setNewPhone(''); setPhoneOtp(''); setPassword(''); }}
+                activeOpacity={0.7}
+              >
+                <Edit3 size={13} color={theme.brand[500]} />
+                <Text style={[styles.editContactText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>Change</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
 
       </ScrollView>
+
+      {/* Gender Picker Modal */}
+      <Modal visible={showGenderPicker} transparent animationType="fade">
+        <TouchableOpacity style={styles.modalOverlay} onPress={() => setShowGenderPicker(false)} activeOpacity={1}>
+          <View style={[styles.pickerSheet, { backgroundColor: theme.bg.card }]}>
+            <Text style={[styles.pickerTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>Select Gender</Text>
+            {GENDER_OPTIONS.map(opt => (
+              <TouchableOpacity
+                key={opt.value}
+                style={[styles.pickerOption, gender === opt.value && { backgroundColor: theme.brand[50] }]}
+                onPress={() => { setGender(opt.value); setShowGenderPicker(false); }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.pickerOptionText, { fontFamily: fonts.medium, color: gender === opt.value ? theme.brand[500] : theme.text.primary }]}>
+                  {opt.label}
+                </Text>
+                {gender === opt.value && <Check size={16} color={theme.brand[500]} />}
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={[styles.pickerCancel, { borderColor: theme.border }]} onPress={() => setShowGenderPicker(false)}>
+              <Text style={[styles.pickerCancelText, { fontFamily: fonts.bold, color: theme.text.secondary }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Email Change Modal */}
+      <Modal visible={editingEmail} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.changeSheet, { backgroundColor: theme.bg.card }]}>
+            <View style={styles.changeSheetHeader}>
+              <Text style={[styles.changeSheetTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>Change Email</Text>
+              <TouchableOpacity onPress={handleCloseEmailModal}>
+                <X size={22} color={theme.text.secondary} />
+              </TouchableOpacity>
+            </View>
+
+            {!isPasswordVerified ? (
+              <>
+                <Text style={[styles.changeSheetSub, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
+                  For security, please verify your account password first to proceed with changing your email.
+                </Text>
+                
+                {/* Password Input */}
+                <View style={[styles.inputWrapper, { backgroundColor: theme.bg.input, marginTop: 16 }]}>
+                  <Lock size={17} color={theme.text.muted} style={styles.inputIcon} />
+                  <TextInput
+                    style={[styles.input, { fontFamily: fonts.medium, color: theme.text.primary }]}
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder="Verify account password"
+                    placeholderTextColor={theme.text.muted}
+                    secureTextEntry={true}
+                  />
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.saveBtn, { backgroundColor: theme.brand[500], marginTop: 20 }]}
+                  onPress={handleVerifyPassword}
+                  disabled={emailLoading}
+                >
+                  {emailLoading ? <ActivityIndicator color="#ffffff" /> : (
+                    <Text style={[styles.saveBtnText, { fontFamily: fonts.bold }]}>VERIFY PASSWORD</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            ) : !emailOtpSent ? (
+              <>
+                <View style={[styles.verifiedBadge, { backgroundColor: theme.brand[50] }]}>
+                  <Check size={16} color="#10b981" />
+                  <Text style={[styles.verifiedBadgeText, { fontFamily: fonts.semiBold, color: '#10b981' }]}>
+                    Password Verified
+                  </Text>
+                </View>
+
+                <Text style={[styles.changeSheetSub, { fontFamily: fonts.medium, color: theme.text.secondary, marginTop: 8 }]}>
+                  Enter your new email address. A security code will be sent to your current email to confirm ownership.
+                </Text>
+
+                {/* New Email Input */}
+                <View style={[styles.inputWrapper, { backgroundColor: theme.bg.input, marginTop: 16 }]}>
+                  <Mail size={17} color={theme.text.muted} style={styles.inputIcon} />
+                  <TextInput
+                    style={[styles.input, { fontFamily: fonts.medium, color: theme.text.primary }]}
+                    value={newEmail}
+                    onChangeText={setNewEmail}
+                    placeholder="New email address"
+                    placeholderTextColor={theme.text.muted}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                </View>
+                <TouchableOpacity
+                  style={[styles.saveBtn, { backgroundColor: theme.brand[500], marginTop: 20 }]}
+                  onPress={handleSendEmailOtp}
+                  disabled={emailLoading}
+                >
+                  {emailLoading ? <ActivityIndicator color="#ffffff" /> : (
+                    <Text style={[styles.saveBtnText, { fontFamily: fonts.bold }]}>SEND CODE</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={[styles.changeSheetSub, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
+                  Enter the 6-digit code sent to your current registered email address to authorize changing to: {newEmail}
+                </Text>
+                <View style={[styles.inputWrapper, { backgroundColor: theme.bg.input, marginTop: 16 }]}>
+                  <TextInput
+                    style={[styles.input, { fontFamily: fonts.bold, color: theme.text.primary, fontSize: 20, letterSpacing: 8, textAlign: 'center' }]}
+                    value={emailOtp}
+                    onChangeText={setEmailOtp}
+                    placeholder="000000"
+                    placeholderTextColor={theme.text.muted}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                  />
+                </View>
+                <TouchableOpacity
+                  style={[styles.saveBtn, { backgroundColor: theme.brand[500], marginTop: 20 }]}
+                  onPress={handleVerifyEmailOtp}
+                  disabled={emailLoading}
+                >
+                  {emailLoading ? <ActivityIndicator color="#ffffff" /> : (
+                    <Text style={[styles.saveBtnText, { fontFamily: fonts.bold }]}>VERIFY & APPLY</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Phone Change Modal */}
+      <Modal visible={editingPhone} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.changeSheet, { backgroundColor: theme.bg.card }]}>
+            <View style={styles.changeSheetHeader}>
+              <Text style={[styles.changeSheetTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>Change Phone</Text>
+              <TouchableOpacity onPress={handleClosePhoneModal}>
+                <X size={22} color={theme.text.secondary} />
+              </TouchableOpacity>
+            </View>
+
+            {!isPasswordVerified ? (
+              <>
+                <Text style={[styles.changeSheetSub, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
+                  For security, please verify your account password first to proceed with changing your phone number.
+                </Text>
+                
+                {/* Password Input */}
+                <View style={[styles.inputWrapper, { backgroundColor: theme.bg.input, marginTop: 16 }]}>
+                  <Lock size={17} color={theme.text.muted} style={styles.inputIcon} />
+                  <TextInput
+                    style={[styles.input, { fontFamily: fonts.medium, color: theme.text.primary }]}
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder="Verify account password"
+                    placeholderTextColor={theme.text.muted}
+                    secureTextEntry={true}
+                  />
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.saveBtn, { backgroundColor: theme.brand[500], marginTop: 20 }]}
+                  onPress={handleVerifyPassword}
+                  disabled={phoneLoading}
+                >
+                  {phoneLoading ? <ActivityIndicator color="#ffffff" /> : (
+                    <Text style={[styles.saveBtnText, { fontFamily: fonts.bold }]}>VERIFY PASSWORD</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            ) : !phoneOtpSent ? (
+              <>
+                <View style={[styles.verifiedBadge, { backgroundColor: theme.brand[50] }]}>
+                  <Check size={16} color="#10b981" />
+                  <Text style={[styles.verifiedBadgeText, { fontFamily: fonts.semiBold, color: '#10b981' }]}>
+                    Password Verified
+                  </Text>
+                </View>
+
+                <Text style={[styles.changeSheetSub, { fontFamily: fonts.medium, color: theme.text.secondary, marginTop: 8 }]}>
+                  Enter your new phone number. A security code will be sent to your current email to confirm ownership.
+                </Text>
+
+                {/* New Phone Input */}
+                <View style={[styles.inputWrapper, { backgroundColor: theme.bg.input, marginTop: 16 }]}>
+                  <Phone size={17} color={theme.text.muted} style={styles.inputIcon} />
+                  <TextInput
+                    style={[styles.input, { fontFamily: fonts.medium, color: theme.text.primary }]}
+                    value={newPhone}
+                    onChangeText={setNewPhone}
+                    placeholder="+91 9999988888"
+                    placeholderTextColor={theme.text.muted}
+                    keyboardType="phone-pad"
+                  />
+                </View>
+                <TouchableOpacity
+                  style={[styles.saveBtn, { backgroundColor: theme.brand[500], marginTop: 20 }]}
+                  onPress={handleSendPhoneOtp}
+                  disabled={phoneLoading}
+                >
+                  {phoneLoading ? <ActivityIndicator color="#ffffff" /> : (
+                    <Text style={[styles.saveBtnText, { fontFamily: fonts.bold }]}>SEND CODE</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={[styles.changeSheetSub, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
+                  Enter the 6-digit code sent to your current registered email address to authorize changing to: {newPhone}
+                </Text>
+                <View style={[styles.inputWrapper, { backgroundColor: theme.bg.input, marginTop: 16 }]}>
+                  <TextInput
+                    style={[styles.input, { fontFamily: fonts.bold, color: theme.text.primary, fontSize: 20, letterSpacing: 8, textAlign: 'center' }]}
+                    value={phoneOtp}
+                    onChangeText={setPhoneOtp}
+                    placeholder="000000"
+                    placeholderTextColor={theme.text.muted}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                  />
+                </View>
+                <TouchableOpacity
+                  style={[styles.saveBtn, { backgroundColor: theme.brand[500], marginTop: 20 }]}
+                  onPress={handleVerifyPhoneOtp}
+                  disabled={phoneLoading}
+                >
+                  {phoneLoading ? <ActivityIndicator color="#ffffff" /> : (
+                    <Text style={[styles.saveBtnText, { fontFamily: fonts.bold }]}>VERIFY & APPLY</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Updated Details Success Modal */}
+      <Modal visible={showUpdatedPopup} transparent animationType="fade">
+        <View style={styles.animationOverlay}>
+          <View style={[styles.animationContent, shadows.premium, { backgroundColor: theme.bg.card }]}>
+            <View style={styles.animationSvgWrapper}>
+              <LottieView
+                source={require('../../../assets/updated_success.json')}
+                autoPlay
+                loop={false}
+                style={{ width: 130, height: 130 }}
+              />
+            </View>
+            <Text style={[styles.animationTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+              Details Updated!
+            </Text>
+            <Text style={[styles.animationSub, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
+              Your profile information has been successfully updated.
+            </Text>
+            <TouchableOpacity 
+              style={[styles.animationCloseBtn, { backgroundColor: theme.brand[500] }]} 
+              onPress={() => setShowUpdatedPopup(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.animationCloseBtnText, { fontFamily: fonts.bold }]}>CONTINUE</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   headerBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -274,113 +979,131 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   headerBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 40, height: 40, borderRadius: 12,
     backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
   },
-  headerTitle: {
-    fontSize: 18,
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 40,
-  },
+  headerTitle: { fontSize: 18 },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 50 },
   summaryCard: {
-    flexDirection: 'row',
-    borderRadius: 24,
-    padding: 16,
-    marginBottom: 20,
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row', borderRadius: 24, padding: 18,
+    marginBottom: 20, alignItems: 'center', justifyContent: 'space-between',
   },
-  summaryItem: {
+  summaryItem: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  iconBg: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  summaryLabel: { fontSize: 11 },
+  summaryValue: { fontSize: 13, marginTop: 2 },
+  summaryDivider: { width: 1, height: 32, backgroundColor: '#f0f0f2', marginHorizontal: 10 },
+  formCard: { borderRadius: 24, padding: 20, marginBottom: 20, gap: 18 },
+  sectionTitle: { fontSize: 15, marginBottom: 2 },
+  sectionSubtitle: { fontSize: 12, lineHeight: 18, marginBottom: 4, marginTop: -6 },
+  inputContainer: { gap: 8 },
+  inputLabel: { fontSize: 10.5, letterSpacing: 0.6 },
+  inputWrapper: {
+    flexDirection: 'row', alignItems: 'center',
+    height: 50, borderRadius: 14, paddingHorizontal: 14,
+  },
+  inputIcon: { marginRight: 10 },
+  input: { flex: 1, height: '100%', fontSize: 14 },
+  dropdownBtn: { justifyContent: 'space-between' },
+  dropdownText: { flex: 1, fontSize: 14 },
+  saveBtn: {
+    height: 54, borderRadius: 16,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+    marginBottom: 6,
+  },
+  saveBtnText: { color: '#ffffff', fontSize: 15 },
+  editContactBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10,
+  },
+  editContactText: { fontSize: 12 },
+  // Modal
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  pickerSheet: {
+    borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    padding: 24, paddingBottom: 40,
+  },
+  pickerTitle: { fontSize: 17, marginBottom: 20, textAlign: 'center' },
+  pickerOption: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 16, paddingHorizontal: 16, borderRadius: 14, marginBottom: 8,
+  },
+  pickerOptionText: { fontSize: 15 },
+  pickerCancel: {
+    marginTop: 8, paddingVertical: 14, borderRadius: 14, borderWidth: 1,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  pickerCancelText: { fontSize: 14 },
+  changeSheet: {
+    margin: 16, borderRadius: 28, padding: 24,
+  },
+  changeSheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  changeSheetTitle: { fontSize: 18 },
+  changeSheetSub: { fontSize: 13, lineHeight: 20 },
+  // Skeleton
+  skeletonBtn: { width: 40, height: 40, borderRadius: 12 },
+  skeletonTitle: { width: 120, height: 20, borderRadius: 6 },
+  skeletonCard: { height: 80, borderRadius: 24, marginBottom: 20 },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  verifiedBadgeText: {
+    fontSize: 12,
+  },
+  animationOverlay: {
     flex: 1,
-    flexDirection: 'row',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 12,
+    padding: 24,
   },
-  iconBg: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+  animationContent: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: 28,
+    padding: 24,
+    alignItems: 'center',
+  },
+  animationSvgWrapper: {
+    marginBottom: 12,
+    width: 130,
+    height: 130,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  summaryLabel: {
-    fontSize: 11,
+  animationTitle: {
+    fontSize: 20,
+    marginBottom: 8,
+    textAlign: 'center',
   },
-  summaryValue: {
+  animationSub: {
     fontSize: 13,
-    marginTop: 2,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 20,
+    paddingHorizontal: 10,
   },
-  divider: {
-    width: 1,
-    height: 30,
-    backgroundColor: '#f0f0f2',
-    marginHorizontal: 12,
-  },
-  formCard: {
-    borderRadius: 24,
-    padding: 20,
-    marginBottom: 24,
-    gap: 16,
-  },
-  sectionTitle: {
-    fontSize: 15,
-    marginBottom: 4,
-  },
-  inputContainer: {
-    gap: 8,
-  },
-  inputLabel: {
-    fontSize: 10.5,
-    letterSpacing: 0.5,
-  },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  animationCloseBtn: {
+    width: '100%',
     height: 48,
     borderRadius: 14,
-    paddingHorizontal: 12,
-  },
-  inputIcon: {
-    marginRight: 10,
-  },
-  input: {
-    flex: 1,
-    height: '100%',
-    fontSize: 13.5,
-  },
-  saveBtn: {
-    height: 54,
-    borderRadius: 16,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
   },
-  saveBtnText: {
+  animationCloseBtnText: {
+    fontSize: 13,
     color: '#ffffff',
-    fontSize: 15,
-  },
-  // Skeleton Styles
-  skeletonBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-  },
-  skeletonTitle: {
-    width: 120,
-    height: 20,
-    borderRadius: 6,
-  },
-  skeletonCard: {
-    height: 80,
-    borderRadius: 24,
-    marginBottom: 20,
+    letterSpacing: 0.5,
   },
 });

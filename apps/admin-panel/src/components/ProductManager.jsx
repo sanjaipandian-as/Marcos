@@ -19,6 +19,10 @@ export default function ProductManager() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [formData, setFormData] = useState({
@@ -28,6 +32,7 @@ export default function ProductManager() {
     materialInfo: '',
     categoryId: '',
     inventoryQty: '',
+    targetGender: 'UNISEX',
     isTrending: false,
     trendingScheduledAt: '',
     images: ['']
@@ -53,15 +58,46 @@ export default function ProductManager() {
   };
 
   useEffect(() => {
-    loadData();
+    const loadCategories = async () => {
+      try {
+        const catList = await api.getCategories();
+        setCategories(catList);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    loadCategories();
   }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadData();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [currentPage, searchTerm, selectedCategory, categories.length]);
 
   const loadData = async () => {
     try {
-      const prodList = await api.getProducts();
-      const catList = await api.getCategories();
-      setProducts(prodList);
-      setCategories(catList);
+      let categorySlug = '';
+      if (selectedCategory !== 'ALL' && categories.length > 0) {
+        const cat = categories.find(c => c.id === selectedCategory);
+        if (cat) categorySlug = cat.slug;
+      }
+      
+      const res = await api.getProductsPaginated({
+        page: currentPage,
+        limit: 12,
+        search: searchTerm,
+        categorySlug
+      });
+      
+      if (res && res.success) {
+        setProducts(res.data);
+        setTotalPages(res.pagination.pages);
+        setTotalItems(res.pagination.total);
+      } else {
+        setProducts(res || []);
+      }
     } catch (err) {
       console.error(err);
     }
@@ -76,6 +112,7 @@ export default function ProductManager() {
       materialInfo: '',
       categoryId: categories[0]?.id || '',
       inventoryQty: '10',
+      targetGender: 'UNISEX',
       isTrending: false,
       trendingScheduledAt: '',
       images: ['https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=500']
@@ -93,6 +130,7 @@ export default function ProductManager() {
       materialInfo: product.materialInfo || '',
       categoryId: product.categoryId,
       inventoryQty: String(product.inventoryQty),
+      targetGender: product.targetGender || 'UNISEX',
       isTrending: product.isTrending,
       trendingScheduledAt: product.trendingScheduledAt ? product.trendingScheduledAt.slice(0, 16) : '',
       images: product.images
@@ -118,6 +156,7 @@ export default function ProductManager() {
       materialInfo: formData.materialInfo,
       categoryId: formData.categoryId,
       inventoryQty: Number(formData.inventoryQty),
+      targetGender: formData.targetGender,
       isTrending: formData.isTrending,
       trendingScheduledAt: formData.isTrending && formData.trendingScheduledAt ? new Date(formData.trendingScheduledAt).toISOString() : undefined,
       images: formData.images
@@ -161,12 +200,17 @@ export default function ProductManager() {
     return categories.find(c => c.id === catId)?.name || 'Unknown';
   };
 
-  const filteredProducts = products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          p.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === 'ALL' || p.categoryId === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  const handleSearchChange = (e) => {
+    setSearchTerm(e.target.value);
+    setCurrentPage(1);
+  };
+  
+  const handleCategoryChange = (e) => {
+    setSelectedCategory(e.target.value);
+    setCurrentPage(1);
+  };
+
+  const filteredProducts = products;
 
   return (
     <div className="space-y-6">
@@ -189,7 +233,7 @@ export default function ProductManager() {
           <input
             type="text"
             value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
+            onChange={handleSearchChange}
             placeholder="Search products..."
             className="w-full pl-9 pr-4 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors"
           />
@@ -199,7 +243,7 @@ export default function ProductManager() {
         <div>
           <select
             value={selectedCategory}
-            onChange={e => setSelectedCategory(e.target.value)}
+            onChange={handleCategoryChange}
             className="w-full text-xs border border-slate-200 rounded-xl py-2 px-3 bg-white text-slate-650 focus:outline-none focus:border-brand-500 transition-colors font-bold"
           >
             <option value="ALL">All Categories</option>
@@ -212,7 +256,7 @@ export default function ProductManager() {
         <div className="flex items-center justify-center sm:justify-start gap-2 px-4 py-2 bg-amber-50 border border-amber-100 rounded-xl text-amber-800 text-[11px] font-bold">
           <AlertTriangle className="w-4.5 h-4.5 shrink-0" />
           <span>
-            {products.filter(p => p.inventoryQty <= 5).length} Items Low or Out of Stock!
+            {totalItems} Total Products
           </span>
         </div>
       </div>
@@ -308,6 +352,33 @@ export default function ProductManager() {
         )}
       </div>
 
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between bg-white border border-slate-200 p-4 rounded-2xl shadow-sm">
+          <p className="text-xs text-slate-500 font-bold">
+            Showing <span className="text-slate-800">{(currentPage - 1) * 12 + 1}</span> to <span className="text-slate-800">{Math.min(currentPage * 12, totalItems)}</span> of <span className="text-slate-800">{totalItems}</span> Products
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="py-1.5 px-4 text-xs font-bold bg-slate-50 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Previous
+            </button>
+            <div className="flex items-center justify-center px-3 py-1.5 bg-brand-50 text-brand-600 font-extrabold text-xs rounded-xl border border-brand-100">
+              Page {currentPage} of {totalPages}
+            </div>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="py-1.5 px-4 text-xs font-bold bg-slate-50 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+
       {isModalOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
           <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-lg shadow-2xl max-h-[85vh] overflow-y-auto flex flex-col relative animate-scaleUp">
@@ -381,6 +452,22 @@ export default function ProductManager() {
                     ))}
                   </select>
                 </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase block">Target Gender *</label>
+                  <select
+                    value={formData.targetGender}
+                    onChange={e => setFormData({ ...formData, targetGender: e.target.value })}
+                    className="w-full text-xs border border-slate-200 rounded-xl py-2 px-3 bg-white focus:outline-none focus:border-brand-500 font-semibold"
+                  >
+                    <option value="UNISEX">Unisex</option>
+                    <option value="MEN">Men</option>
+                    <option value="WOMEN">Women</option>
+                    <option value="KIDS">Kids</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 uppercase block">Fabric/Material</label>
                   <input

@@ -9,6 +9,7 @@ const client_1 = require("@prisma/client");
 const router = (0, express_1.Router)();
 router.get('/', auth_middleware_js_1.authenticate, visit_controller_js_1.VisitController.getVisits);
 router.post('/', auth_middleware_js_1.authenticate, (0, validate_middleware_js_1.validate)(visit_controller_js_1.visitCreateSchema), visit_controller_js_1.VisitController.createVisit);
+router.put('/:id', auth_middleware_js_1.authenticate, (0, validate_middleware_js_1.validate)(visit_controller_js_1.visitUpdateSchema), visit_controller_js_1.VisitController.updateVisit);
 // Admin Only assignments
 router.put('/:id/assign', auth_middleware_js_1.authenticate, (0, auth_middleware_js_1.authorize)(client_1.Role.ADMIN, client_1.Role.SUPERADMIN), (0, validate_middleware_js_1.validate)(visit_controller_js_1.visitAssignSchema), visit_controller_js_1.VisitController.assignVisit);
 // Staff / Admin status completions with image buffer upload validation

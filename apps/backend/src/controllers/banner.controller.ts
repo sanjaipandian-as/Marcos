@@ -2,6 +2,15 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import prisma from '../config/db.js';
 import { createAuditLog } from '../utils/audit.js';
+import redis from '../config/redis.js';
+
+async function invalidateBannerCache() {
+  try {
+    await redis.del('cache:banners:all', 'cache:banners:loc:HOME_SLIDER', 'cache:banners:loc:PROMOTIONAL_SECTION', 'cache:banners:loc:OFFER_SECTION');
+  } catch (err) {
+    console.error('Failed to invalidate banner cache:', err);
+  }
+}
 
 export const bannerCreateSchema = z.object({
   body: z.object({
@@ -36,8 +45,17 @@ export class BannerController {
    */
   static async getBanners(req: Request, res: Response, next: NextFunction) {
     const { location } = req.query;
+    const cacheKey = location ? `cache:banners:loc:${location}` : 'cache:banners:all';
 
     try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return res.status(200).json({
+          success: true,
+          data: JSON.parse(cached),
+        });
+      }
+
       const now = new Date();
       const where: any = {
         isActive: true,
@@ -61,6 +79,8 @@ export class BannerController {
           { createdAt: 'asc' }
         ],
       });
+
+      await redis.set(cacheKey, JSON.stringify(banners), 'EX', 86400);
 
       return res.status(200).json({
         success: true,
@@ -100,11 +120,6 @@ export class BannerController {
     const { id } = req.params;
 
     try {
-      const banner = await prisma.banner.findUnique({ where: { id } });
-      if (!banner) {
-        return res.status(404).json({ success: false, message: 'Banner not found' });
-      }
-
       await prisma.banner.update({
         where: { id },
         data: { clicks: { increment: 1 } },
@@ -114,7 +129,10 @@ export class BannerController {
         success: true,
         message: 'Click registered successfully',
       });
-    } catch (error) {
+    } catch (error: any) {
+      if (error.code === 'P2025') {
+        return res.status(404).json({ success: false, message: 'Banner not found' });
+      }
       next(error);
     }
   }
@@ -165,6 +183,8 @@ export class BannerController {
           },
         });
       }
+
+      await invalidateBannerCache();
 
       return res.status(201).json({
         success: true,
@@ -217,6 +237,8 @@ export class BannerController {
         });
       }
 
+      await invalidateBannerCache();
+
       return res.status(200).json({
         success: true,
         message: 'Banner updated successfully',
@@ -251,6 +273,8 @@ export class BannerController {
           title: existing.title,
         },
       });
+
+      await invalidateBannerCache();
 
       return res.status(200).json({
         success: true,

@@ -34,7 +34,8 @@ export function initWorker() {
     },
     {
       connection: connectionOptions,
-      concurrency: 5,
+      concurrency: 2,
+      drainDelay: 30, // Wait 30 seconds between polls when queue is empty (saves Redis commands)
     }
   );
 
@@ -76,12 +77,19 @@ export function initWorker() {
         });
       }
 
-      // 3. Update Order / Invoice status to failed if applicable
+      // 3. Log invoice generation failure — DO NOT cancel the order
+      // The order is already paid/valid; PDF failure is a non-critical side effect
       if (job.name === 'GENERATE_INVOICE_PDF' && job.data.orderId) {
-        await prisma.order.update({
-          where: { id: job.data.orderId },
-          data: { status: 'CANCELLED' }, // Or set to a failed billing status
-        });
+        logger.error(`Invoice PDF generation failed for order ${job.data.orderId}. Order status NOT changed. Admin intervention required.`);
+        // Notify superadmins specifically about the invoice failure
+        const io2 = getIO();
+        if (io2) {
+          io2.to('superadmins').emit('audit:alert', {
+            action: 'INVOICE_PDF_FAILED',
+            orderId: job.data.orderId,
+            message: `Invoice PDF generation permanently failed for order ${job.data.orderId}. Manual generation required.`,
+          });
+        }
       }
     } catch (e: any) {
       logger.error('Failed to execute job failure cleanup rules', { metadata: { error: e.message } });
@@ -334,38 +342,9 @@ export async function handleCreditReferralPoints(orderId: string, userId: string
           },
         });
 
-        // Credit referee
-        await tx.user.update({
-          where: { id: userId },
-          data: {
-            pointsBalance: { increment: referralBonus },
-          },
-        });
-
-        await tx.pointTransaction.create({
-          data: {
-            userId,
-            points: referralBonus,
-            reason: `Referral sign-up bonus (referred by other user)`,
-          },
-        });
-
-        // Log REFERRAL_POINTS_AWARDED for referee
-        await tx.auditLog.create({
-          data: {
-            userId: null,
-            action: 'REFERRAL_POINTS_AWARDED',
-            details: {
-              message: `Awarded ${referralBonus} referral points to referee ID ${userId} on their first order`,
-              userId,
-              points: referralBonus,
-              referrerUserId: user.referredById,
-              orderId,
-            },
-          },
-        });
-
-        logger.info(`Referred bonus of ${referralBonus} points credited to referrer ${user.referredById} and referee ${userId}`);
+        // Credit referee — Note: referee already received 100 sign-up bonus during registration,
+        // so we only credit the referrer here to avoid double-counting.
+        // The referee's registration bonus was handled in auth.controller.ts
       }
     }
   });

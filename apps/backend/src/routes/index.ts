@@ -11,6 +11,7 @@ import bannerRoutes from './banner.routes.js';
 import ticketRoutes from './ticket.routes.js';
 import orderRoutes from './order.routes.js';
 import categoryRoutes from './category.routes.js';
+import systemRoutes from './system.routes.js';
 
 const router = Router();
 
@@ -26,6 +27,7 @@ router.use('/banners', bannerRoutes);
 router.use('/tickets', ticketRoutes);
 router.use('/orders', orderRoutes);
 router.use('/categories', categoryRoutes);
+router.use('/system', systemRoutes);
 
 export default router;
 

@@ -33,6 +33,7 @@ export default function RegisterScreen({ navigation, onLoginSuccess }) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [referredByCode, setReferredByCode] = useState('');
 
   // Step 2 States
   const [otpCode, setOtpCode] = useState('');
@@ -43,7 +44,7 @@ export default function RegisterScreen({ navigation, onLoginSuccess }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [address, setAddress] = useState('');
-  const [gender, setGender] = useState('FEMALE'); 
+  const [gender, setGender] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -149,11 +150,15 @@ export default function RegisterScreen({ navigation, onLoginSuccess }) {
         password,
         address: address ? address.trim() : null,
         gender: gender,
+        referredByCode: referredByCode ? referredByCode.trim() : null,
       });
 
       if (res.success && res.accessToken) {
         await AsyncStorage.setItem('accessToken', res.accessToken);
         await AsyncStorage.setItem('userProfile', JSON.stringify(res.user));
+        if (res.user.referredById) {
+          await AsyncStorage.setItem('show_referral_success_popup', 'true');
+        }
         
         Alert.alert('Welcome!', 'Registration completed successfully.');
         onLoginSuccess(res.user);
@@ -244,6 +249,23 @@ export default function RegisterScreen({ navigation, onLoginSuccess }) {
             autoCapitalize="none"
             value={email}
             onChangeText={setEmail}
+          />
+        </View>
+      </View>
+
+      {/* Referral Code (Optional) */}
+      <View style={styles.inputGroup}>
+        <Text style={[styles.label, { fontFamily: fonts.semiBold }]}>
+          Referral Code (Optional)
+        </Text>
+        <View style={[styles.inputWrapper, { borderColor: theme.border }]}>
+          <TextInput
+            style={[styles.input, { fontFamily: fonts.regular }]}
+            placeholder="e.g. REF-ALEXR-1234"
+            placeholderTextColor={theme.text.muted}
+            autoCapitalize="characters"
+            value={referredByCode}
+            onChangeText={setReferredByCode}
           />
         </View>
       </View>
@@ -388,21 +410,25 @@ export default function RegisterScreen({ navigation, onLoginSuccess }) {
           Gender Profile *
         </Text>
         <View style={styles.genderRow}>
-          {['FEMALE', 'MALE', 'OTHER'].map((g) => (
+          {[
+            { label: 'Male', value: 'MALE' },
+            { label: 'Female', value: 'FEMALE' },
+            { label: 'Prefer not to say', value: 'OTHER' },
+          ].map((g) => (
             <TouchableOpacity
-              key={g}
+              key={g.value}
               style={[
                 styles.genderOption,
                 { borderColor: theme.border },
-                gender === g && { backgroundColor: theme.brand[50], borderColor: theme.brand[500] }
+                gender === g.value && { backgroundColor: theme.brand[50], borderColor: theme.brand[500] }
               ]}
-              onPress={() => setGender(g)}
+              onPress={() => setGender(g.value)}
             >
               <Text style={[
                 styles.genderOptionText,
-                { fontFamily: fonts.medium, color: gender === g ? theme.brand[500] : '#64748b' }
+                { fontFamily: fonts.medium, color: gender === g.value ? theme.brand[500] : '#64748b' }
               ]}>
-                {g}
+                {g.label}
               </Text>
             </TouchableOpacity>
           ))}

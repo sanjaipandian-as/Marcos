@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -7,11 +7,12 @@ import {
   TouchableOpacity, 
   ActivityIndicator, 
   Share,
-  Linking,
   Alert,
   Platform,
   StatusBar,
-  Dimensions
+  Dimensions,
+  Modal,
+  Clipboard
 } from 'react-native';
 import { useTheme } from '../../styles/ThemeContext';
 import { APP_CONFIG } from '../../config/app.config';
@@ -21,11 +22,8 @@ import {
   Share2, 
   Users, 
   Receipt, 
-  MessageSquareCode, 
-  Crown, 
-  Sparkles, 
   ChevronRight, 
-  ArrowRight, 
+  ChevronLeft,
   Info,
   Copy,
   Trophy,
@@ -40,10 +38,13 @@ export default function LoyaltyDashboardScreen({ navigation }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('LOGS'); // LOGS, REDEEM, REFERRALS
+  const [redeemedCoupon, setRedeemedCoupon] = useState(null);
+  const [redeeming, setRedeeming] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
 
-  const loadProfile = async () => {
+  const loadProfile = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await api.get('/auth/profile');
       if (res.success) {
         setProfile(res.data);
@@ -51,7 +52,7 @@ export default function LoyaltyDashboardScreen({ navigation }) {
     } catch (err) {
       console.error('Error fetching loyalty profile:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -63,17 +64,19 @@ export default function LoyaltyDashboardScreen({ navigation }) {
   }, [navigation]);
 
   const points = profile?.pointsBalance || 0;
-  const nextTierPoints = 1000;
-  const progress = Math.min(1, points / nextTierPoints) * 100;
 
   const getInviteMsg = () => {
-    return `Hey! Join me at ${APP_CONFIG.STORE_NAME} Bespoke Tailoring. Use my referral code: ${profile?.referralCode} to get 100 bonus points on your first tailoring order!`;
+    const inviteLink = `https://marcos-bespoke.com/invite?code=${profile?.referralCode}`;
+    return `Hey! Join me at ${APP_CONFIG.STORE_NAME} Bespoke Tailoring. Use my referral code: ${profile?.referralCode} to get 100 bonus points on your first tailoring order!\n\nTap here to download & register: ${inviteLink}`;
   };
 
   const handleShareSystem = async () => {
     try {
+      const inviteLink = `https://marcos-bespoke.com/invite?code=${profile?.referralCode}`;
       await Share.share({
         message: getInviteMsg(),
+        url: inviteLink,
+        title: 'Join MARCOS Tailoring',
       });
     } catch (err) {
       console.error(err);
@@ -81,127 +84,261 @@ export default function LoyaltyDashboardScreen({ navigation }) {
   };
 
   const copyToClipboard = () => {
-    // In a real app, use Clipboard.setString
-    Alert.alert('Copied', 'Referral code copied to clipboard!');
+    if (profile?.referralCode) {
+      Clipboard.setString(profile.referralCode);
+      Alert.alert('Copied', 'Referral code copied to clipboard!');
+    }
   };
 
-  if (loading && !profile) {
-    return (
-      <View style={styles.loader}>
-        <ActivityIndicator size="large" color="#006241" />
-      </View>
+  const handleRedeem = (pointsToRedeem, label) => {
+    if (points < pointsToRedeem) {
+      Alert.alert('Insufficient Points', `You need at least ${pointsToRedeem} points to redeem this voucher.`);
+      return;
+    }
+
+    Alert.alert(
+      'Redeem Points',
+      `Are you sure you want to redeem ${pointsToRedeem} points for a ${label}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Redeem', 
+          onPress: async () => {
+            try {
+              setRedeeming(true);
+              const res = await api.post('/auth/loyalty/redeem', { pointsToRedeem });
+              if (res.success) {
+                setRedeemedCoupon(res.data.couponCode);
+                setModalVisible(true);
+                // Refresh profile/points in background
+                loadProfile(true);
+              } else {
+                Alert.alert('Error', res.message || 'Points redemption failed.');
+              }
+            } catch (err) {
+              Alert.alert('Error', err.message || 'Something went wrong.');
+            } finally {
+              setRedeeming(false);
+            }
+          }
+        }
+      ]
     );
+  };
+
+  const renderSkeleton = () => (
+    <View style={[styles.container, { backgroundColor: theme.bg.main }]}>
+      {/* Header Bar */}
+      <View style={styles.headerBar}>
+        <View style={[styles.skelBtn, { backgroundColor: theme.border }]} />
+        <View style={[styles.skelTitle, { backgroundColor: theme.border, width: 120, height: 18 }]} />
+        <View style={{ width: 40 }} />
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Tier Card Skeleton */}
+        <View style={[styles.skelCard, { backgroundColor: theme.border }]} />
+
+        {/* Tabs Skeleton */}
+        <View style={styles.skelTabs}>
+          <View style={[styles.skelTab, { backgroundColor: theme.border }]} />
+          <View style={[styles.skelTab, { backgroundColor: theme.border }]} />
+          <View style={[styles.skelTab, { backgroundColor: theme.border }]} />
+        </View>
+
+        {/* Rows Skeleton */}
+        <View style={{ paddingHorizontal: 24, gap: 14 }}>
+          {[1, 2, 3].map(k => (
+            <View key={k} style={[styles.skelRow, { backgroundColor: theme.bg.card, borderColor: theme.border }]} />
+          ))}
+        </View>
+      </ScrollView>
+    </View>
+  );
+
+  if (loading && !profile) {
+    return renderSkeleton();
   }
 
   const transactions = profile?.pointTransactions || [];
   const referrals = profile?.referrals || [];
 
-  const renderTierCard = () => (
-    <View style={[styles.tierCard, shadows.premium]}>
+  const renderPointsCard = () => (
+    <View style={[styles.pointsCard, shadows.premium]}>
       <LinearGradient
-        colors={['#0a1d17', '#006241']}
+        colors={[theme.brand[700], theme.brand[500]]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={styles.tierGradient}
+        style={styles.pointsGradient}
       >
-        <View style={styles.tierHeader}>
-          <View>
-            <Text style={[styles.tierLabel, { fontFamily: fonts.bold }]}>CURRENT STATUS</Text>
-            <Text style={[styles.tierName, { fontFamily: fonts.extraBold }]}>
-              {points >= 1000 ? 'PLATINUM VIP' : 'GOLD MEMBER'}
-            </Text>
-          </View>
-          <View style={styles.tierIconWrapper}>
-            <Crown size={28} color="#c5a880" />
-          </View>
-        </View>
-
-        <View style={styles.pointsDisplay}>
+        <Text style={[styles.pointsLabel, { fontFamily: fonts.bold }]}>YOUR POINTS BALANCE</Text>
+        <View style={styles.pointsRow}>
+          <Gift size={30} color="#ffffff" style={{ opacity: 0.95 }} />
           <Text style={[styles.pointsVal, { fontFamily: fonts.extraBold }]}>{points}</Text>
-          <Text style={[styles.pointsUnit, { fontFamily: fonts.bold }]}>POINTS</Text>
+          <Text style={[styles.pointsUnitText, { fontFamily: fonts.semiBold }]}>points</Text>
         </View>
-
-        <View style={styles.progressSection}>
-          <View style={styles.progressInfo}>
-            <Text style={[styles.progressText, { fontFamily: fonts.medium }]}>
-              {points >= 1000 ? 'Highest Tier Reached' : `${1000 - points} points to Platinum`}
-            </Text>
-            <Text style={[styles.progressPercent, { fontFamily: fonts.bold }]}>{Math.round(progress)}%</Text>
-          </View>
-          <View style={styles.progressBarBg}>
-            <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
-          </View>
-        </View>
+        <Text style={[styles.pointsHint, { fontFamily: fonts.medium }]}>
+          Earn more points by sharing your referral code with friends!
+        </Text>
       </LinearGradient>
     </View>
   );
 
   const renderReferralSection = () => (
-    <View style={[styles.referralSection, shadows.premium]}>
+    <View style={[styles.referralSection, shadows.premium, { backgroundColor: theme.bg.card }]}>
       <View style={styles.sectionHeader}>
-        <Users size={20} color="#006241" />
-        <Text style={[styles.sectionTitle, { fontFamily: fonts.bold }]}>Referral Program</Text>
+        <Users size={20} color={theme.brand[500]} />
+        <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>Referral Program</Text>
       </View>
       
-      <Text style={[styles.referralDesc, { fontFamily: fonts.medium }]}>
-        Invite friends to experience MARCOS. Both of you earn <Text style={{ color: '#006241' }}>100 bonus points</Text> on their first order.
+      <Text style={[styles.referralDesc, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
+        Invite friends to experience {APP_CONFIG.STORE_NAME} Bespoke Tailoring and earn loyalty rewards.
       </Text>
 
-      <View style={styles.codeContainer}>
-        <View style={styles.codeWrapper}>
-          <Text style={[styles.codeLabel, { fontFamily: fonts.bold }]}>YOUR UNIQUE CODE</Text>
-          <Text style={[styles.codeValue, { fontFamily: fonts.extraBold }]}>{profile?.referralCode}</Text>
+      {/* Visual Referral Guide Steps */}
+      <View style={styles.referralStepsRow}>
+        <View style={styles.stepItem}>
+          <View style={[styles.stepNumBg, { backgroundColor: theme.brand[50] }]}>
+            <Text style={[styles.stepNum, { fontFamily: fonts.bold, color: theme.brand[500] }]}>1</Text>
+          </View>
+          <Text style={[styles.stepText, { fontFamily: fonts.bold, color: theme.text.primary }]}>Share Code</Text>
         </View>
-        <TouchableOpacity style={styles.copyBtn} onPress={copyToClipboard}>
-          <Copy size={20} color="#006241" />
+        <ChevronRight size={14} color={theme.text.muted} />
+        <View style={styles.stepItem}>
+          <View style={[styles.stepNumBg, { backgroundColor: theme.brand[50] }]}>
+            <Text style={[styles.stepNum, { fontFamily: fonts.bold, color: theme.brand[500] }]}>2</Text>
+          </View>
+          <Text style={[styles.stepText, { fontFamily: fonts.bold, color: theme.text.primary }]}>Friend Joins</Text>
+        </View>
+        <ChevronRight size={14} color={theme.text.muted} />
+        <View style={styles.stepItem}>
+          <View style={[styles.stepNumBg, { backgroundColor: theme.brand[50] }]}>
+            <Text style={[styles.stepNum, { fontFamily: fonts.bold, color: theme.brand[500] }]}>3</Text>
+          </View>
+          <Text style={[styles.stepText, { fontFamily: fonts.bold, color: theme.text.primary }]}>Both Earn 100 pts</Text>
+        </View>
+      </View>
+
+      <View style={[styles.codeContainer, { borderColor: theme.border, backgroundColor: theme.bg.input }]}>
+        <View style={styles.codeWrapper}>
+          <Text style={[styles.codeLabel, { fontFamily: fonts.bold, color: theme.text.muted }]}>YOUR UNIQUE CODE</Text>
+          <Text style={[styles.codeValue, { fontFamily: fonts.extraBold, color: theme.brand[500] }]}>{profile?.referralCode}</Text>
+        </View>
+        <TouchableOpacity style={[styles.copyBtn, { backgroundColor: theme.bg.card, borderColor: theme.border }]} onPress={copyToClipboard}>
+          <Copy size={18} color={theme.brand[500]} />
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.shareBtnPremium} onPress={handleShareSystem}>
+      <TouchableOpacity style={[styles.shareBtnPremium, { backgroundColor: theme.brand[500] }]} onPress={handleShareSystem} activeOpacity={0.85}>
         <Share2 size={18} color="#ffffff" />
         <Text style={[styles.shareBtnText, { fontFamily: fonts.bold }]}>INVITE FRIENDS NOW</Text>
       </TouchableOpacity>
     </View>
   );
 
-  return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-      
-      <LinearGradient
-        colors={['#0a1d17', '#006241']}
-        style={styles.header}
-      >
-        <View style={styles.headerContent}>
-          <Text style={[styles.headerTitle, { fontFamily: fonts.bold }]}>VIP Rewards</Text>
-          <Text style={[styles.headerSub, { fontFamily: fonts.medium }]}>Your bespoke loyalty journey</Text>
+  const renderRedeemModal = () => (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={modalVisible}
+      onRequestClose={() => setModalVisible(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={[styles.modalContent, shadows.premium, { backgroundColor: theme.bg.card }]}>
+          <View style={[styles.modalIconBg, { backgroundColor: theme.brand[50] }]}>
+            <Trophy size={36} color={theme.brand[500]} />
+          </View>
+          <Text style={[styles.modalTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+            Voucher Generated!
+          </Text>
+          <Text style={[styles.modalSub, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
+            Copy your unique single-use code to use during checkout:
+          </Text>
+
+          <View style={[styles.modalCodeBox, { backgroundColor: theme.bg.input, borderColor: theme.border }]}>
+            <Text style={[styles.modalCodeText, { fontFamily: fonts.extraBold, color: theme.brand[500] }]}>
+              {redeemedCoupon}
+            </Text>
+            <TouchableOpacity 
+              style={[styles.modalCopyBtn, { backgroundColor: theme.bg.card }]} 
+              onPress={() => {
+                Clipboard.setString(redeemedCoupon);
+                Alert.alert('Copied', 'Coupon code copied!');
+              }}
+            >
+              <Copy size={16} color={theme.brand[500]} />
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity 
+            style={[styles.modalCloseBtn, { backgroundColor: theme.brand[500] }]} 
+            onPress={() => setModalVisible(false)}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.modalCloseBtnText, { fontFamily: fonts.bold }]}>
+              DONE
+            </Text>
+          </TouchableOpacity>
         </View>
-      </LinearGradient>
+      </View>
+    </Modal>
+  );
+
+  return (
+    <View style={[styles.container, { backgroundColor: theme.bg.main }]}>
+      <StatusBar barStyle="dark-content" />
+      {redeeming && (
+        <View style={styles.absoluteLoader}>
+          <ActivityIndicator size="large" color={theme.brand[500]} />
+        </View>
+      )}
+      {renderRedeemModal()}
+      
+      {/* Header Bar */}
+      <View style={[styles.headerBar, { backgroundColor: theme.bg.main }]}>
+        <TouchableOpacity style={[styles.headerBtn, shadows.premium, { backgroundColor: theme.bg.card }]} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+          <ChevronLeft size={20} color={theme.text.primary} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>Invite & Earn</Text>
+        <View style={{ width: 40 }} />
+      </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {renderTierCard()}
+        {renderPointsCard()}
 
-        <View style={styles.tabsWrapper}>
+        <View style={[styles.tabsWrapper, { borderBottomColor: theme.border }]}>
           <TouchableOpacity 
-            style={[styles.tab, activeTab === 'LOGS' && styles.activeTab]} 
+            style={styles.tab} 
             onPress={() => setActiveTab('LOGS')}
+            activeOpacity={0.7}
           >
-            <Text style={[styles.tabText, activeTab === 'LOGS' && styles.activeTabText, { fontFamily: fonts.bold }]}>HISTORY</Text>
-            {activeTab === 'LOGS' && <View style={styles.activeTabIndicator} />}
+            <Text style={[
+              styles.tabText, 
+              { fontFamily: fonts.bold, color: activeTab === 'LOGS' ? theme.brand[500] : theme.text.muted }
+            ]}>HISTORY</Text>
+            {activeTab === 'LOGS' && <View style={[styles.activeTabIndicator, { backgroundColor: theme.brand[500] }]} />}
           </TouchableOpacity>
           <TouchableOpacity 
-            style={[styles.tab, activeTab === 'REDEEM' && styles.activeTab]} 
+            style={styles.tab} 
             onPress={() => setActiveTab('REDEEM')}
+            activeOpacity={0.7}
           >
-            <Text style={[styles.tabText, activeTab === 'REDEEM' && styles.activeTabText, { fontFamily: fonts.bold }]}>REDEEM</Text>
-            {activeTab === 'REDEEM' && <View style={styles.activeTabIndicator} />}
+            <Text style={[
+              styles.tabText, 
+              { fontFamily: fonts.bold, color: activeTab === 'REDEEM' ? theme.brand[500] : theme.text.muted }
+            ]}>REDEEM</Text>
+            {activeTab === 'REDEEM' && <View style={[styles.activeTabIndicator, { backgroundColor: theme.brand[500] }]} />}
           </TouchableOpacity>
           <TouchableOpacity 
-            style={[styles.tab, activeTab === 'REFERRALS' && styles.activeTab]} 
+            style={styles.tab} 
             onPress={() => setActiveTab('REFERRALS')}
+            activeOpacity={0.7}
           >
-            <Text style={[styles.tabText, activeTab === 'REFERRALS' && styles.activeTabText, { fontFamily: fonts.bold }]}>REFERRALS</Text>
-            {activeTab === 'REFERRALS' && <View style={styles.activeTabIndicator} />}
+            <Text style={[
+              styles.tabText, 
+              { fontFamily: fonts.bold, color: activeTab === 'REFERRALS' ? theme.brand[500] : theme.text.muted }
+            ]}>REFERRALS</Text>
+            {activeTab === 'REFERRALS' && <View style={[styles.activeTabIndicator, { backgroundColor: theme.brand[500] }]} />}
           </TouchableOpacity>
         </View>
 
@@ -209,20 +346,42 @@ export default function LoyaltyDashboardScreen({ navigation }) {
           <View style={styles.logsContainer}>
             {transactions.length === 0 ? (
               <View style={styles.emptyState}>
-                <Receipt size={40} color="#cbd5e1" />
-                <Text style={[styles.emptyStateText, { fontFamily: fonts.medium }]}>No point transactions yet</Text>
+                <Receipt size={40} color={theme.text.muted} />
+                <Text style={[styles.emptyStateText, { fontFamily: fonts.medium, color: theme.text.secondary }]}>No point transactions yet</Text>
               </View>
             ) : (
               transactions.map((tx) => (
-                <View key={tx.id} style={styles.logItem}>
-                  <View style={styles.logIcon}>
+                <View key={tx.id} style={[styles.logItem, { borderBottomColor: theme.border }]}>
+                  <View style={[styles.logIcon, { backgroundColor: theme.bg.card, borderColor: theme.border }]}>
                     <Star size={16} color={tx.points > 0 ? '#10b981' : '#ef4444'} />
                   </View>
                   <View style={styles.logInfo}>
-                    <Text style={[styles.logReason, { fontFamily: fonts.semiBold }]}>{tx.reason}</Text>
-                    <Text style={[styles.logDate, { fontFamily: fonts.medium }]}>
+                    <Text style={[styles.logReason, { fontFamily: fonts.semiBold, color: theme.text.primary }]}>
+                      {tx.reason.includes('Coupon: ')
+                        ? `Redeemed ${tx.points === -500 ? '₹500' : '₹1,200'} Coupon`
+                        : tx.reason}
+                    </Text>
+                    <Text style={[styles.logDate, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
                       {new Date(tx.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                     </Text>
+                    {tx.reason.includes('Coupon: ') && (() => {
+                      const code = tx.reason.split('Coupon: ')[1]?.trim();
+                      return code ? (
+                        <TouchableOpacity 
+                          style={[styles.copyCouponBadge, { backgroundColor: theme.bg.input, borderColor: theme.border }]} 
+                          onPress={() => {
+                            Clipboard.setString(code);
+                            Alert.alert('Copied', `Coupon code ${code} copied to clipboard!`);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Copy size={11} color={theme.brand[500]} />
+                          <Text style={[styles.copyCouponBadgeText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>
+                            {code} (Tap to Copy)
+                          </Text>
+                        </TouchableOpacity>
+                      ) : null;
+                    })()}
                   </View>
                   <Text style={[styles.logPoints, { fontFamily: fonts.bold, color: tx.points > 0 ? '#10b981' : '#ef4444' }]}>
                     {tx.points > 0 ? `+${tx.points}` : tx.points}
@@ -235,35 +394,43 @@ export default function LoyaltyDashboardScreen({ navigation }) {
 
         {activeTab === 'REDEEM' && (
           <View style={styles.redeemContainer}>
-            <View style={styles.infoBox}>
-              <Info size={16} color="#006241" />
-              <Text style={[styles.infoBoxText, { fontFamily: fonts.medium }]}>
+            <View style={[styles.infoBox, { backgroundColor: theme.brand[50] }]}>
+              <Info size={16} color={theme.brand[500]} />
+              <Text style={[styles.infoBoxText, { fontFamily: fonts.medium, color: theme.brand[800] }]}>
                 Redeem points for exclusive discounts on your next bespoke order.
               </Text>
             </View>
             
-            <TouchableOpacity style={[styles.redeemItem, shadows.premium]}>
-              <View style={styles.redeemIconWrapper}>
-                <Trophy size={20} color="#c5a880" />
+            <TouchableOpacity 
+              style={[styles.redeemItem, shadows.premium, { backgroundColor: theme.bg.card }]} 
+              activeOpacity={0.8}
+              onPress={() => handleRedeem(500, '₹500 Discount Voucher')}
+            >
+              <View style={[styles.redeemIconWrapper, { backgroundColor: theme.brand[50] }]}>
+                <Trophy size={20} color={theme.brand[500]} />
               </View>
               <View style={styles.redeemInfo}>
-                <Text style={[styles.redeemTitle, { fontFamily: fonts.bold }]}>₹500 Discount Voucher</Text>
-                <Text style={[styles.redeemPoints, { fontFamily: fonts.bold }]}>500 POINTS</Text>
+                <Text style={[styles.redeemTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>₹500 Discount Voucher</Text>
+                <Text style={[styles.redeemPoints, { fontFamily: fonts.bold, color: theme.brand[500] }]}>500 POINTS</Text>
               </View>
-              <View style={[styles.redeemAction, { opacity: points >= 500 ? 1 : 0.4 }]}>
+              <View style={[styles.redeemAction, { backgroundColor: theme.brand[500], opacity: points >= 500 ? 1 : 0.4 }]}>
                 <Text style={[styles.redeemActionText, { fontFamily: fonts.bold }]}>REDEEM</Text>
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.redeemItem, shadows.premium]}>
-              <View style={styles.redeemIconWrapper}>
-                <Trophy size={20} color="#c5a880" />
+            <TouchableOpacity 
+              style={[styles.redeemItem, shadows.premium, { backgroundColor: theme.bg.card }]} 
+              activeOpacity={0.8}
+              onPress={() => handleRedeem(1000, '₹1,200 Discount Voucher')}
+            >
+              <View style={[styles.redeemIconWrapper, { backgroundColor: theme.brand[50] }]}>
+                <Trophy size={20} color={theme.brand[500]} />
               </View>
               <View style={styles.redeemInfo}>
-                <Text style={[styles.redeemTitle, { fontFamily: fonts.bold }]}>₹1,200 Discount Voucher</Text>
-                <Text style={[styles.redeemPoints, { fontFamily: fonts.bold }]}>1000 POINTS</Text>
+                <Text style={[styles.redeemTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>₹1,200 Discount Voucher</Text>
+                <Text style={[styles.redeemPoints, { fontFamily: fonts.bold, color: theme.brand[500] }]}>1000 POINTS</Text>
               </View>
-              <View style={[styles.redeemAction, { opacity: points >= 1000 ? 1 : 0.4 }]}>
+              <View style={[styles.redeemAction, { backgroundColor: theme.brand[500], opacity: points >= 1000 ? 1 : 0.4 }]}>
                 <Text style={[styles.redeemActionText, { fontFamily: fonts.bold }]}>REDEEM</Text>
               </View>
             </TouchableOpacity>
@@ -275,26 +442,26 @@ export default function LoyaltyDashboardScreen({ navigation }) {
             {renderReferralSection()}
             
             <View style={styles.referredList}>
-              <Text style={[styles.referredListTitle, { fontFamily: fonts.bold }]}>REFERRED FRIENDS ({referrals.length})</Text>
+              <Text style={[styles.referredListTitle, { fontFamily: fonts.bold, color: theme.text.muted }]}>REFERRED FRIENDS ({referrals.length})</Text>
               {referrals.length === 0 ? (
                 <View style={styles.emptyState}>
-                  <Users size={32} color="#cbd5e1" />
-                  <Text style={[styles.emptyStateText, { fontFamily: fonts.medium }]}>No referrals yet</Text>
+                  <Users size={32} color={theme.text.muted} />
+                  <Text style={[styles.emptyStateText, { fontFamily: fonts.medium, color: theme.text.secondary }]}>No referrals yet</Text>
                 </View>
               ) : (
                 referrals.map((ref, idx) => (
-                  <View key={idx} style={styles.referredItem}>
-                    <View style={styles.referredAvatar}>
-                      <Text style={[styles.referredAvatarText, { fontFamily: fonts.bold }]}>{ref.fullName[0]}</Text>
+                  <View key={idx} style={[styles.referredItem, { backgroundColor: theme.bg.card, borderColor: theme.border }]}>
+                    <View style={[styles.referredAvatar, { backgroundColor: theme.brand[50] }]}>
+                      <Text style={[styles.referredAvatarText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>{ref.fullName[0]}</Text>
                     </View>
                     <View style={styles.referredInfo}>
-                      <Text style={[styles.referredName, { fontFamily: fonts.semiBold }]}>{ref.fullName}</Text>
-                      <Text style={[styles.referredDate, { fontFamily: fonts.medium }]}>
+                      <Text style={[styles.referredName, { fontFamily: fonts.semiBold, color: theme.text.primary }]}>{ref.fullName}</Text>
+                      <Text style={[styles.referredDate, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
                         Joined {new Date(ref.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                       </Text>
                     </View>
-                    <View style={styles.rewardBadge}>
-                      <Text style={[styles.rewardBadgeText, { fontFamily: fonts.bold }]}>+100</Text>
+                    <View style={[styles.rewardBadge, { backgroundColor: theme.brand[50] }]}>
+                      <Text style={[styles.rewardBadgeText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>+100</Text>
                     </View>
                   </View>
                 ))
@@ -310,118 +477,85 @@ export default function LoyaltyDashboardScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
   },
   loader: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
   },
-  header: {
-    paddingTop: Platform.OS === 'ios' ? 60 : (StatusBar.currentHeight || 40) + 10,
-    paddingBottom: 24,
-    paddingHorizontal: 24,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
+  absoluteLoader: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 999,
   },
-  headerContent: {
-    gap: 4,
+  headerBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingBottom: 10,
+  },
+  headerBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 24,
-    color: '#ffffff',
-    letterSpacing: -0.5,
-  },
-  headerSub: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.7)',
+    fontSize: 18,
   },
   scrollContent: {
     paddingBottom: 40,
   },
-  tierCard: {
+  pointsCard: {
     marginHorizontal: 24,
-    marginTop: -20,
+    marginTop: 10,
     borderRadius: 24,
     overflow: 'hidden',
     marginBottom: 24,
   },
-  tierGradient: {
+  pointsGradient: {
     padding: 24,
   },
-  tierHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 20,
-  },
-  tierLabel: {
-    fontSize: 10,
-    color: 'rgba(255,255,255,0.6)',
+  pointsLabel: {
+    fontSize: 10.5,
+    color: 'rgba(255,255,255,0.75)',
     letterSpacing: 1.5,
   },
-  tierName: {
-    fontSize: 22,
-    color: '#ffffff',
-    marginTop: 4,
-  },
-  tierIconWrapper: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pointsDisplay: {
+  pointsRow: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 8,
-    marginBottom: 24,
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 8,
+    marginBottom: 12,
   },
   pointsVal: {
     fontSize: 42,
     color: '#ffffff',
+    lineHeight: 46,
   },
-  pointsUnit: {
-    fontSize: 14,
-    color: '#c5a880',
-    letterSpacing: 1,
+  pointsUnitText: {
+    fontSize: 15,
+    color: '#ffffff',
+    opacity: 0.9,
+    alignSelf: 'flex-end',
+    marginBottom: 6,
   },
-  progressSection: {
-    gap: 8,
-  },
-  progressInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  progressText: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.7)',
-  },
-  progressPercent: {
+  pointsHint: {
     fontSize: 12,
     color: '#ffffff',
-  },
-  progressBarBg: {
-    height: 6,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: '#c5a880',
-    borderRadius: 3,
+    opacity: 0.85,
+    lineHeight: 18,
   },
   tabsWrapper: {
     flexDirection: 'row',
     paddingHorizontal: 24,
     marginBottom: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
   },
   tab: {
     flex: 1,
@@ -431,10 +565,6 @@ const styles = StyleSheet.create({
   },
   tabText: {
     fontSize: 13,
-    color: '#94a3b8',
-  },
-  activeTabText: {
-    color: '#006241',
   },
   activeTabIndicator: {
     position: 'absolute',
@@ -442,7 +572,6 @@ const styles = StyleSheet.create({
     left: '25%',
     right: '25%',
     height: 3,
-    backgroundColor: '#006241',
     borderRadius: 2,
   },
   logsContainer: {
@@ -453,30 +582,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
   },
   logIcon: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
     borderWidth: 1,
-    borderColor: '#f1f5f9',
   },
   logInfo: {
     flex: 1,
   },
   logReason: {
     fontSize: 14,
-    color: '#1e293b',
     marginBottom: 2,
   },
   logDate: {
     fontSize: 11,
-    color: '#94a3b8',
   },
   logPoints: {
     fontSize: 16,
@@ -487,7 +611,6 @@ const styles = StyleSheet.create({
   infoBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f0fdf4',
     padding: 12,
     borderRadius: 12,
     gap: 10,
@@ -495,13 +618,11 @@ const styles = StyleSheet.create({
   },
   infoBoxText: {
     fontSize: 12,
-    color: '#166534',
     flex: 1,
   },
   redeemItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
     borderRadius: 20,
     padding: 16,
     marginBottom: 12,
@@ -510,7 +631,6 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#fefce8',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
@@ -520,15 +640,12 @@ const styles = StyleSheet.create({
   },
   redeemTitle: {
     fontSize: 14,
-    color: '#1e293b',
     marginBottom: 2,
   },
   redeemPoints: {
     fontSize: 12,
-    color: '#006241',
   },
   redeemAction: {
-    backgroundColor: '#006241',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -541,7 +658,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   referralSection: {
-    backgroundColor: '#ffffff',
     borderRadius: 24,
     padding: 24,
     marginBottom: 24,
@@ -554,23 +670,46 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 16,
-    color: '#1e293b',
   },
   referralDesc: {
     fontSize: 13,
-    color: '#64748b',
     lineHeight: 20,
     marginBottom: 20,
+  },
+  referralStepsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
+    marginBottom: 24,
+  },
+  stepItem: {
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  stepNumBg: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepNum: {
+    fontSize: 12,
+  },
+  stepText: {
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 2,
   },
   codeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
     borderRadius: 16,
     padding: 16,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#f1f5f9',
     borderStyle: 'dashed',
   },
   codeWrapper: {
@@ -578,30 +717,25 @@ const styles = StyleSheet.create({
   },
   codeLabel: {
     fontSize: 9,
-    color: '#94a3b8',
     letterSpacing: 1,
     marginBottom: 4,
   },
   codeValue: {
     fontSize: 20,
-    color: '#006241',
     letterSpacing: 2,
   },
   copyBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#f1f5f9',
   },
   shareBtnPremium: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#006241',
     height: 54,
     borderRadius: 16,
     gap: 10,
@@ -615,52 +749,43 @@ const styles = StyleSheet.create({
   },
   referredListTitle: {
     fontSize: 11,
-    color: '#94a3b8',
     letterSpacing: 1,
     marginBottom: 4,
   },
   referredItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
     borderRadius: 16,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#f1f5f9',
   },
   referredAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#f0fdf4',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
   referredAvatarText: {
     fontSize: 16,
-    color: '#006241',
   },
   referredInfo: {
     flex: 1,
   },
   referredName: {
     fontSize: 14,
-    color: '#1e293b',
   },
   referredDate: {
     fontSize: 11,
-    color: '#94a3b8',
   },
   rewardBadge: {
-    backgroundColor: '#f0fdf4',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
   },
   rewardBadgeText: {
     fontSize: 11,
-    color: '#10b981',
   },
   emptyState: {
     alignItems: 'center',
@@ -669,6 +794,122 @@ const styles = StyleSheet.create({
   },
   emptyStateText: {
     fontSize: 13,
-    color: '#94a3b8',
+  },
+  copyCouponBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 6,
+  },
+  copyCouponBadgeText: {
+    fontSize: 10,
+    letterSpacing: 0.3,
+  },
+
+  /* Skeleton styling */
+  skelBtn: {
+    width: 40, height: 40, borderRadius: 12,
+  },
+  skelTitle: {
+    borderRadius: 8,
+  },
+  skelCard: {
+    marginHorizontal: 24,
+    height: 140,
+    borderRadius: 24,
+    marginTop: 10,
+    marginBottom: 24,
+    opacity: 0.6,
+  },
+  skelTabs: {
+    flexDirection: 'row',
+    paddingHorizontal: 24,
+    gap: 16,
+    marginBottom: 20,
+  },
+  skelTab: {
+    flex: 1,
+    height: 36,
+    borderRadius: 18,
+    opacity: 0.6,
+  },
+  skelRow: {
+    height: 72,
+    borderRadius: 16,
+    borderWidth: 1,
+    opacity: 0.8,
+  },
+
+  /* Modal styling */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    width: '100%',
+    borderRadius: 28,
+    padding: 24,
+    alignItems: 'center',
+  },
+  modalIconBg: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    marginBottom: 8,
+  },
+  modalSub: {
+    fontSize: 13.5,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  modalCodeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 24,
+    width: '100%',
+    justifyContent: 'space-between',
+  },
+  modalCodeText: {
+    fontSize: 18,
+    letterSpacing: 1,
+  },
+  modalCopyBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCloseBtn: {
+    width: '100%',
+    height: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCloseBtnText: {
+    fontSize: 14,
+    color: '#ffffff',
+    letterSpacing: 1,
   },
 });

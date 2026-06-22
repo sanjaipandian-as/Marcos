@@ -7,6 +7,7 @@ exports.AdminCategoryController = exports.categoriesReorderSchema = exports.cate
 const zod_1 = require("zod");
 const db_js_1 = __importDefault(require("../config/db.js"));
 const audit_js_1 = require("../utils/audit.js");
+const redis_js_1 = __importDefault(require("../config/redis.js"));
 exports.categoryCreateSchema = zod_1.z.object({
     body: zod_1.z.object({
         name: zod_1.z.string().min(1),
@@ -57,6 +58,7 @@ class AdminCategoryController {
                     order,
                 },
             });
+            await redis_js_1.default.del('cache:categories');
             return res.status(201).json({
                 success: true,
                 message: 'Category created successfully',
@@ -94,6 +96,7 @@ class AdminCategoryController {
                     order,
                 },
             });
+            await redis_js_1.default.del('cache:categories');
             return res.status(200).json({
                 success: true,
                 message: 'Category updated successfully',
@@ -133,6 +136,7 @@ class AdminCategoryController {
                     name: existing.name,
                 },
             });
+            await redis_js_1.default.del('cache:categories');
             return res.status(200).json({
                 success: true,
                 message: 'Category deleted successfully',
@@ -152,6 +156,7 @@ class AdminCategoryController {
                 where: { id: c.id },
                 data: { order: c.order },
             })));
+            await redis_js_1.default.del('cache:categories');
             return res.status(200).json({
                 success: true,
                 message: 'Categories reordered successfully',
@@ -166,9 +171,17 @@ class AdminCategoryController {
      */
     static async listCategories(req, res, next) {
         try {
+            const cached = await redis_js_1.default.get('cache:categories');
+            if (cached) {
+                return res.status(200).json({
+                    success: true,
+                    data: JSON.parse(cached),
+                });
+            }
             const categories = await db_js_1.default.category.findMany({
                 orderBy: { order: 'asc' },
             });
+            await redis_js_1.default.set('cache:categories', JSON.stringify(categories), 'EX', 86400);
             return res.status(200).json({
                 success: true,
                 data: categories,

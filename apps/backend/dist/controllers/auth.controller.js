@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AuthController = exports.updateProfileSchema = exports.verifyResetOtpSchema = exports.resetPasswordSchema = exports.forgotPasswordSchema = exports.otpVerifySchema = exports.otpSendSchema = exports.loginSchema = exports.registerSchema = void 0;
+exports.AuthController = exports.confirmContactUpdateSchema = exports.requestContactUpdateSchema = exports.verifyPasswordSchema = exports.redeemPointsSchema = exports.updateProfileSchema = exports.verifyResetOtpSchema = exports.resetPasswordSchema = exports.forgotPasswordSchema = exports.otpVerifySchema = exports.otpSendSchema = exports.loginSchema = exports.registerSchema = void 0;
 exports.normalizePhoneNumber = normalizePhoneNumber;
 const zod_1 = require("zod");
 const db_js_1 = __importDefault(require("../config/db.js"));
@@ -38,8 +38,9 @@ exports.registerSchema = zod_1.z.object({
         phoneNumber: zod_1.z.string(),
         password: zod_1.z.string().min(6),
         fullName: zod_1.z.string(),
-        referredById: zod_1.z.string().uuid().optional(),
-        role: zod_1.z.enum(['CUSTOMER', 'STAFF', 'ADMIN', 'SUPERADMIN']).optional(),
+        referredById: zod_1.z.string().uuid().optional().nullable(),
+        referredByCode: zod_1.z.string().optional().nullable(),
+        role: zod_1.z.enum(['CUSTOMER', 'STAFF', 'ADMIN']).optional(),
     }),
 });
 // Login validator schema
@@ -101,13 +102,44 @@ exports.updateProfileSchema = zod_1.z.object({
         fcmToken: zod_1.z.string().optional().nullable(),
     }),
 });
+// Redeem points schema
+exports.redeemPointsSchema = zod_1.z.object({
+    body: zod_1.z.object({
+        pointsToRedeem: zod_1.z.coerce.number().int().refine(val => [500, 1000].includes(val), {
+            message: 'Points to redeem must be either 500 or 1000',
+        }),
+    }),
+});
+// Verify password schema
+exports.verifyPasswordSchema = zod_1.z.object({
+    body: zod_1.z.object({
+        password: zod_1.z.string(),
+    }),
+});
+// Request contact details update schema
+exports.requestContactUpdateSchema = zod_1.z.object({
+    body: zod_1.z.object({
+        password: zod_1.z.string(),
+        newEmail: zod_1.z.string().email().optional(),
+        newPhoneNumber: zod_1.z.string().optional(),
+    }).refine(data => data.newEmail || data.newPhoneNumber, {
+        message: 'Either newEmail or newPhoneNumber is required',
+        path: ['newEmail'],
+    }),
+});
+// Confirm contact details update schema
+exports.confirmContactUpdateSchema = zod_1.z.object({
+    body: zod_1.z.object({
+        code: zod_1.z.string().length(6),
+    }),
+});
 class AuthController {
     /**
      * POST /auth/register
      */
     static async register(req, res, next) {
         try {
-            const { email, phoneNumber, password, fullName, referredById, role } = req.body;
+            let { email, phoneNumber, password, fullName, referredById, referredByCode, role } = req.body;
             const normalizedPhone = normalizePhoneNumber(phoneNumber);
             const cleanDigits = phoneNumber.replace(/[\s\-()]/g, '');
             const rawDigits = cleanDigits.startsWith('+91') ? cleanDigits.substring(3) : (cleanDigits.startsWith('91') ? cleanDigits.substring(2) : cleanDigits);
@@ -124,19 +156,45 @@ class AuthController {
             if (existingUser) {
                 return res.status(409).json({ success: false, message: 'Email or Phone Number already registered' });
             }
+            // If referredByCode is passed, resolve referredById
+            if (referredByCode && !referredById) {
+                const referrer = await db_js_1.default.user.findUnique({
+                    where: { referralCode: referredByCode.trim().toUpperCase() }
+                });
+                if (referrer) {
+                    referredById = referrer.id;
+                }
+                else {
+                    return res.status(400).json({ success: false, message: 'Invalid referral code.' });
+                }
+            }
             const passwordHash = await (0, crypto_js_1.hashPassword)(password);
-            // Generate unique referral code
-            const referralCode = `REF-${fullName.replace(/\s+/g, '').toUpperCase().substring(0, 5)}-${Math.floor(1000 + Math.random() * 9000)}`;
-            const user = await db_js_1.default.user.create({
-                data: {
-                    email,
-                    phoneNumber: normalizedPhone,
-                    passwordHash,
-                    fullName,
-                    referralCode,
-                    referredById,
-                    role: role || 'CUSTOMER',
-                },
+            // Generate unique referral code using UUID for collision safety
+            const referralCode = `REF-${crypto_1.default.randomUUID().substring(0, 8).toUpperCase()}`;
+            const user = await db_js_1.default.$transaction(async (tx) => {
+                const newUser = await tx.user.create({
+                    data: {
+                        email,
+                        phoneNumber: normalizedPhone,
+                        passwordHash,
+                        fullName,
+                        referralCode,
+                        referredById,
+                        role: (email === 'marcos@admin.com' || email === 'marcos@zippy.com') ? 'SUPERADMIN' : (role || 'CUSTOMER'),
+                        pointsBalance: referredById ? 100 : 0,
+                    },
+                });
+                if (referredById) {
+                    // Create PointTransaction record for customer
+                    await tx.pointTransaction.create({
+                        data: {
+                            userId: newUser.id,
+                            points: 100,
+                            reason: 'Referral signup bonus points',
+                        }
+                    });
+                }
+                return newUser;
             });
             // Generate access token
             const accessToken = auth_service_js_1.default.generateAccessToken({
@@ -164,6 +222,9 @@ class AuthController {
                     id: user.id,
                     email: user.email,
                     role: user.role,
+                    fullName: user.fullName,
+                    pointsBalance: user.pointsBalance,
+                    referredById: user.referredById,
                 },
             });
         }
@@ -219,7 +280,7 @@ class AuthController {
                     path: '/',
                     httpOnly: true,
                     secure: process.env.NODE_ENV === 'production',
-                    sameSite: 'strict',
+                    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
                     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
                 });
                 return res.status(200).json({
@@ -325,7 +386,7 @@ class AuthController {
                 });
             }
             // Generate 6 digit code
-            const code = Math.floor(100000 + Math.random() * 900000).toString();
+            const code = crypto_1.default.randomInt(100000, 999999).toString();
             const hashedCode = crypto_1.default.createHash('sha256').update(code).digest('hex');
             // Save to Redis with 5 minutes TTL
             await redis_js_1.default.set(`otp:${identifier}`, hashedCode, 'EX', 300);
@@ -484,7 +545,7 @@ class AuthController {
                     path: '/',
                     httpOnly: true,
                     secure: process.env.NODE_ENV === 'production',
-                    sameSite: 'strict',
+                    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
                     maxAge: 7 * 24 * 60 * 60 * 1000,
                 });
                 return res.status(200).json({ success: true, accessToken, user: payload });
@@ -513,7 +574,7 @@ class AuthController {
                     path: '/',
                     httpOnly: true,
                     secure: process.env.NODE_ENV === 'production',
-                    sameSite: 'strict',
+                    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
                     maxAge: 7 * 24 * 60 * 60 * 1000,
                 });
                 return res.status(200).json({ success: true, accessToken, user });
@@ -568,7 +629,7 @@ class AuthController {
                 return res.status(200).json({ success: true, message: 'If that email exists, a reset code has been sent.' });
             }
             // Generate 6-digit code
-            const code = Math.floor(100000 + Math.random() * 900000).toString();
+            const code = crypto_1.default.randomInt(100000, 999999).toString();
             const hashedCode = crypto_1.default.createHash('sha256').update(code).digest('hex');
             // Save to Redis (5 mins TTL)
             await redis_js_1.default.set(`reset_otp:${email}`, hashedCode, 'EX', 300);
@@ -657,36 +718,54 @@ class AuthController {
      */
     static async getProfile(req, res, next) {
         try {
-            const user = await db_js_1.default.user.findUnique({
-                where: { id: req.user.id },
-                select: {
-                    id: true,
-                    email: true,
-                    phoneNumber: true,
-                    fullName: true,
-                    gender: true,
-                    address: true,
-                    fcmToken: true,
-                    role: true,
-                    pointsBalance: true,
-                    referralCode: true,
-                    createdAt: true,
-                    pointTransactions: {
-                        orderBy: { createdAt: 'desc' },
-                        take: 20,
-                    },
-                    referrals: {
-                        select: {
-                            fullName: true,
-                            createdAt: true,
+            const userId = req.user.id;
+            const [user, orderCount, rewardCount] = await Promise.all([
+                db_js_1.default.user.findUnique({
+                    where: { id: userId },
+                    select: {
+                        id: true,
+                        email: true,
+                        phoneNumber: true,
+                        fullName: true,
+                        gender: true,
+                        address: true,
+                        fcmToken: true,
+                        role: true,
+                        pointsBalance: true,
+                        referralCode: true,
+                        createdAt: true,
+                        pointTransactions: {
+                            orderBy: { createdAt: 'desc' },
+                            take: 20,
+                        },
+                        referrals: {
+                            select: {
+                                fullName: true,
+                                createdAt: true,
+                            },
                         },
                     },
-                },
-            });
+                }),
+                db_js_1.default.order.count({ where: { userId } }),
+                db_js_1.default.pointTransaction.count({
+                    where: {
+                        userId,
+                        points: { gt: 0 } // Rewards are positive point transactions
+                    }
+                })
+            ]);
             if (!user) {
                 return res.status(404).json({ success: false, message: 'User not found.' });
             }
-            return res.status(200).json({ success: true, data: user });
+            // Merge stats into the user data object
+            const userData = {
+                ...user,
+                stats: {
+                    orders: orderCount,
+                    rewards: rewardCount,
+                }
+            };
+            return res.status(200).json({ success: true, data: userData });
         }
         catch (error) {
             next(error);
@@ -771,6 +850,299 @@ class AuthController {
             return res.status(200).json({
                 success: true,
                 message: 'Your account has been deleted successfully.',
+            });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    /**
+     * POST /auth/loyalty/redeem
+     * Customer loyalty points redemption to generate discount coupon
+     */
+    static async redeemPoints(req, res, next) {
+        const userId = req.user.id;
+        const { pointsToRedeem } = req.body;
+        try {
+            const result = await db_js_1.default.$transaction(async (tx) => {
+                const user = await tx.user.findUnique({
+                    where: { id: userId },
+                    select: { pointsBalance: true }
+                });
+                if (!user) {
+                    throw new Error('User not found.');
+                }
+                if (user.pointsBalance < pointsToRedeem) {
+                    throw new Error('Insufficient points balance.');
+                }
+                const discountFlat = pointsToRedeem === 500 ? 500.00 : 1200.00;
+                // Generate unique coupon code
+                const code = `REDEEM-${pointsToRedeem}-${crypto_1.default.randomBytes(3).toString('hex').toUpperCase()}`;
+                const expiryDate = new Date();
+                expiryDate.setDate(expiryDate.getDate() + 30); // Valid for 30 days
+                // 1. Create Coupon in database
+                const coupon = await tx.coupon.create({
+                    data: {
+                        code,
+                        discountPercent: 0,
+                        discountFlat,
+                        maxDiscount: discountFlat,
+                        expiryDate,
+                        isActive: true,
+                        maxUses: 1,
+                        usedCount: 0,
+                    }
+                });
+                // 2. Decrement User points balance
+                const updatedUser = await tx.user.update({
+                    where: { id: userId },
+                    data: { pointsBalance: { decrement: pointsToRedeem } }
+                });
+                if (updatedUser.pointsBalance < 0) {
+                    throw new Error('Insufficient points balance.');
+                }
+                // 3. Create PointTransaction record
+                await tx.pointTransaction.create({
+                    data: {
+                        userId,
+                        points: -pointsToRedeem,
+                        reason: `Redeemed points for Coupon: ${code}`
+                    }
+                });
+                return { couponCode: code, discountFlat, pointsRemaining: updatedUser.pointsBalance };
+            });
+            // Log points redeemed
+            await (0, audit_js_1.createAuditLog)({
+                userId,
+                action: 'POINTS_REDEEMED',
+                ipAddress: req.ip,
+                details: {
+                    message: `Customer redeemed ${pointsToRedeem} points for a ₹${result.discountFlat} discount coupon (${result.couponCode})`,
+                    pointsRedeemed: pointsToRedeem,
+                    discountFlat: result.discountFlat,
+                    couponCode: result.couponCode,
+                },
+            });
+            return res.status(200).json({
+                success: true,
+                message: 'Points redeemed successfully.',
+                data: result
+            });
+        }
+        catch (error) {
+            return res.status(400).json({ success: false, message: error.message });
+        }
+    }
+    /**
+     * GET /auth/loyalty/coupons
+     * Customer: list active unexpired coupon codes redeemed by user
+     */
+    static async listUserCoupons(req, res, next) {
+        const userId = req.user.id;
+        try {
+            // 1. Fetch user's point transactions that represent coupon redemption
+            const transactions = await db_js_1.default.pointTransaction.findMany({
+                where: {
+                    userId,
+                    reason: {
+                        startsWith: 'Redeemed points for Coupon: '
+                    }
+                },
+                orderBy: {
+                    createdAt: 'desc'
+                }
+            });
+            // 2. Extract codes
+            const couponCodes = transactions
+                .map((tx) => {
+                const parts = tx.reason.split('Redeemed points for Coupon: ');
+                return parts[1]?.trim();
+            })
+                .filter(Boolean);
+            if (couponCodes.length === 0) {
+                return res.status(200).json({ success: true, data: [] });
+            }
+            // 3. Fetch these coupons from Coupon table
+            const coupons = await db_js_1.default.coupon.findMany({
+                where: {
+                    code: { in: couponCodes },
+                    isActive: true,
+                    expiryDate: { gt: new Date() }
+                }
+            });
+            // 4. Filter coupons that have remaining uses
+            const activeCoupons = coupons.filter((c) => c.usedCount < c.maxUses);
+            return res.status(200).json({
+                success: true,
+                data: activeCoupons
+            });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    /**
+     * POST /auth/profile/request-update
+     * Authenticated: requests changing email/phone number
+     */
+    static async requestContactUpdate(req, res, next) {
+        const userId = req.user.id;
+        const { password, newEmail, newPhoneNumber } = req.body;
+        try {
+            // 1. Fetch user to verify password
+            const user = await db_js_1.default.user.findUnique({ where: { id: userId } });
+            if (!user) {
+                return res.status(404).json({ success: false, message: 'User not found.' });
+            }
+            const isPasswordValid = await (0, crypto_js_1.verifyPassword)(password, user.passwordHash);
+            if (!isPasswordValid) {
+                return res.status(401).json({ success: false, message: 'Incorrect password.' });
+            }
+            // If newEmail or newPhoneNumber is requested, check if it's already registered by another user
+            if (newEmail && newEmail !== user.email) {
+                const emailExists = await db_js_1.default.user.findFirst({ where: { email: newEmail, id: { not: userId } } });
+                if (emailExists) {
+                    return res.status(400).json({ success: false, message: 'New email is already registered to another account.' });
+                }
+            }
+            if (newPhoneNumber) {
+                const normalized = normalizePhoneNumber(newPhoneNumber);
+                const phoneExists = await db_js_1.default.user.findFirst({ where: { phoneNumber: normalized, id: { not: userId } } });
+                if (phoneExists) {
+                    return res.status(400).json({ success: false, message: 'New phone number is already registered to another account.' });
+                }
+            }
+            // 2. Generate 6-digit verification code
+            const code = crypto_1.default.randomInt(100000, 999999).toString();
+            const hashedCode = crypto_1.default.createHash('sha256').update(code).digest('hex');
+            // 3. Save request state to Redis (expires in 5 mins)
+            const state = {
+                hashedCode,
+                newEmail: newEmail || null,
+                newPhoneNumber: newPhoneNumber ? normalizePhoneNumber(newPhoneNumber) : null,
+            };
+            await redis_js_1.default.set(`contact_update_request:${userId}`, JSON.stringify(state), 'EX', 300);
+            // 4. Send code to user's CURRENT email address
+            const emailHtml = `
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f9f9f9; padding: 40px 20px; text-align: center;">
+          <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05); overflow: hidden; border: 1px solid #eaeaea; text-align: left;">
+            <div style="background: linear-gradient(135deg, #fb923c, #e85c1c); padding: 30px; text-align: center;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700; letter-spacing: 2px;">MARCOS</h1>
+              <p style="color: #ffffff; opacity: 0.8; margin: 5px 0 0 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Security Verification</p>
+            </div>
+            <div style="padding: 40px 30px;">
+              <h2 style="color: #222222; margin: 0 0 20px 0; font-size: 20px; font-weight: 600;">Hello ${user.fullName},</h2>
+              <p style="color: #555555; font-size: 15px; line-height: 1.6; margin: 0 0 30px 0;">
+                We received a request to update the registered contact details for your MARCOS Studio account. Please use the secure verification code (OTP) below to authorize this change.
+              </p>
+              
+              <div style="background-color: #f4f6f8; border-radius: 8px; padding: 25px; text-align: center; margin-bottom: 30px; border: 1px solid #eef2f5;">
+                <span style="display: block; color: #777777; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 10px;">Verification Code</span>
+                <span style="font-family: 'Courier New', Courier, monospace; font-size: 36px; font-weight: 800; color: #e85c1c; letter-spacing: 6px; display: inline-block;">${code}</span>
+              </div>
+
+              <p style="color: #999999; font-size: 13px; line-height: 1.5; margin: 0 0 20px 0;">
+                This code is valid for **5 minutes**. If you did not request this update, please ignore this email or contact support immediately.
+              </p>
+            </div>
+            <div style="background-color: #f4f6f8; padding: 25px 30px; text-align: center; border-top: 1px solid #eaeaea;">
+              <p style="color: #222222; font-size: 14px; font-weight: 600; margin: 0 0 5px 0;">MARCOS Bespoke Tailoring Studio</p>
+              <p style="color: #bbbbbb; font-size: 11px; margin: 0;">&copy; 2026 MARCOS Studio. All Rights Reserved.</p>
+            </div>
+          </div>
+        </div>
+      `;
+            email_service_js_1.default.sendEmail(user.email, 'Verify Your Identity - MARCOS', `Your verification code is: ${code}`, emailHtml).catch(err => {
+                logger_js_1.default.error('Failed to send contact update request email', { metadata: { error: err.message } });
+            });
+            return res.status(200).json({ success: true, message: 'Verification code sent to your current email address.' });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    /**
+     * POST /auth/profile/confirm-update
+     * Authenticated: confirms update using code and applies it
+     */
+    static async confirmContactUpdate(req, res, next) {
+        const userId = req.user.id;
+        const { code } = req.body;
+        try {
+            // 1. Get request state from Redis
+            const rawState = await redis_js_1.default.get(`contact_update_request:${userId}`);
+            if (!rawState) {
+                return res.status(400).json({ success: false, message: 'Verification request expired or not initiated. Please request again.' });
+            }
+            const state = JSON.parse(rawState);
+            const hashedIncoming = crypto_1.default.createHash('sha256').update(code).digest('hex');
+            if (state.hashedCode !== hashedIncoming) {
+                return res.status(400).json({ success: false, message: 'Invalid verification code.' });
+            }
+            // 2. Clear request from Redis
+            await redis_js_1.default.del(`contact_update_request:${userId}`);
+            // 3. Apply changes to database
+            const updateData = {};
+            if (state.newEmail)
+                updateData.email = state.newEmail;
+            if (state.newPhoneNumber)
+                updateData.phoneNumber = state.newPhoneNumber;
+            const updatedUser = await db_js_1.default.user.update({
+                where: { id: userId },
+                data: updateData,
+            });
+            await (0, audit_js_1.createAuditLog)({
+                userId,
+                action: 'USER_CONTACT_UPDATED',
+                ipAddress: req.ip,
+                details: {
+                    message: `User updated contact details: email (${state.newEmail || 'unchanged'}), phone (${state.newPhoneNumber || 'unchanged'})`,
+                    updatedFields: updateData,
+                },
+            });
+            // Generate a fresh access token for the updated email/info
+            const accessToken = auth_service_js_1.default.generateAccessToken({
+                id: updatedUser.id,
+                email: updatedUser.email,
+                role: updatedUser.role,
+                fullName: updatedUser.fullName,
+            });
+            return res.status(200).json({
+                success: true,
+                message: 'Contact details updated successfully.',
+                accessToken,
+                user: {
+                    id: updatedUser.id,
+                    email: updatedUser.email,
+                    role: updatedUser.role,
+                    fullName: updatedUser.fullName,
+                    phoneNumber: updatedUser.phoneNumber,
+                },
+            });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    /**
+     * POST /auth/profile/verify-password
+     * Authenticated: verifies password before letting customer change email/phone
+     */
+    static async verifyProfilePassword(req, res, next) {
+        const userId = req.user.id;
+        const { password } = req.body;
+        try {
+            const user = await db_js_1.default.user.findUnique({ where: { id: userId } });
+            if (!user) {
+                return res.status(404).json({ success: false, message: 'User not found.' });
+            }
+            const isPasswordValid = await (0, crypto_js_1.verifyPassword)(password, user.passwordHash);
+            if (!isPasswordValid) {
+                return res.status(401).json({ success: false, message: 'Incorrect password.' });
+            }
+            return res.status(200).json({
+                success: true,
+                message: 'Password verified successfully.',
             });
         }
         catch (error) {

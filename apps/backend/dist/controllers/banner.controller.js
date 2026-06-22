@@ -7,6 +7,15 @@ exports.BannerController = exports.bannerUpdateSchema = exports.bannerCreateSche
 const zod_1 = require("zod");
 const db_js_1 = __importDefault(require("../config/db.js"));
 const audit_js_1 = require("../utils/audit.js");
+const redis_js_1 = __importDefault(require("../config/redis.js"));
+async function invalidateBannerCache() {
+    try {
+        await redis_js_1.default.del('cache:banners:all', 'cache:banners:loc:HOME_SLIDER', 'cache:banners:loc:PROMOTIONAL_SECTION', 'cache:banners:loc:OFFER_SECTION');
+    }
+    catch (err) {
+        console.error('Failed to invalidate banner cache:', err);
+    }
+}
 exports.bannerCreateSchema = zod_1.z.object({
     body: zod_1.z.object({
         imageUrl: zod_1.z.string().url(),
@@ -16,6 +25,7 @@ exports.bannerCreateSchema = zod_1.z.object({
         scheduledStart: zod_1.z.string().datetime().optional().nullable(),
         scheduledEnd: zod_1.z.string().datetime().optional().nullable(),
         isActive: zod_1.z.boolean().default(true),
+        order: zod_1.z.number().int().default(0),
     }),
 });
 exports.bannerUpdateSchema = zod_1.z.object({
@@ -27,6 +37,7 @@ exports.bannerUpdateSchema = zod_1.z.object({
         scheduledStart: zod_1.z.string().datetime().optional().nullable(),
         scheduledEnd: zod_1.z.string().datetime().optional().nullable(),
         isActive: zod_1.z.boolean().optional(),
+        order: zod_1.z.number().int().optional(),
     }),
 });
 class BannerController {
@@ -36,7 +47,15 @@ class BannerController {
      */
     static async getBanners(req, res, next) {
         const { location } = req.query;
+        const cacheKey = location ? `cache:banners:loc:${location}` : 'cache:banners:all';
         try {
+            const cached = await redis_js_1.default.get(cacheKey);
+            if (cached) {
+                return res.status(200).json({
+                    success: true,
+                    data: JSON.parse(cached),
+                });
+            }
             const now = new Date();
             const where = {
                 isActive: true,
@@ -53,8 +72,12 @@ class BannerController {
             }
             const banners = await db_js_1.default.banner.findMany({
                 where,
-                orderBy: { createdAt: 'desc' },
+                orderBy: [
+                    { order: 'asc' },
+                    { createdAt: 'asc' }
+                ],
             });
+            await redis_js_1.default.set(cacheKey, JSON.stringify(banners), 'EX', 86400);
             return res.status(200).json({
                 success: true,
                 data: banners,
@@ -70,7 +93,10 @@ class BannerController {
     static async adminListBanners(req, res, next) {
         try {
             const banners = await db_js_1.default.banner.findMany({
-                orderBy: { createdAt: 'desc' },
+                orderBy: [
+                    { order: 'asc' },
+                    { createdAt: 'asc' }
+                ],
             });
             return res.status(200).json({
                 success: true,
@@ -88,10 +114,6 @@ class BannerController {
     static async incrementClicks(req, res, next) {
         const { id } = req.params;
         try {
-            const banner = await db_js_1.default.banner.findUnique({ where: { id } });
-            if (!banner) {
-                return res.status(404).json({ success: false, message: 'Banner not found' });
-            }
             await db_js_1.default.banner.update({
                 where: { id },
                 data: { clicks: { increment: 1 } },
@@ -102,6 +124,9 @@ class BannerController {
             });
         }
         catch (error) {
+            if (error.code === 'P2025') {
+                return res.status(404).json({ success: false, message: 'Banner not found' });
+            }
             next(error);
         }
     }
@@ -109,7 +134,7 @@ class BannerController {
      * POST /admin/banners (Admin Only)
      */
     static async createBanner(req, res, next) {
-        const { imageUrl, title, targetUrl, location, scheduledStart, scheduledEnd, isActive } = req.body;
+        const { imageUrl, title, targetUrl, location, scheduledStart, scheduledEnd, isActive, order } = req.body;
         try {
             const banner = await db_js_1.default.banner.create({
                 data: {
@@ -120,6 +145,7 @@ class BannerController {
                     scheduledStart: scheduledStart ? new Date(scheduledStart) : null,
                     scheduledEnd: scheduledEnd ? new Date(scheduledEnd) : null,
                     isActive,
+                    order: order !== undefined ? order : 0,
                 },
             });
             await (0, audit_js_1.createAuditLog)({
@@ -147,6 +173,7 @@ class BannerController {
                     },
                 });
             }
+            await invalidateBannerCache();
             return res.status(201).json({
                 success: true,
                 message: 'Banner created successfully',
@@ -162,7 +189,7 @@ class BannerController {
      */
     static async updateBanner(req, res, next) {
         const { id } = req.params;
-        const { imageUrl, title, targetUrl, location, scheduledStart, scheduledEnd, isActive } = req.body;
+        const { imageUrl, title, targetUrl, location, scheduledStart, scheduledEnd, isActive, order } = req.body;
         try {
             const existing = await db_js_1.default.banner.findUnique({ where: { id } });
             if (!existing) {
@@ -178,6 +205,7 @@ class BannerController {
                     scheduledStart: scheduledStart !== undefined ? (scheduledStart ? new Date(scheduledStart) : null) : undefined,
                     scheduledEnd: scheduledEnd !== undefined ? (scheduledEnd ? new Date(scheduledEnd) : null) : undefined,
                     isActive,
+                    order: order !== undefined ? order : undefined,
                 },
             });
             if (scheduledStart !== undefined || scheduledEnd !== undefined) {
@@ -193,6 +221,7 @@ class BannerController {
                     },
                 });
             }
+            await invalidateBannerCache();
             return res.status(200).json({
                 success: true,
                 message: 'Banner updated successfully',
@@ -224,6 +253,7 @@ class BannerController {
                     title: existing.title,
                 },
             });
+            await invalidateBannerCache();
             return res.status(200).json({
                 success: true,
                 message: 'Banner deleted successfully',

@@ -6,7 +6,9 @@ const BASE_URL = 'http://localhost:5000/api/v1';
 class APIClient {
   constructor() {
     const saved = localStorage.getItem('marcos_api_mode');
-    this.isLiveMode = saved === 'live';
+    this.isLiveMode = saved !== 'demo';
+    this._isRefreshing = false;        // Prevent concurrent refresh storms
+    this._refreshQueue = [];           // Queue requests waiting for token refresh
   }
 
   setLiveMode(live) {
@@ -18,11 +20,34 @@ class APIClient {
     return this.isLiveMode;
   }
 
-  async request(endpoint, options) {
+  /** Silently call /auth/refresh using the httpOnly cookie the backend set on login. */
+  async _silentRefresh() {
+    const refreshResponse = await fetch(`${BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include', // Send the httpOnly refreshToken cookie
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!refreshResponse.ok) {
+      throw new Error('Refresh failed');
+    }
+
+    const data = await refreshResponse.json();
+    if (data.accessToken) {
+      localStorage.setItem('marcos_admin_token', data.accessToken);
+      if (data.user) {
+        localStorage.setItem('marcos_admin_user', JSON.stringify(data.user));
+      }
+      return data.accessToken;
+    }
+    throw new Error('No access token in refresh response');
+  }
+
+  async request(endpoint, options, _isRetry = false) {
     if (!this.isLiveMode) {
       throw new Error('Fallback to mock database');
     }
-    
+
     // Set default JSON headers
     const headers = new Headers(options?.headers);
     if (!headers.has('Content-Type') && !(options?.body instanceof FormData)) {
@@ -33,17 +58,57 @@ class APIClient {
     if (token) {
       headers.set('Authorization', `Bearer ${token}`);
     }
-    
+
     const response = await fetch(`${BASE_URL}${endpoint}`, {
       ...options,
+      credentials: 'include', // Always send cookies (needed for refresh token flow)
       headers,
     });
 
-    if (!response.ok) {
-      if (response.status === 401 || response.status === 403) {
+    // ── Silent token refresh on 401 ────────────────────────────────────────────
+    // If the access token has expired (401) and this isn't already a retry,
+    // attempt a silent refresh using the httpOnly cookie before giving up.
+    if (response.status === 401 && !_isRetry) {
+      if (this._isRefreshing) {
+        // Another refresh is already in-flight — queue this request
+        return new Promise((resolve, reject) => {
+          this._refreshQueue.push({ resolve, reject, endpoint, options });
+        });
+      }
+
+      this._isRefreshing = true;
+      try {
+        await this._silentRefresh();
+        this._isRefreshing = false;
+
+        // Flush any queued requests
+        this._refreshQueue.forEach(({ resolve, reject, endpoint: ep, options: op }) => {
+          this.request(ep, op, true).then(resolve).catch(reject);
+        });
+        this._refreshQueue = [];
+
+        // Retry the original request once with the new token
+        return this.request(endpoint, options, true);
+      } catch (refreshError) {
+        this._isRefreshing = false;
+        this._refreshQueue.forEach(({ reject }) => reject(new Error('Session expired')));
+        this._refreshQueue = [];
+
+        // Refresh also failed → clear session and redirect to login
         localStorage.removeItem('marcos_admin_token');
         localStorage.removeItem('marcos_admin_user');
+        this.setLiveMode(false);
         window.location.reload();
+        throw new Error('Session expired. Please log in again.');
+      }
+    }
+    // ──────────────────────────────────────────────────────────────────────────
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        // Forbidden — don't wipe the session, just throw
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Forbidden: Insufficient privileges');
       }
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.message || `Request failed: ${response.status}`);
@@ -55,6 +120,7 @@ class APIClient {
   async login(email, password) {
     const response = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
+      credentials: 'include', // CRITICAL: Receive the httpOnly refreshToken cookie from backend
       headers: {
         'Content-Type': 'application/json',
       },
@@ -75,9 +141,24 @@ class APIClient {
     return data;
   }
 
-  logout() {
+  async logout() {
+    // Tell the backend to blacklist the access token and clear the refresh cookie
+    try {
+      const token = localStorage.getItem('marcos_admin_token');
+      await fetch(`${BASE_URL}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include', // Send the httpOnly cookie so backend can revoke it
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+      });
+    } catch (e) {
+      // Ignore network errors on logout — still clear local state
+    }
     localStorage.removeItem('marcos_admin_token');
     localStorage.removeItem('marcos_admin_user');
+    this.setLiveMode(false);
   }
 
   getCurrentUser() {
@@ -90,10 +171,243 @@ class APIClient {
     }
   }
 
+  // DASHBOARD
+  async getDashboard(weekStart) {
+    try {
+      const url = weekStart ? `/admin/dashboard?weekStart=${weekStart}` : '/admin/dashboard';
+      const res = await this.request(url);
+      return res.data;
+    } catch (e) {
+      if (this.isLiveMode) throw e;
+      // Fallback mock data for demo mode
+      return {
+        availableWeeks: [
+          { start: '2026-06-21', label: 'Jun 21 - Jun 27, 2026 (This Week)' },
+          { start: '2026-06-14', label: 'Jun 14 - Jun 20, 2026 (Last Week)' }
+        ],
+        selectedWeekStart: weekStart || '2026-06-14',
+        overview: {
+          revenue: { value: 420000, diff: 12 },
+          orders: { value: 1284, diff: 8 },
+          aov: { value: 3270, diff: -2 },
+          abandonRate: { value: 38, diff: -4 }
+        },
+        productSales: {
+          topSelling: [
+            { id: 1, name: 'Premium Silk Saree', unitsSold: 342, stock: 12 },
+            { id: 2, name: 'Bridal Lehenga Set', unitsSold: 289, stock: 4 }
+          ],
+          lowestSelling: [
+            { id: 3, name: 'Handloom Dupatta', unitsSold: 8, stock: 45 },
+            { id: 4, name: 'Zardozi Blouse', unitsSold: 12, stock: 32 }
+          ]
+        },
+        productViews: {
+          mostViewed: [{ id: 2, name: 'Bridal Lehenga Set', views: 4820 }],
+          leastViewed: [{ id: 5, name: 'Plain Dhoti', views: 89 }]
+        },
+        cartActivity: {
+          mostAdded: [{ id: 1, name: 'Premium Silk Saree', addedToCart: 518 }],
+          leastAdded: [{ id: 3, name: 'Handloom Dupatta', addedToCart: 14 }]
+        },
+        conversion: {
+          topConverters: [{ id: 6, name: 'Cotton Kurta', addedToCart: 310, purchased: 211, conversionRate: 68 }],
+          mostAbandoned: [{ id: 7, name: 'Anarkali Suit', abandoned: 258 }]
+        },
+        funnel: { views: 18400, addedToCart: 2890, reachedCheckout: 1680, purchased: 1284 },
+        cityIntelligence: {
+          ordersByCity: [{ city: 'Chennai', orders: 312 }],
+          customersByCity: [{ city: 'Chennai', customers: 892 }],
+          aovByCity: [{ city: 'Chennai', aov: 4250 }]
+        },
+        peakHours: Array(7).fill(0).map(() => Array(24).fill(0)),
+        stockRisk: [{ id: 2, name: 'Bridal Lehenga Set', stock: 4, demand: 'Very High demand', recentSales: 30 }]
+      };
+    }
+  }
+
+  async getCustomerIntelligence() {
+    try {
+      const res = await this.request('/admin/customers-intelligence');
+      return res.data;
+    } catch (e) {
+      if (this.isLiveMode) throw e;
+      // Fallback mock data
+      return {
+        kpis: {
+          totalCustomers: { value: 3841, diff: 214 },
+          avgCLV: { value: 8420, top10PercentAvg: 31200 },
+          repeatRate: { value: 38, diff: 4 },
+          churnRisk: { value: 142 }
+        },
+        top10Customers: [
+          { initials: 'PN', fullName: 'Priya Nair', location: 'Chennai', ordersCount: 14, totalSpend: 48200 },
+          { initials: 'RK', fullName: 'Ramesh K.', location: 'Coimbatore', ordersCount: 11, totalSpend: 41800 },
+          { initials: 'LS', fullName: 'Lakshmi S.', location: 'Madurai', ordersCount: 9, totalSpend: 38500 }
+        ],
+        segments: [
+          { name: 'One-time', value: 52 },
+          { name: 'Repeat', value: 38 },
+          { name: 'VIP', value: 10 }
+        ],
+        newVsReturning: [
+          { month: 'Jan', new: 210, returning: 90 },
+          { month: 'Feb', new: 180, returning: 120 }
+        ],
+        churnRiskCustomers: [
+          { fullName: 'Kavitha R.', riskLevel: '90+ days', totalSpend: 12400 },
+          { fullName: 'Bala S.', riskLevel: '60+ days', totalSpend: 8200 }
+        ],
+        categoryRepeatRates: [
+          { category: 'Bridal wear', rate: 58 },
+          { category: 'Sarees', rate: 49 },
+          { category: 'Kurtas', rate: 41 }
+        ]
+      };
+    }
+  }
+
+  async getOrderIntelligence() {
+    try {
+      const res = await this.request('/admin/orders-intelligence');
+      return res.data;
+    } catch (e) {
+      if (this.isLiveMode) throw e;
+      // Fallback mock data
+      return {
+        totalOrders: { value: 1284, label: 'this month' },
+        avgFulfillment: { value: '5.2d', label: 'order to delivery' },
+        cancellationRate: { value: '6.4%', label: '1.2% improved' },
+        returnRate: { value: '3.1%', label: 'fit issues mostly' },
+        orderStatusBreakdown: [
+          { status: 'Delivered', count: 842, percent: 62, color: 'bg-emerald-500' },
+          { status: 'In tailoring', count: 247, percent: 18, color: 'bg-purple-500' },
+          { status: 'Ready / pickup', count: 98, percent: 7, color: 'bg-blue-500' },
+          { status: 'Pending', count: 64, percent: 5, color: 'bg-orange-500' },
+          { status: 'Cancelled', count: 82, percent: 6, color: 'bg-red-500' },
+          { status: 'Returned', count: 31, percent: 2, color: 'bg-slate-500' }
+        ],
+        fulfillmentTrend: [
+          { week: 'W1', days: 7 }, { week: 'W2', days: 6.5 }, { week: 'W3', days: 6 },
+          { week: 'W4', days: 6.2 }, { week: 'W5', days: 5.5 }, { week: 'W6', days: 5 },
+          { week: 'W7', days: 4.5 }, { week: 'W8', days: 5.2 }
+        ],
+        cancelByProduct: [
+          { name: 'Anarkali', rate: 12, reason: 'Size mismatch' },
+          { name: 'Nehru', rate: 9, reason: 'Delivery delay' },
+          { name: 'Kids', rate: 8, reason: 'Changed mind' },
+          { name: 'Plain', rate: 6, reason: 'Quality concern' },
+          { name: 'Bridal', rate: 4, reason: 'Price issue' }
+        ],
+        returnByProduct: [
+          { name: 'Zardozi', rate: 8 },
+          { name: 'Anarkali', rate: 6 },
+          { name: 'Bridal', rate: 5 },
+          { name: 'Cotton', rate: 3 },
+          { name: 'Silk', rate: 2 }
+        ],
+        sizingChart: [
+          { name: 'Custom', value: 64, fill: '#8b5cf6' },
+          { name: 'Standard', value: 36, fill: '#d1d5db' }
+        ]
+      };
+    }
+  }
+
+  async getRevenueIntelligence() {
+    try {
+      const res = await this.request('/admin/revenue-intelligence');
+      return res.data;
+    } catch (e) {
+      if (this.isLiveMode) throw e;
+      // Fallback data
+      return {
+        totalRevenue: { value: 4280000, label: 'this month' },
+        revenueLost: { value: 210000, label: 'cancellations + refunds' },
+        momGrowth: { value: 12, label: 'vs last month' },
+        yoyGrowth: { value: 28, label: 'vs same month last year' },
+        revenueByCategory: [
+          { name: 'Sarees', value: 1200000 },
+          { name: 'Lehengas', value: 850000 },
+          { name: 'Kurtas', value: 650000 },
+          { name: 'Sherwanis', value: 500000 },
+          { name: 'Blouses', value: 350000 }
+        ],
+        momVsYoy: [
+          { month: 'Jan', thisYear: 3200000, lastYear: 2600000 },
+          { month: 'Feb', thisYear: 3500000, lastYear: 2900000 },
+          { month: 'Mar', thisYear: 4100000, lastYear: 3200000 },
+          { month: 'Apr', thisYear: 3800000, lastYear: 3000000 },
+          { month: 'May', thisYear: 4600000, lastYear: 3700000 },
+          { month: 'Jun', thisYear: 4280000, lastYear: 3400000 }
+        ],
+        newVsReturning: [
+          { month: 'Jan', new: 1000000, returning: 2200000 },
+          { month: 'Feb', new: 1100000, returning: 2400000 },
+          { month: 'Mar', new: 1100000, returning: 3000000 },
+          { month: 'Apr', new: 1200000, returning: 2600000 },
+          { month: 'May', new: 1100000, returning: 3500000 },
+          { month: 'Jun', new: 1280000, returning: 3000000 }
+        ]
+      };
+    }
+  }
+
+  async getPromotionsIntelligence() {
+    try {
+      const res = await this.request('/admin/promotions-intelligence');
+      return res.data;
+    } catch (e) {
+      if (this.isLiveMode) throw e;
+      return null;
+    }
+  }
+
+  async getInventoryIntelligence() {
+    try {
+      const res = await this.request('/admin/inventory-intelligence');
+      return res.data;
+    } catch (e) {
+      if (this.isLiveMode) throw e;
+      return null;
+    }
+  }
+
   // PRODUCTS CRUD
+  async getProductsPaginated({ page = 1, limit = 12, search = '', categorySlug = '' } = {}) {
+    try {
+      const query = new URLSearchParams();
+      query.append('page', page);
+      query.append('limit', limit);
+      if (search) query.append('search', search);
+      if (categorySlug) query.append('category', categorySlug);
+
+      const res = await this.request(`/products?${query.toString()}`);
+      return res;
+    } catch (e) {
+      const allProducts = MockDB.get('m_products');
+      const filtered = allProducts.filter(p => {
+        if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false;
+        return true;
+      });
+      const start = (page - 1) * limit;
+      return {
+        success: true,
+        data: filtered.slice(start, start + limit),
+        pagination: {
+          page,
+          limit,
+          total: filtered.length,
+          pages: Math.ceil(filtered.length / limit) || 1
+        }
+      };
+    }
+  }
+
   async getProducts() {
     try {
-      const res = await this.request('/products');
+      // Fallback for components needing all products (e.g. Sidebar counts)
+      const res = await this.request('/products?limit=1000');
       return res.data;
     } catch (e) {
       return MockDB.get('m_products');
@@ -133,15 +447,15 @@ class APIClient {
       const products = MockDB.get('m_products');
       const idx = products.findIndex(p => p.id === id);
       if (idx === -1) throw new Error('Product not found');
-      
-      const updated = { 
-        ...products[idx], 
+
+      const updated = {
+        ...products[idx],
         ...updates,
       };
-      
+
       if (updates.inventoryQty !== undefined) {
-        updated.stockStatus = updated.inventoryQty <= 0 
-          ? 'OUT_OF_STOCK' 
+        updated.stockStatus = updated.inventoryQty <= 0
+          ? 'OUT_OF_STOCK'
           : (updated.inventoryQty <= MockDB.getSettings().lowStockThreshold ? 'LOW_STOCK' : 'IN_STOCK');
       }
 
@@ -173,9 +487,9 @@ class APIClient {
       });
       return res.data;
     } catch (e) {
-      return this.updateProduct(id, { 
-        isTrending, 
-        trendingScheduledAt: isTrending ? new Date().toISOString() : undefined 
+      return this.updateProduct(id, {
+        isTrending,
+        trendingScheduledAt: isTrending ? new Date().toISOString() : undefined
       });
     }
   }
@@ -186,7 +500,7 @@ class APIClient {
       const res = await this.request('/categories');
       return res.data;
     } catch (e) {
-      return MockDB.get('m_categories').sort((a,b) => a.order - b.order);
+      return MockDB.get('m_categories').sort((a, b) => a.order - b.order);
     }
   }
 
@@ -258,17 +572,31 @@ class APIClient {
       });
       MockDB.set('m_categories', updated);
       MockDB.addAuditLog('CATEGORIES_REORDERED', { message: `Categories reordered.`, orderedIds }, 'INFO');
-      return updated.sort((a,b) => a.order - b.order);
+      return updated.sort((a, b) => a.order - b.order);
     }
   }
 
   // CUSTOMERS & MEASUREMENTS
   async getCustomers() {
     try {
-      const res = await this.request('/admin/customers');
+      const res = await this.request('/admin/customers?limit=1000');
       return res.data;
     } catch (e) {
       return MockDB.get('m_users').filter(u => u.role === 'CUSTOMER');
+    }
+  }
+
+  async searchCustomers(searchTerm) {
+    if (!searchTerm) return [];
+    try {
+      const res = await this.request(`/admin/customers?search=${encodeURIComponent(searchTerm)}&limit=10`);
+      return res.data;
+    } catch (e) {
+      const term = searchTerm.toLowerCase();
+      return MockDB.get('m_users').filter(u =>
+        u.role === 'CUSTOMER' &&
+        (u.fullName?.toLowerCase().includes(term) || u.email?.toLowerCase().includes(term) || u.phone?.includes(term))
+      );
     }
   }
 
@@ -398,7 +726,7 @@ class APIClient {
         userName: appt.user?.fullName || 'Customer',
       }));
     } catch (e) {
-      return MockDB.get('m_appointments').sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      return MockDB.get('m_appointments').sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     }
   }
 
@@ -410,12 +738,75 @@ class APIClient {
       });
       return res.data;
     } catch (e) {
+      if (this.isLiveMode) throw e;
       const appointments = MockDB.get('m_appointments');
       const idx = appointments.findIndex(a => a.id === id);
       if (idx === -1) throw new Error('Appointment not found');
       appointments[idx].status = status;
       MockDB.set('m_appointments', appointments);
       return appointments[idx];
+    }
+  }
+
+  async updateAppointment(id, data) {
+    try {
+      const res = await this.request(`/appointments/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+      return res.data;
+    } catch (e) {
+      if (this.isLiveMode) throw e;
+      const appointments = MockDB.get('m_appointments');
+      const idx = appointments.findIndex(a => a.id === id);
+      if (idx === -1) throw new Error('Appointment not found');
+      appointments[idx] = { ...appointments[idx], ...data };
+      if (data.date) appointments[idx].date = new Date(data.date).toISOString();
+      MockDB.set('m_appointments', appointments);
+      return appointments[idx];
+    }
+  }
+
+  async createAppointment(data) {
+    try {
+      const res = await this.request('/appointments', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+      return res.data;
+    } catch (e) {
+      if (this.isLiveMode) throw e;
+      const appts = MockDB.get('m_appointments');
+      const newAppt = {
+        ...data,
+        id: data.id || `appt-${Date.now()}`,
+        status: data.status || 'PENDING',
+        createdAt: new Date().toISOString(),
+        assignedStaffId: data.staffId || null,
+      };
+      appts.push(newAppt);
+      MockDB.set('m_appointments', appts);
+      return newAppt;
+    }
+  }
+
+
+  async updateStoreVisit(id, data) {
+    try {
+      const res = await this.request(`/visits/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+      return res.data;
+    } catch (e) {
+      if (this.isLiveMode) throw e;
+      const visits = MockDB.get('m_store_visits');
+      const idx = visits.findIndex(v => v.id === id);
+      if (idx === -1) throw new Error('Visit not found');
+      visits[idx] = { ...visits[idx], ...data };
+      if (data.preferredDate) visits[idx].preferredDate = new Date(data.preferredDate).toISOString();
+      MockDB.set('m_store_visits', visits);
+      return visits[idx];
     }
   }
 
@@ -429,7 +820,7 @@ class APIClient {
         assignedStaffName: visit.assignedStaff?.fullName || '',
       }));
     } catch (e) {
-      return MockDB.get('m_store_visits').sort((a,b) => new Date(a.preferredDate).getTime() - new Date(b.preferredDate).getTime());
+      return MockDB.get('m_store_visits').sort((a, b) => new Date(a.preferredDate).getTime() - new Date(b.preferredDate).getTime());
     }
   }
 
@@ -447,14 +838,14 @@ class APIClient {
       const visits = MockDB.get('m_store_visits');
       const idx = visits.findIndex(v => v.id === visitId);
       if (idx === -1) throw new Error('Visit not found');
-      
+
       const staff = MockDB.get('m_users').find(u => u.id === staffId);
       if (!staff) throw new Error('Staff not found');
 
       visits[idx].assignedStaffId = staffId;
       visits[idx].assignedStaffName = staff.fullName;
       visits[idx].status = 'ASSIGNED';
-      
+
       MockDB.set('m_store_visits', visits);
       return visits[idx];
     }
@@ -479,7 +870,7 @@ class APIClient {
       visits[idx].completionNotes = completionNotes;
       visits[idx].mediaUrls = mediaUrls;
       visits[idx].status = 'COMPLETED';
-      
+
       MockDB.set('m_store_visits', visits);
       return visits[idx];
     }
@@ -497,11 +888,11 @@ class APIClient {
       const users = MockDB.get('m_users');
       const idx = users.findIndex(u => u.id === userId);
       if (idx === -1) throw new Error('User not found');
-      
+
       const user = users[idx];
       const newBal = user.pointsBalance + points;
       if (newBal < 0) throw new Error('Loyalty balance cannot drop below zero');
-      
+
       user.pointsBalance = newBal;
       MockDB.set('m_users', users);
 
@@ -517,13 +908,13 @@ class APIClient {
       });
       MockDB.set('m_point_transactions', pts);
 
-      MockDB.addAuditLog('POINTS_MANUALLY_ADJUSTED', { 
+      MockDB.addAuditLog('POINTS_MANUALLY_ADJUSTED', {
         message: `Manual adjustment of ${points} points for ${user.fullName}. Reason: ${reason}`,
         targetUserId: userId,
         delta: points,
-        reason 
+        reason
       }, points < 0 ? 'WARNING' : 'INFO');
-      
+
       return true;
     }
   }
@@ -533,7 +924,7 @@ class APIClient {
       const res = await this.request('/admin/loyalty/transactions');
       return res.data;
     } catch (e) {
-      return MockDB.get('m_point_transactions').sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      return MockDB.get('m_point_transactions').sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
   }
 
@@ -761,7 +1152,7 @@ class APIClient {
       const tickets = MockDB.get('m_support_tickets');
       const idx = tickets.findIndex(t => t.id === id);
       if (idx === -1) throw new Error('Ticket not found');
-      
+
       const newMsg = {
         id: `msg-${Date.now()}`,
         sender: 'ADMIN',
@@ -770,7 +1161,7 @@ class APIClient {
         sentAt: new Date().toISOString(),
       };
       tickets[idx].messages.push(newMsg);
-      
+
       if (tickets[idx].status === 'OPEN') {
         tickets[idx].status = 'IN_PROGRESS';
       }
@@ -786,7 +1177,7 @@ class APIClient {
       const res = await this.request('/admin/audits');
       return res.data;
     } catch (e) {
-      return MockDB.get('m_audit_logs').sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      return MockDB.get('m_audit_logs').sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
   }
 
@@ -887,12 +1278,16 @@ class APIClient {
       const res = await this.request('/billing/invoice', {
         method: 'POST',
         body: JSON.stringify({
-          userId: undefined,
+          userId: sale.userId || undefined,
           customerName: sale.customerName,
           items: invoiceItems,
           discountAmount,
           paymentMethod: sale.paymentMethod.toUpperCase(),
           isOfflineSales: true,
+          status: sale.status,
+          isQuickOrder: sale.isQuickOrder,
+          quickOrderReason: sale.quickOrderReason,
+          quickOrderExpectedDate: sale.quickOrderExpectedDate,
         }),
       });
 
@@ -912,7 +1307,7 @@ class APIClient {
     } catch (e) {
       const products = MockDB.get('m_products');
       const orders = MockDB.get('m_orders');
-      
+
       const orderItems = [];
       let subtotal = 0;
 
@@ -922,10 +1317,10 @@ class APIClient {
         if (prod.inventoryQty < item.quantity) {
           throw new Error(`Insufficient inventory for product '${prod.name}'. Available: ${prod.inventoryQty}, Requested: ${item.quantity}`);
         }
-        
+
         prod.inventoryQty -= item.quantity;
-        prod.stockStatus = prod.inventoryQty <= 0 
-          ? 'OUT_OF_STOCK' 
+        prod.stockStatus = prod.inventoryQty <= 0
+          ? 'OUT_OF_STOCK'
           : (prod.inventoryQty <= MockDB.getSettings().lowStockThreshold ? 'LOW_STOCK' : 'IN_STOCK');
 
         orderItems.push({
@@ -979,6 +1374,9 @@ class APIClient {
         paymentStatus: 'COMPLETED',
         createdAt: new Date().toISOString(),
         items: orderItems,
+        isQuickOrder: sale.isQuickOrder || false,
+        quickOrderReason: sale.isQuickOrder ? sale.quickOrderReason : null,
+        quickOrderStatus: sale.isQuickOrder ? 'PENDING' : null,
       };
 
       orders.unshift(newOrder);
@@ -1006,15 +1404,55 @@ class APIClient {
       return res.data.map(order => ({
         ...order,
         customerName: order.user ? order.user.fullName : (order.gatewayResponse?.guestCustomerName || 'Offline Customer (Guest)'),
+        userId: order.userId || order.user?.id,
         items: (order.orderItems || []).map(item => ({
           id: item.id,
           productName: item.product?.name || 'Unknown Item',
           quantity: item.quantity,
           price: Number(item.price),
         })),
+        // booking is already attached by the backend (getAssociatedBooking), pass it through
+        booking: order.booking || null,
       }));
     } catch (e) {
-      return MockDB.get('m_orders').sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      const orders = MockDB.get('m_orders');
+      const appts = MockDB.get('m_appointments');
+      const visits = MockDB.get('m_store_visits');
+
+      return orders.map(order => {
+        // Find appointment
+        const appt = appts.find(a => (a.notes || '').includes(order.invoiceNumber));
+        // Find visit
+        const visit = visits.find(v => (v.requirements || '').includes(order.invoiceNumber));
+
+        let booking = null;
+        if (appt) {
+          booking = {
+            id: appt.id,
+            type: 'STUDIO',
+            date: appt.date,
+            timeSlot: appt.timeSlot,
+            status: appt.status,
+            notes: appt.notes,
+          };
+        } else if (visit) {
+          booking = {
+            id: visit.id,
+            type: 'HOME_VISIT',
+            date: visit.confirmedDate || visit.preferredDate,
+            timeSlot: 'Home Visit Fitting',
+            status: visit.status,
+            requirements: visit.requirements,
+          };
+        }
+
+        return {
+          ...order,
+          customerName: order.customerName || (order.user ? order.user.fullName : 'Offline Customer'),
+          items: order.items || [],
+          booking,
+        };
+      }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
   }
 
@@ -1042,6 +1480,61 @@ class APIClient {
     }
   }
 
+  async updateQuickOrderStatus(id, quickOrderStatus) {
+    try {
+      const res = await this.request(`/orders/admin/${id}/quick-status`, {
+        method: 'PUT',
+        body: JSON.stringify({ quickOrderStatus }),
+      });
+      return res.data;
+    } catch (e) {
+      const orders = MockDB.get('m_orders');
+      const idx = orders.findIndex(o => o.id === id);
+      if (idx === -1) throw new Error('Order not found');
+      orders[idx].quickOrderStatus = quickOrderStatus;
+      MockDB.set('m_orders', orders);
+
+      MockDB.addAuditLog('QUICK_ORDER_STATUS_CHANGED', {
+        message: `Order ${orders[idx].invoiceNumber} quick status shifted to ${quickOrderStatus}.`,
+        orderId: id,
+        quickOrderStatus,
+      }, 'INFO');
+
+      return orders[idx];
+    }
+  }
+
+  async updateOrderDetails(id, updates) {
+    try {
+      const res = await this.request(`/orders/admin/${id}/status`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          status: updates.status,
+          paymentStatus: updates.paymentStatus,
+          fabricType: updates.fabricType,
+          customizations: updates.customizations,
+          tailorNotes: updates.tailorNotes,
+          measurementProfileId: updates.measurementProfileId,
+        }),
+      });
+      return res.data;
+    } catch (e) {
+      const orders = MockDB.get('m_orders');
+      const idx = orders.findIndex(o => o.id === id);
+      if (idx === -1) throw new Error('Order not found');
+      orders[idx] = { ...orders[idx], ...updates };
+      MockDB.set('m_orders', orders);
+
+      MockDB.addAuditLog('ORDER_UPDATED', {
+        message: `Order ${orders[idx].invoiceNumber} details updated by Admin.`,
+        orderId: id,
+        updates,
+      }, 'INFO');
+
+      return orders[idx];
+    }
+  }
+
   async getPackingSlip(orderId) {
     try {
       const res = await this.request(`/orders/admin/${orderId}/packing-slip`);
@@ -1059,8 +1552,62 @@ class APIClient {
   // ANALYTICS & EXTENDED REPORTS
   async getDashboardReport() {
     try {
-      const res = await this.request('/admin/dashboard');
-      return res.data;
+      const realDashboard = await this.request('/admin/dashboard').then(res => res.data);
+      const orders = await this.getOrders();
+      
+      const totalRevenue = realDashboard.overview?.revenue?.value || 0;
+      const orderCount = realDashboard.overview?.orders?.value || 0;
+      const aov = realDashboard.overview?.aov?.value || 0;
+      
+      const revenueChart = [
+        { month: 'Jan 26', revenue: 45000 },
+        { month: 'Feb 26', revenue: 52000 },
+        { month: 'Mar 26', revenue: 68000 },
+        { month: 'Apr 26', revenue: 58000 },
+        { month: 'May 26', revenue: 84000 },
+        { month: 'Jun 26', revenue: totalRevenue }
+      ];
+
+      const topCategories = (realDashboard.productSales?.topSelling || []).map(p => ({
+        name: p.name,
+        value: p.unitsSold * 1000
+      }));
+
+      if (topCategories.length === 0) {
+        topCategories.push(
+          { name: 'Sarees', value: 85000 },
+          { name: 'Lehengas', value: 65000 },
+          { name: 'Kurtas', value: 45000 }
+        );
+      }
+
+      return {
+        totalRevenue,
+        orderCount,
+        aov,
+        recentOrders: Array.isArray(orders) ? orders.slice(0, 10) : [],
+        revenueChart,
+        topCategories,
+        indiaActiveUsers: [
+          { name: 'Bangalore, Karnataka', count: 5 },
+          { name: 'Mumbai, Maharashtra', count: 2 },
+          { name: 'New Delhi, Delhi', count: 1 }
+        ],
+        productTraffic: [
+          { name: 'Google Search', percentage: 45 },
+          { name: 'Instagram Ads', percentage: 25 },
+          { name: 'Direct/Email', percentage: 20 },
+          { name: 'Referral', percentage: 10 }
+        ],
+        conversionRates: [
+          { name: 'Overall Conversion', value: 3.2, change: '+0.5%' },
+          { name: 'Add to Cart', value: 12.5, change: '+1.2%' },
+          { name: 'Checkout Initiated', value: 8.4, change: '-0.3%' },
+          { name: 'Cart Abandonment', value: 65.2, change: '-2.1%' },
+          { name: 'Repeat Customer', value: 24.8, change: '+3.4%' }
+        ],
+        pendingVisits: 0
+      };
     } catch (e) {
       const orders = MockDB.get('m_orders');
       const visits = MockDB.get('m_store_visits');
@@ -1083,7 +1630,7 @@ class APIClient {
       const mockCategories = MockDB.get('m_categories') || [];
       const catMap = {};
       mockCategories.forEach(c => { catMap[c.id] = { name: c.name, value: 0 }; });
-      
+
       orders.forEach(order => {
         if (order.status === 'PAID') {
           (order.items || []).forEach(item => {
@@ -1139,7 +1686,7 @@ class APIClient {
       let totalQty = 0;
       const productSales = {};
       mockProducts.forEach(p => { productSales[p.id] = { name: p.name, qty: 0 }; });
-      
+
       orders.forEach(order => {
         if (order.status === 'PAID') {
           (order.items || []).forEach(item => {
@@ -1190,7 +1737,7 @@ class APIClient {
     } catch (e) {
       const users = MockDB.get('m_users').filter(u => u.role === 'CUSTOMER');
       const products = MockDB.get('m_products');
-      
+
       const customerGrowth = [
         { month: 'Jan 26', count: 12 },
         { month: 'Feb 26', count: 18 },
@@ -1205,7 +1752,7 @@ class APIClient {
         productName: p.name,
         quantitySold: p.id === 'prod-1' ? 8 : (p.id === 'prod-2' ? 5 : 2),
         revenueGenerated: p.price * (p.id === 'prod-1' ? 8 : (p.id === 'prod-2' ? 5 : 2)),
-      })).sort((a,b) => b.revenueGenerated - a.revenueGenerated);
+      })).sort((a, b) => b.revenueGenerated - a.revenueGenerated);
 
       const lowStockAlerts = products.filter(p => p.inventoryQty <= MockDB.getSettings().lowStockThreshold);
 

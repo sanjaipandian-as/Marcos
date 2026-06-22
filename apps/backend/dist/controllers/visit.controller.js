@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.VisitController = exports.visitAssignSchema = exports.visitCreateSchema = void 0;
+exports.VisitController = exports.visitUpdateSchema = exports.visitAssignSchema = exports.visitCreateSchema = void 0;
 const zod_1 = require("zod");
 const db_js_1 = __importDefault(require("../config/db.js"));
 const client_1 = require("@prisma/client");
@@ -23,39 +23,61 @@ exports.visitAssignSchema = zod_1.z.object({
         confirmedDate: zod_1.z.string().datetime(),
     }),
 });
+exports.visitUpdateSchema = zod_1.z.object({
+    body: zod_1.z.object({
+        preferredDate: zod_1.z.string().datetime().optional(),
+        confirmedDate: zod_1.z.string().datetime().optional(),
+        address: zod_1.z.string().min(1).optional(),
+        requirements: zod_1.z.string().min(1).optional(),
+        status: zod_1.z.enum(['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']).optional(),
+    }),
+});
 class VisitController {
     /**
      * GET /visits
      */
     static async getVisits(req, res, next) {
         const user = req.user;
+        const { page = 1, limit = 20 } = req.query;
+        const skip = (Number(page) - 1) * Number(limit);
         try {
             const where = {};
             if (user.role === client_1.Role.CUSTOMER) {
                 where.customerId = user.id;
             }
-            const visits = await db_js_1.default.storeVisit.findMany({
-                where,
-                orderBy: { preferredDate: 'asc' },
-                include: {
-                    customer: {
-                        select: {
-                            fullName: true,
-                            email: true,
-                            phoneNumber: true,
+            const [visits, total] = await Promise.all([
+                db_js_1.default.storeVisit.findMany({
+                    where,
+                    orderBy: { preferredDate: 'asc' },
+                    skip,
+                    take: Number(limit),
+                    include: {
+                        customer: {
+                            select: {
+                                fullName: true,
+                                email: true,
+                                phoneNumber: true,
+                            },
                         },
-                    },
-                    assignedStaff: {
-                        select: {
-                            fullName: true,
+                        assignedStaff: {
+                            select: {
+                                fullName: true,
+                            },
                         },
+                        report: true,
                     },
-                    report: true,
-                },
-            });
+                }),
+                db_js_1.default.storeVisit.count({ where }),
+            ]);
             return res.status(200).json({
                 success: true,
                 data: visits,
+                pagination: {
+                    page: Number(page),
+                    limit: Number(limit),
+                    total,
+                    pages: Math.ceil(total / Number(limit)),
+                },
             });
         }
         catch (error) {
@@ -228,6 +250,56 @@ class VisitController {
                 });
             }
             return res.status(200).json({ success: true, data: updatedVisit });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    /**
+     * PUT /visits/:id
+     * General update for store visit (e.g. rescheduling)
+     */
+    static async updateVisit(req, res, next) {
+        const user = req.user;
+        const { id } = req.params;
+        const { preferredDate, confirmedDate, address, requirements, status } = req.body;
+        try {
+            const visit = await db_js_1.default.storeVisit.findUnique({
+                where: { id },
+            });
+            if (!visit) {
+                return res.status(404).json({ success: false, message: 'Store visit not found' });
+            }
+            // Check ownership/permissions
+            if (visit.customerId !== user.id && user.role === client_1.Role.CUSTOMER) {
+                return res.status(403).json({ success: false, message: 'Forbidden: You do not own this visit request' });
+            }
+            // Reset to PENDING if user reschedules so admin can re-confirm/assign staff
+            let targetStatus = status;
+            if (preferredDate && user.role === client_1.Role.CUSTOMER) {
+                targetStatus = 'PENDING';
+            }
+            const updated = await db_js_1.default.storeVisit.update({
+                where: { id },
+                data: {
+                    ...(preferredDate && { preferredDate: new Date(preferredDate) }),
+                    ...(confirmedDate && { confirmedDate: new Date(confirmedDate) }),
+                    ...(address && { address }),
+                    ...(requirements && { requirements }),
+                    ...(targetStatus && { status: targetStatus }),
+                },
+            });
+            // Broadcast WebSocket notification to Staff, Customer and Admins
+            const io = (0, socket_handler_js_1.getIO)();
+            if (io) {
+                io.to(`user:${visit.customerId}`).to('admins').emit('visit:status_changed', {
+                    visitId: updated.id,
+                    status: updated.status,
+                    preferredDate: updated.preferredDate,
+                    confirmedDate: updated.confirmedDate,
+                });
+            }
+            return res.status(200).json({ success: true, data: updated });
         }
         catch (error) {
             next(error);

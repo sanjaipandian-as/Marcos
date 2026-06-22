@@ -125,6 +125,21 @@ export default function ProductDetailsScreen({ route, navigation }) {
     }
   };
 
+  const handleBuyNow = () => {
+    if (!product) return;
+    const directCheckoutItem = {
+      id: 'direct_' + Date.now(),
+      productId: product.id,
+      quantity: quantity,
+      product: product
+    };
+    navigation.navigate('Checkout', {
+      cartItems: [directCheckoutItem],
+      appliedCoupon: null,
+      discountAmount: 0
+    });
+  };
+
   if (loading && (!product || product.id !== productId)) {
     return (
       <View style={[styles.container, { backgroundColor: theme.bg.main }]}>
@@ -215,9 +230,14 @@ export default function ProductDetailsScreen({ route, navigation }) {
                 {product.materialInfo || 'Bespoke Premium Fabric'}
               </Text>
             </View>
-            <Text style={[styles.productPrice, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-              ₹{Number(product.price).toLocaleString('en-IN')}
-            </Text>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={[styles.productPrice, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                ₹{Number(product.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </Text>
+              <Text style={{ fontSize: 10, color: theme.text.muted, fontFamily: fonts.medium, marginTop: 2 }}>
+                Starting Price
+              </Text>
+            </View>
           </View>
 
           {/* Size Selector and Quantity Adjuster Row */}
@@ -278,6 +298,13 @@ export default function ProductDetailsScreen({ route, navigation }) {
             </View>
           </View>
 
+          {/* Sizing Price Notice */}
+          <View style={{ backgroundColor: 'rgba(0, 98, 65, 0.05)', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(0, 98, 65, 0.15)' }}>
+            <Text style={{ fontSize: 11.5, color: '#006241', fontFamily: fonts.medium, lineHeight: 16 }}>
+              Note: This is a starting price, not the final price. The amount will differ based on your sizes.
+            </Text>
+          </View>
+
           {/* Description Section */}
           <View style={styles.descriptionSection}>
             <Text style={[styles.sectionLabel, { fontFamily: fonts.bold, color: theme.text.primary, marginBottom: 8 }]}>
@@ -312,7 +339,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.buyActionBtn, { backgroundColor: theme.brand[500] }]}
-          onPress={handleAddToCart}
+          onPress={handleBuyNow}
           activeOpacity={0.8}
         >
           <ShoppingBag size={20} color="#ffffff" style={{ marginRight: 8 }} />

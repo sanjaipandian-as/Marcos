@@ -68,6 +68,14 @@ export default function AppointmentBookingScreen({ navigation }) {
   // Validation states
   const [errors, setErrors] = useState({});
 
+  // Rescheduling states
+  const [rescheduleModalVisible, setRescheduleModalVisible] = useState(false);
+  const [reschedulingItem, setReschedulingItem] = useState(null);
+  const [rescheduleDate, setRescheduleDate] = useState(null);
+  const [rescheduleTimeSlot, setRescheduleTimeSlot] = useState('');
+  const [rescheduleNotes, setRescheduleNotes] = useState('');
+  const [calendarTarget, setCalendarTarget] = useState('BOOKING'); // 'BOOKING' or 'RESCHEDULE'
+
   const scrollY = React.useRef(new Animated.Value(0)).current;
 
   const availableSlots = [
@@ -119,7 +127,14 @@ export default function AppointmentBookingScreen({ navigation }) {
     if (!validateForm()) return;
     setSubmitting(true);
     try {
-      const formattedDate = selectedDate.toISOString();
+      // Use UTC date construction to avoid timezone-related off-by-one date issues.
+      // getFullYear/getMonth/getDate return LOCAL calendar values (which match what
+      // the user saw in the calendar picker), then we pin the time to noon UTC so
+      // the stored UTC date stays on the same calendar day as the user's selection.
+      const yearVal = selectedDate.getFullYear();
+      const monthVal = String(selectedDate.getMonth() + 1).padStart(2, '0');
+      const dayVal = String(selectedDate.getDate()).padStart(2, '0');
+      const formattedDate = `${yearVal}-${monthVal}-${dayVal}T12:00:00.000Z`;
       let res;
       if (activeTab === 'SERVICE') {
         res = await api.post('/appointments', {
@@ -160,17 +175,119 @@ export default function AppointmentBookingScreen({ navigation }) {
     setErrors({});
   };
 
+  const handleReschedulePress = (item) => {
+    const isVisit = !!item.address;
+    setReschedulingItem(item);
+    
+    const dateStr = isVisit ? item.preferredDate : item.date;
+    const bDate = new Date(dateStr);
+    const localDate = new Date(bDate.getUTCFullYear(), bDate.getUTCMonth(), bDate.getUTCDate());
+    
+    setRescheduleDate(localDate);
+    setRescheduleTimeSlot(isVisit ? '' : (item.timeSlot || ''));
+    
+    let initialNotes = '';
+    if (isVisit) {
+      initialNotes = item.requirements || '';
+    } else {
+      initialNotes = item.notes || '';
+    }
+    setRescheduleNotes(initialNotes);
+    setErrors({});
+    setRescheduleModalVisible(true);
+  };
+
+  const handleCancelPress = (item) => {
+    const isVisit = !!item.address;
+    Alert.alert(
+      'Cancel Booking',
+      `Are you sure you want to cancel this ${isVisit ? 'home visit' : 'standard'} booking?`,
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: async () => {
+            setLoading(true);
+            try {
+              const endpoint = isVisit ? `/visits/${item.id}` : `/appointments/${item.id}`;
+              const res = await api.put(endpoint, { status: 'CANCELLED' });
+              if (res.success) {
+                Alert.alert('Success', 'Booking cancelled successfully.');
+                loadData();
+              } else {
+                Alert.alert('Error', res.message || 'Failed to cancel booking.');
+              }
+            } catch (err) {
+              Alert.alert('Error', err.message || 'An error occurred.');
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const submitReschedule = async () => {
+    if (!rescheduleDate) {
+      setErrors({ rescheduleDate: 'Date is required' });
+      return;
+    }
+    const isVisit = !!reschedulingItem.address;
+    if (!isVisit && !rescheduleTimeSlot) {
+      setErrors({ rescheduleTimeSlot: 'Time slot is required' });
+      return;
+    }
+    
+    setSubmitting(true);
+    try {
+      const yearVal = rescheduleDate.getFullYear();
+      const monthVal = String(rescheduleDate.getMonth() + 1).padStart(2, '0');
+      const dayVal = String(rescheduleDate.getDate()).padStart(2, '0');
+      const formattedDate = `${yearVal}-${monthVal}-${dayVal}T12:00:00.000Z`;
+      
+      const endpoint = isVisit ? `/visits/${reschedulingItem.id}` : `/appointments/${reschedulingItem.id}`;
+      const payload = isVisit 
+        ? { preferredDate: formattedDate, requirements: rescheduleNotes }
+        : { date: formattedDate, timeSlot: rescheduleTimeSlot, notes: rescheduleNotes };
+        
+      const res = await api.put(endpoint, payload);
+      if (res.success) {
+        Alert.alert('Success', 'Booking rescheduled successfully.');
+        setRescheduleModalVisible(false);
+        loadData();
+      } else {
+        Alert.alert('Error', res.message || 'Failed to reschedule.');
+      }
+    } catch (err) {
+      Alert.alert('Error', err.message || 'An error occurred.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const renderCalendarModal = () => {
-    const daysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
-    const firstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
-    const totalDays = daysInMonth(year, month);
-    const startDay = firstDayOfMonth(year, month);
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    
+    const firstDay = new Date(year, month, 1).getDay();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    const prevMonthDays = new Date(year, month, 0).getDate();
+    
     const days = [];
-    for (let i = 0; i < startDay; i++) days.push(null);
-    for (let i = 1; i <= totalDays; i++) days.push(new Date(year, month, i));
+    for (let i = firstDay - 1; i >= 0; i--) {
+      days.push({ date: new Date(year, month - 1, prevMonthDays - i), isCurrentMonth: false });
+    }
+    for (let i = 1; i <= totalDays; i++) {
+      days.push({ date: new Date(year, month, i), isCurrentMonth: true });
+    }
+    const remaining = 42 - days.length;
+    for (let i = 1; i <= remaining; i++) {
+      days.push({ date: new Date(year, month + 1, i), isCurrentMonth: false });
+    }
+    
     const today = new Date();
     today.setHours(0,0,0,0);
 
@@ -183,19 +300,38 @@ export default function AppointmentBookingScreen({ navigation }) {
               <Text style={[styles.calendarMonthText, { color: '#1e293b', fontFamily: fonts.bold }]}>{monthNames[month]} {year}</Text>
               <TouchableOpacity onPress={() => setCurrentMonth(new Date(year, month + 1, 1))}><ChevronRight size={24} color="#1e293b" /></TouchableOpacity>
             </View>
+            <View style={styles.weekDaysRow}>
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, i) => (
+                <Text key={i} style={[styles.weekDayText, { color: theme.text.muted, fontFamily: fonts.bold }]}>{day}</Text>
+              ))}
+            </View>
             <View style={styles.daysGrid}>
-              {days.map((date, i) => {
-                if (!date) return <View key={i} style={styles.dayCell} />;
-                const isSelected = selectedDate && selectedDate.toDateString() === date.toDateString();
-                const isPast = date < today;
+              {days.map((item, i) => {
+                const targetDate = calendarTarget === 'RESCHEDULE' ? rescheduleDate : selectedDate;
+                const isSelected = targetDate && targetDate.toDateString() === item.date.toDateString();
+                const isPast = item.date < today;
                 return (
                   <TouchableOpacity 
                     key={i} 
                     style={[styles.dayCell, isSelected && { backgroundColor: theme.brand[500], borderRadius: 12 }]}
-                    disabled={isPast}
-                    onPress={() => { setSelectedDate(date); setShowCalendarModal(false); }}
+                    disabled={isPast || !item.isCurrentMonth}
+                    onPress={() => {
+                      if (calendarTarget === 'RESCHEDULE') {
+                        setRescheduleDate(item.date);
+                      } else {
+                        setSelectedDate(item.date);
+                      }
+                      setShowCalendarModal(false);
+                    }}
                   >
-                    <Text style={[styles.dayText, { color: isPast ? '#cbd5e1' : '#1e293b', fontFamily: fonts.bold }, isSelected && { color: '#ffffff' }]}>{date.getDate()}</Text>
+                    <Text style={[
+                      styles.dayText, 
+                      { fontFamily: fonts.bold },
+                      !item.isCurrentMonth ? { color: '#e2e8f0' } : (isPast ? { color: '#cbd5e1' } : { color: '#1e293b' }),
+                      isSelected && { color: '#ffffff' }
+                    ]}>
+                      {item.date.getDate()}
+                    </Text>
                   </TouchableOpacity>
                 );
               })}
@@ -209,25 +345,117 @@ export default function AppointmentBookingScreen({ navigation }) {
     );
   };
 
+  const formatBookingDate = (dateString) => {
+    if (!dateString) return '';
+    const dateObj = new Date(dateString);
+    if (isNaN(dateObj.getTime())) return dateString;
+    const day = dateObj.getUTCDate();
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const month = months[dateObj.getUTCMonth()];
+    const year = dateObj.getUTCFullYear();
+    return `${day} ${month} ${year}`;
+  };
+
   const renderBookingItem = ({ item }) => {
     const isVisit = !!item.address;
-    const date = new Date(isVisit ? item.preferredDate : item.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    const date = formatBookingDate(isVisit ? item.preferredDate : item.date);
+    const showActions = item.status !== 'CANCELLED' && item.status !== 'COMPLETED';
+    
+    // Status colors
+    const getStatusColor = () => {
+      switch (item.status) {
+        case 'COMPLETED': return '#10b981';
+        case 'CANCELLED': return '#ef4444';
+        default: return theme.brand[500];
+      }
+    };
+    const statusColor = getStatusColor();
     
     return (
-      <View style={[styles.bookingCard, shadows.premium, { backgroundColor: '#ffffff' }]}>
-        <View style={styles.cardHeader}>
-          <View style={[styles.typeBadge, { backgroundColor: isVisit ? '#f0fdf4' : '#eff6ff' }]}>
-            {isVisit ? <Home size={12} color="#166534" /> : <Briefcase size={12} color="#1e40af" />}
-            <Text style={[styles.typeBadgeText, { color: isVisit ? '#166534' : '#1e40af', fontFamily: fonts.bold }]}>
-              {isVisit ? 'HOME VISIT' : 'STANDARD'}
-            </Text>
+      <View style={[styles.premiumBookingCard, shadows.premium, { backgroundColor: theme.bg.card, borderColor: theme.border }]}>
+        
+        <View style={styles.cardContent}>
+          <View style={styles.cardHeader}>
+            <View style={[styles.typeBadge, { backgroundColor: theme.brand[50] }]}>
+              {isVisit ? <Home size={12} color={theme.brand[600]} /> : <Briefcase size={12} color={theme.brand[600]} />}
+              <Text style={[styles.typeBadgeText, { color: theme.brand[700], fontFamily: fonts.bold }]}>
+                {isVisit ? 'HOME VISIT' : 'STANDARD'}
+              </Text>
+            </View>
+            <View style={[styles.statusBadge, { backgroundColor: statusColor + '15' }]}>
+              <Text style={[styles.statusText, { color: statusColor, fontFamily: fonts.bold }]}>
+                {item.status}
+              </Text>
+            </View>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: '#f1f5f9' }]}><Text style={[styles.statusText, { color: '#64748b', fontFamily: fonts.bold }]}>{item.status}</Text></View>
-        </View>
-        <View style={styles.cardBody}>
-          <View style={styles.infoRow}><Calendar size={14} color="#64748b" /><Text style={[styles.infoText, { color: '#1e293b', fontFamily: fonts.medium }]}>{date}</Text></View>
-          {!isVisit && <View style={styles.infoRow}><Clock size={14} color="#64748b" /><Text style={[styles.infoText, { color: '#1e293b', fontFamily: fonts.medium }]}>{item.timeSlot}</Text></View>}
-          <View style={styles.infoRow}><MapPin size={14} color="#64748b" /><Text style={[styles.infoText, { color: '#1e293b', fontFamily: fonts.medium }]} numberOfLines={1}>{isVisit ? item.address : 'In-Store'}</Text></View>
+          
+          <View style={styles.cardBody}>
+            <View style={styles.dateBlock}>
+               <Text style={[styles.dateMonthText, { fontFamily: fonts.semiBold, color: theme.brand[500] }]}>
+                 {date.split(' ')[1]} {date.split(' ')[2]}
+               </Text>
+               <Text style={[styles.dateDayText, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                 {date.split(' ')[0]}
+               </Text>
+               {!isVisit && (
+                 <Text style={[styles.timeSlotText, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
+                   {item.timeSlot}
+                 </Text>
+               )}
+            </View>
+            
+            <View style={styles.detailsBlock}>
+              <View style={styles.infoRowPremium}>
+                <MapPin size={14} color={theme.text.muted} />
+                <Text style={[styles.infoTextPremium, { color: theme.text.secondary, fontFamily: fonts.medium }]} numberOfLines={1}>
+                  {isVisit ? item.address : 'MARCOS In-Store'}
+                </Text>
+              </View>
+              
+              {/* Show Product Details */}
+              {!isVisit && item.productType ? (
+                <View style={styles.infoRowPremium}>
+                  <Sparkles size={14} color={theme.text.muted} />
+                  <Text style={[styles.infoTextPremium, { color: theme.text.secondary, fontFamily: fonts.medium }]} numberOfLines={1}>
+                    {item.productType}
+                  </Text>
+                </View>
+              ) : null}
+              {isVisit && item.requirements ? (
+                <View style={styles.infoRowPremium}>
+                  <Sparkles size={14} color={theme.text.muted} />
+                  <Text style={[styles.infoTextPremium, { color: theme.text.secondary, fontFamily: fonts.medium }]} numberOfLines={1}>
+                    {item.requirements}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
+
+          {showActions && (
+            <View style={[styles.cardActionsPremium, { borderTopColor: theme.border }]}>
+              <TouchableOpacity 
+                style={[styles.cardActionBtnPremium, { backgroundColor: theme.bg.main }]} 
+                onPress={() => handleReschedulePress(item)}
+                activeOpacity={0.7}
+              >
+                <Calendar size={14} color={theme.text.primary} />
+                <Text style={[styles.cardActionBtnTextPremium, { color: theme.text.primary, fontFamily: fonts.semiBold }]}>
+                  Reschedule
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.cardActionBtnPremium, { backgroundColor: '#fef2f2' }]} 
+                onPress={() => handleCancelPress(item)}
+                activeOpacity={0.7}
+              >
+                <Trash2 size={14} color="#ef4444" />
+                <Text style={[styles.cardActionBtnTextPremium, { color: '#ef4444', fontFamily: fonts.semiBold }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </View>
     );
@@ -288,11 +516,6 @@ export default function AppointmentBookingScreen({ navigation }) {
           <Text style={[styles.emptySubtitle, { color: theme.text.secondary, fontFamily: fonts.medium }]}>
             Schedule a session to plan or fit your bespoke masterpieces.
           </Text>
-          <TouchableOpacity style={[styles.mainBookBtn, { backgroundColor: theme.brand[500] }]} onPress={() => setBookingModalVisible(true)} activeOpacity={0.8}>
-            <Text style={[styles.mainBookBtnText, { color: '#ffffff', fontFamily: fonts.bold }]}>
-              BOOK {activeTab === 'SERVICE' ? 'STANDARD' : 'HOME VISIT'}
-            </Text>
-          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -304,10 +527,6 @@ export default function AppointmentBookingScreen({ navigation }) {
         />
       )}
 
-      <TouchableOpacity style={[styles.fab, shadows.premium, { backgroundColor: theme.brand[500] }]} onPress={() => setBookingModalVisible(true)} activeOpacity={0.8}>
-        <Plus size={24} color="#ffffff" />
-      </TouchableOpacity>
-
       <Modal visible={bookingModalVisible} animationType="slide" transparent>
         <View style={styles.modalBg}>
           <View style={[styles.modalCard, { backgroundColor: '#ffffff' }]}>
@@ -315,7 +534,7 @@ export default function AppointmentBookingScreen({ navigation }) {
               <Text style={[styles.modalTitle, { color: '#1e293b', fontFamily: fonts.bold }]}>NEW {activeTab === 'SERVICE' ? 'SERVICE' : 'HOME VISIT'}</Text>
               <TouchableOpacity onPress={() => setBookingModalVisible(false)}><X size={24} color="#64748b" /></TouchableOpacity>
             </View>
-            <ScrollView contentContainerStyle={styles.modalScroll} showsVerticalScrollIndicator={false}>
+            <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={styles.modalScroll} showsVerticalScrollIndicator={false}>
               
               <TouchableOpacity style={[styles.inputField, { backgroundColor: theme.bg.input, borderColor: theme.border }]} onPress={() => setShowCalendarModal(true)}>
                 <Calendar size={20} color={theme.brand[500]} />
@@ -342,11 +561,94 @@ export default function AppointmentBookingScreen({ navigation }) {
               )}
               {errors.address && <Text style={styles.errorText}>{errors.address}</Text>}
 
-              <TextInput style={[styles.textInput, { height: 100, backgroundColor: theme.bg.input, borderColor: theme.border, color: theme.text.primary }]} placeholder="Notes / Requirements" placeholderTextColor={theme.text.muted} multiline value={notes} onChangeText={setNotes} />
+              <TextInput style={[styles.textInput, { height: 80, backgroundColor: theme.bg.input, borderColor: theme.border, color: theme.text.primary }]} placeholder="Notes / Requirements" placeholderTextColor={theme.text.muted} multiline value={notes} onChangeText={setNotes} />
               {errors.notes && <Text style={styles.errorText}>{errors.notes}</Text>}
 
               <TouchableOpacity style={[styles.submitBtn, { backgroundColor: theme.brand[500] }]} onPress={handleBooking} disabled={submitting}>
                 {submitting ? <ActivityIndicator color="#ffffff" /> : <Text style={[styles.submitBtnText, { color: '#ffffff', fontFamily: fonts.bold }]}>CONFIRM BOOKING</Text>}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={rescheduleModalVisible} animationType="slide" transparent>
+        <View style={styles.modalBg}>
+          <View style={[styles.modalCard, { backgroundColor: '#ffffff' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: '#1e293b', fontFamily: fonts.bold }]}>
+                RESCHEDULE {reschedulingItem?.address ? 'HOME VISIT' : 'STANDARD'}
+              </Text>
+              <TouchableOpacity onPress={() => setRescheduleModalVisible(false)}>
+                <X size={24} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={styles.modalScroll} showsVerticalScrollIndicator={false}>
+              
+              <TouchableOpacity 
+                style={[styles.inputField, { backgroundColor: theme.bg.input, borderColor: theme.border }]} 
+                onPress={() => {
+                  setCalendarTarget('RESCHEDULE');
+                  setShowCalendarModal(true);
+                }}
+              >
+                <Calendar size={20} color={theme.brand[500]} />
+                <Text style={[styles.inputText, { color: theme.text.primary, fontFamily: fonts.medium }]}>
+                  {rescheduleDate ? rescheduleDate.toDateString() : 'Select Date'}
+                </Text>
+                <ChevronDown size={20} color={theme.text.muted} />
+              </TouchableOpacity>
+              {errors.rescheduleDate && <Text style={styles.errorText}>{errors.rescheduleDate}</Text>}
+
+              {reschedulingItem && !reschedulingItem.address ? (
+                <>
+                  <View style={styles.slotsRow}>
+                    {availableSlots.map(s => (
+                      <TouchableOpacity 
+                        key={s} 
+                        style={[
+                          styles.slot, 
+                          { borderColor: theme.border }, 
+                          rescheduleTimeSlot === s && { backgroundColor: theme.brand[500], borderColor: theme.brand[500] }
+                        ]} 
+                        onPress={() => setRescheduleTimeSlot(s)}
+                      >
+                        <Text style={[
+                          styles.slotText, 
+                          { color: theme.text.secondary }, 
+                          rescheduleTimeSlot === s && { color: '#ffffff' }, 
+                          { fontFamily: fonts.bold }
+                        ]}>
+                          {s.split(' ')[0]}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  {errors.rescheduleTimeSlot && <Text style={styles.errorText}>{errors.rescheduleTimeSlot}</Text>}
+                </>
+              ) : null}
+
+              <TextInput 
+                style={[styles.textInput, { height: 100, backgroundColor: theme.bg.input, borderColor: theme.border, color: theme.text.primary }]} 
+                placeholder="Notes / Requirements" 
+                placeholderTextColor={theme.text.muted} 
+                multiline 
+                value={rescheduleNotes} 
+                onChangeText={setRescheduleNotes} 
+              />
+
+              <TouchableOpacity 
+                style={[styles.submitBtn, { backgroundColor: theme.brand[500] }]} 
+                onPress={submitReschedule} 
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <Text style={[styles.submitBtnText, { color: '#ffffff', fontFamily: fonts.bold }]}>
+                    CONFIRM RESCHEDULE
+                  </Text>
+                )}
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -389,21 +691,67 @@ const styles = StyleSheet.create({
   activeToggleText: { color: '#ffffff' },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   listPadding: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 100 },
-  bookingCard: { backgroundColor: '#ffffff', borderRadius: 20, padding: 20, marginBottom: 16 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  premiumBookingCard: { 
+    borderRadius: 24, 
+    marginBottom: 16, 
+    flexDirection: 'row',
+    overflow: 'hidden',
+    borderWidth: 1,
+  },
+  cardAccentLeft: {
+    width: 6,
+    height: '100%',
+  },
+  cardContent: {
+    flex: 1,
+    padding: 20,
+  },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
   typeBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
-  typeBadgeText: { fontSize: 10 },
-  statusBadge: { backgroundColor: '#f1f5f9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  statusText: { fontSize: 10, color: '#64748b' },
-  cardBody: { gap: 10 },
-  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  infoText: { fontSize: 13, color: '#1e293b' },
+  typeBadgeText: { fontSize: 10, letterSpacing: 0.5 },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
+  statusText: { fontSize: 10, letterSpacing: 0.5 },
+  cardBody: { flexDirection: 'row', gap: 16, alignItems: 'center' },
+  dateBlock: {
+    backgroundColor: 'rgba(0,0,0,0.02)',
+    padding: 12,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 80,
+  },
+  dateMonthText: { fontSize: 12, textTransform: 'uppercase' },
+  dateDayText: { fontSize: 24, marginTop: 2, marginBottom: 2 },
+  timeSlotText: { fontSize: 11 },
+  detailsBlock: { flex: 1, gap: 8 },
+  infoRowPremium: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  infoTextPremium: { fontSize: 13, flex: 1 },
+  cardActionsPremium: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 20,
+    borderTopWidth: 1,
+    paddingTop: 16,
+  },
+  cardActionBtnPremium: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  cardActionBtnTextPremium: {
+    fontSize: 13,
+  },
   fab: { position: 'absolute', bottom: 30, right: 24, width: 60, height: 60, borderRadius: 30, backgroundColor: '#006241', alignItems: 'center', justifyContent: 'center', elevation: 8 },
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalCard: { backgroundColor: '#ffffff', borderTopLeftRadius: 32, borderTopRightRadius: 32, maxHeight: '90%', padding: 24 },
+  modalCard: { backgroundColor: '#ffffff', borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, paddingBottom: 0 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
   modalTitle: { fontSize: 18, color: '#1e293b' },
-  modalScroll: { paddingBottom: 40 },
+  modalScroll: { paddingBottom: 30 },
   inputField: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0', marginBottom: 16 },
   inputText: { flex: 1, marginLeft: 12, fontSize: 15, color: '#1e293b' },
   textInput: { backgroundColor: '#f8fafc', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0', fontSize: 15, color: '#1e293b', marginBottom: 16, textAlignVertical: 'top' },
@@ -419,6 +767,8 @@ const styles = StyleSheet.create({
   calendarCard: { backgroundColor: '#ffffff', borderRadius: 24, padding: 20 },
   calendarHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   calendarMonthText: { fontSize: 18, color: '#1e293b' },
+  weekDaysRow: { flexDirection: 'row', marginBottom: 10 },
+  weekDayText: { width: '14.28%', textAlign: 'center', fontSize: 12, textTransform: 'uppercase' },
   daysGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   dayCell: { width: '14.28%', height: 45, alignItems: 'center', justifyContent: 'center' },
   dayText: { fontSize: 14 },

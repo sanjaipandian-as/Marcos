@@ -12,7 +12,9 @@ import {
 } from 'react-native';
 import { useTheme } from '../../styles/ThemeContext';
 import api from '../../utils/api';
+import { Alert } from 'react-native';
 import { ArrowLeft, Sparkles, ShoppingBag, ShoppingCart, Heart } from 'lucide-react-native';
+import { CustomCartAddIcon, CustomCartAddedIcon } from '../../components/CartIcons';
 
 const { width } = Dimensions.get('window');
 
@@ -84,17 +86,21 @@ export default function FestivalOffersScreen({ navigation }) {
     try {
       const inCart = cartItems.has(productId);
       if (!inCart) {
-        await api.post('/products/cart', { productId, quantity: 1 });
-        setCartItems(prev => {
-          const next = new Set(prev);
-          next.add(productId);
-          return next;
-        });
+        const res = await api.post('/products/cart', { productId, quantity: 1 });
+        if (res.success) {
+          setCartItems(prev => {
+            const next = new Set(prev);
+            next.add(productId);
+            return next;
+          });
+          Alert.alert('Success', 'Added to cart successfully!');
+        }
       } else {
         navigation.navigate('Cart');
       }
     } catch (err) {
-      console.error('Error adding to cart:', err);
+      const errorMsg = err?.message || 'Unable to add item to cart. Please try again.';
+      Alert.alert('Error', errorMsg);
     }
   };
 
@@ -139,19 +145,24 @@ export default function FestivalOffersScreen({ navigation }) {
         
         <View style={styles.priceRow}>
           <Text style={[styles.prodPrice, { fontFamily: fonts.bold, color: '#006241' }]}>
-            ₹{Number(item.price).toLocaleString('en-IN')}
+            ₹{Number(item.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
           </Text>
           
           <View style={styles.cardRightActions}>
             <TouchableOpacity 
-              style={styles.cartIconBtn} 
+              style={[
+                styles.cartIconBtn,
+                cartItems.has(item.id)
+                  ? { backgroundColor: theme.brand[500], borderWidth: 1, borderColor: theme.brand[500] }
+                  : { backgroundColor: '#ffffff', borderWidth: 1, borderColor: theme.brand[500] }
+              ]} 
               onPress={() => handleAddToCart(item.id)}
               activeOpacity={0.7}
             >
               {cartItems.has(item.id) ? (
-                <ShoppingCart size={15} color="#006241" />
+                <CustomCartAddedIcon color="#ffffff" size={18} />
               ) : (
-                <ShoppingBag size={15} color="#475569" />
+                <CustomCartAddIcon color={theme.brand[500]} size={18} />
               )}
             </TouchableOpacity>
           </View>
@@ -336,10 +347,9 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   cartIconBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#f1f5f9',
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },

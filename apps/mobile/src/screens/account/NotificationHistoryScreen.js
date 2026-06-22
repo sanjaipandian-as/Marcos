@@ -1,37 +1,34 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  StyleSheet, 
-  Text, 
-  View, 
-  FlatList, 
-  TouchableOpacity, 
-  ActivityIndicator, 
+import {
+  StyleSheet,
+  Text,
+  View,
+  FlatList,
+  TouchableOpacity,
+  ActivityIndicator,
   Alert,
   Platform,
-  StatusBar,
-  ScrollView,
-  Dimensions
+  StatusBar
 } from 'react-native';
 import { useTheme } from '../../styles/ThemeContext';
 import { APP_CONFIG } from '../../config/app.config';
 import api from '../../utils/api';
-import { 
-  Bell, 
-  BellOff, 
-  CheckCheck, 
-  Circle, 
-  CreditCard, 
-  Plus, 
-  Trash2, 
-  ShieldCheck, 
+import {
+  Bell,
+  BellOff,
+  CheckCheck,
+  Circle,
+  CreditCard,
+  Plus,
+  Trash2,
+  ShieldCheck,
   ChevronRight,
+  ChevronLeft,
   PlusCircle,
   Clock,
   Settings
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-
-const { width } = Dimensions.get('window');
 
 export default function NotificationHistoryScreen({ navigation }) {
   const { theme, fonts, shadows } = useTheme();
@@ -65,7 +62,7 @@ export default function NotificationHistoryScreen({ navigation }) {
     try {
       const res = await api.put(`/notifications/recipients/${recipientId}/read`);
       if (res.success) {
-        setNotifications(prev => 
+        setNotifications(prev =>
           prev.map(item => item.id === recipientId ? { ...item, isRead: true } : item)
         );
       }
@@ -96,7 +93,7 @@ export default function NotificationHistoryScreen({ navigation }) {
     });
 
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
         style={[
           styles.notifCard,
           shadows.premium,
@@ -106,8 +103,8 @@ export default function NotificationHistoryScreen({ navigation }) {
         activeOpacity={0.8}
       >
         <View style={styles.notifIconWrapper}>
-          <LinearGradient 
-            colors={!item.isRead ? [theme.brand[500], theme.brand[800]] : ['#f1f5f9', '#e2e8f0']} 
+          <LinearGradient
+            colors={!item.isRead ? [theme.brand[500], theme.brand[800]] : ['#f1f5f9', '#e2e8f0']}
             style={styles.notifIconCircle}
           >
             <Bell size={16} color={!item.isRead ? '#ffffff' : '#94a3b8'} />
@@ -164,7 +161,7 @@ export default function NotificationHistoryScreen({ navigation }) {
   return (
     <View style={[styles.container, { backgroundColor: theme.bg.main }]}>
       <StatusBar barStyle="dark-content" translucent={false} />
-      
+
       {/* Header Bar */}
       <View style={styles.headerBar}>
         <TouchableOpacity style={[styles.headerBtn, shadows.premium]} onPress={() => navigation.goBack()} activeOpacity={0.7}>

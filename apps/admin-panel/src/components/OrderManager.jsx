@@ -1,26 +1,472 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Search, 
-  Eye, 
-  Printer, 
+import {
+  Search,
+  Eye,
+  Printer,
   Mail,
   ShoppingBag,
-  ExternalLink,
   ChevronDown,
-  X
+  X,
+  CheckCircle2,
+  Circle,
+  Package,
+  Truck,
+  MapPin,
+  Navigation,
+  XCircle,
+  Clock,
+  Calendar,
+  Briefcase,
+  Clipboard,
+  CheckCircle,
+  User,
+  Phone,
+  Ruler,
+  Plus,
+  Trash2,
+  Filter,
 } from 'lucide-react';
 import api from '../utils/api';
 
-export default function OrderManager() {
+const formatBookingDateUTC = (dateString, options = {}) => {
+  if (!dateString) return '';
+  const dateObj = new Date(dateString);
+  if (isNaN(dateObj.getTime())) return dateString;
+  
+  const day = dateObj.getUTCDate();
+  const year = dateObj.getUTCFullYear();
+  const monthNamesShort = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const monthNamesLong = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  
+  const month = options.month === 'long' ? monthNamesLong[dateObj.getUTCMonth()] : monthNamesShort[dateObj.getUTCMonth()];
+  
+  if (options.weekday === 'long') {
+    const weekday = daysOfWeek[dateObj.getUTCDay()];
+    return `${weekday}, ${day} ${month} ${year}`;
+  }
+  
+  if (options.weekday === 'short') {
+    const weekday = daysOfWeek[dateObj.getUTCDay()].substring(0, 3);
+    return `${weekday}, ${month} ${day}`;
+  }
+  
+  return `${day} ${month} ${year}`;
+};
+
+// ─── Delivery stage definitions (admin-visible labels + DB keys) ──────────────
+const DELIVERY_STAGES = [
+  {
+    key: 'PENDING',
+    label: 'Order Placed',
+    sublabel: 'Awaiting confirmation/booking',
+    icon: ShoppingBag,
+    color: '#f59e0b',
+    bg: 'bg-amber-50',
+    border: 'border-amber-200',
+    text: 'text-amber-700',
+    dot: 'bg-amber-400',
+  },
+  {
+    key: 'PAID',
+    label: 'Measurement Session',
+    sublabel: 'Fitting appointment scheduled',
+    icon: Clock,
+    color: '#8b5cf6',
+    bg: 'bg-violet-50',
+    border: 'border-violet-200',
+    text: 'text-violet-700',
+    dot: 'bg-violet-400',
+  },
+  {
+    key: 'PROCESSING',
+    label: 'Order Stitching',
+    sublabel: 'Artisans are stitching items',
+    icon: Package,
+    color: '#3b82f6',
+    bg: 'bg-blue-50',
+    border: 'border-blue-200',
+    text: 'text-blue-700',
+    dot: 'bg-blue-400',
+  },
+  {
+    key: 'SHIPPED',
+    label: 'Product Completed',
+    sublabel: 'Custom stitching finished',
+    icon: MapPin,
+    color: '#0891b2',
+    bg: 'bg-cyan-50',
+    border: 'border-cyan-200',
+    text: 'text-cyan-700',
+    dot: 'bg-cyan-400',
+  },
+  {
+    key: 'OUT_FOR_DELIVERY',
+    label: 'Product Out for Delivery',
+    sublabel: 'Delivery executive is on the way',
+    icon: Navigation,
+    color: '#059669',
+    bg: 'bg-emerald-50',
+    border: 'border-emerald-200',
+    text: 'text-emerald-700',
+    dot: 'bg-emerald-400',
+  },
+  {
+    key: 'DELIVERED',
+    label: 'Delivered',
+    sublabel: 'Package received by customer',
+    icon: CheckCircle2,
+    color: '#16a34a',
+    bg: 'bg-green-50',
+    border: 'border-green-200',
+    text: 'text-green-700',
+    dot: 'bg-green-500',
+  },
+];
+
+const HAPPY_PATH = ['PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'];
+
+function getStageIndex(status) {
+  return HAPPY_PATH.indexOf(status);
+}
+
+function getStageConfig(status) {
+  return DELIVERY_STAGES.find(s => s.key === status) || {
+    key: status,
+    label: status,
+    sublabel: '',
+    icon: Circle,
+    color: '#64748b',
+    bg: 'bg-slate-50',
+    border: 'border-slate-200',
+    text: 'text-slate-600',
+    dot: 'bg-slate-400',
+  };
+}
+
+// ─── Delivery Pipeline Component (shown inside the order detail modal) ────────
+function DeliveryPipeline({ order, onStage }) {
+  const currentIdx = getStageIndex(order.status);
+  const isCancelled = order.status === 'CANCELLED';
+
+  if (isCancelled) {
+    return (
+      <div className="rounded-2xl bg-red-50 border border-red-100 p-4 flex items-start gap-3">
+        <XCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+        <div>
+          <p className="text-sm font-extrabold text-red-700">Order Cancelled</p>
+          <p className="text-xs text-red-500 font-medium mt-0.5">
+            {order.paymentStatus === 'REFUNDED' ? 'Refund has been initiated.' : 'This order has been cancelled.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">
+        Delivery Stage — click to advance
+      </p>
+      {DELIVERY_STAGES.map((stage, idx) => {
+        const StageIcon = stage.icon;
+        const isDone = idx < currentIdx;
+        const isCurrent = idx === currentIdx;
+        const isFuture = idx > currentIdx;
+        const isNext = idx === currentIdx + 1;
+
+        return (
+          <button
+            key={stage.key}
+            onClick={() => !isCurrent && !isDone && onStage(order, stage.key)}
+            disabled={isDone || isCurrent}
+            className={`
+              w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all text-left
+              ${isCurrent
+                ? `${stage.bg} ${stage.border} ring-2 ring-offset-1`
+                : isDone
+                ? 'bg-slate-50 border-slate-100 opacity-60 cursor-default'
+                : isNext
+                ? `${stage.bg} ${stage.border} hover:shadow-md cursor-pointer hover:scale-[1.01] active:scale-[0.99]`
+                : 'bg-white border-slate-100 opacity-40 cursor-not-allowed'
+              }
+            `}
+            style={isCurrent ? { ringColor: stage.color } : {}}
+            title={isCurrent ? 'Current status' : isDone ? 'Completed' : isNext ? `Set to: ${stage.label}` : 'Not yet reachable'}
+          >
+            {/* Status indicator */}
+            <div
+              className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                isDone ? 'bg-slate-200' : isCurrent ? '' : 'bg-white border-2 border-slate-200'
+              }`}
+              style={isCurrent ? { backgroundColor: stage.color } : {}}
+            >
+              {isDone ? (
+                <CheckCircle2 className="w-4 h-4 text-slate-500" />
+              ) : (
+                <StageIcon className="w-4 h-4" color={isCurrent ? '#fff' : isFuture ? '#cbd5e1' : stage.color} />
+              )}
+            </div>
+
+            {/* Label */}
+            <div className="flex-1 min-w-0">
+              <p className={`text-xs font-bold truncate ${isDone ? 'text-slate-400' : isCurrent ? stage.text : isFuture && !isNext ? 'text-slate-300' : 'text-slate-600'}`}>
+                {stage.label}
+              </p>
+              <p className={`text-[10px] font-medium truncate ${isDone ? 'text-slate-300' : isCurrent ? stage.text + ' opacity-80' : 'text-slate-400'}`}>
+                {stage.sublabel}
+              </p>
+            </div>
+
+            {/* State badge */}
+            <div className="flex-shrink-0">
+              {isDone && (
+                <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Done</span>
+              )}
+              {isCurrent && (
+                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full" style={{ color: stage.color, backgroundColor: `${stage.color}18` }}>
+                  Current
+                </span>
+              )}
+              {isNext && !isCurrent && !isDone && (
+                <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-full border border-slate-200">
+                  Set →
+                </span>
+              )}
+            </div>
+          </button>
+        );
+      })}
+
+      {/* Cancel option — always available for non-delivered, non-cancelled */}
+      {order.status !== 'DELIVERED' && (
+        <button
+          onClick={() => onStage(order, 'CANCELLED')}
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-red-100 bg-white hover:bg-red-50 transition-all text-left group"
+        >
+          <div className="w-8 h-8 rounded-full flex items-center justify-center bg-red-50 flex-shrink-0">
+            <XCircle className="w-4 h-4 text-red-400" />
+          </div>
+          <div className="flex-1">
+            <p className="text-xs font-bold text-red-500">Cancel Order</p>
+            <p className="text-[10px] text-red-400 font-medium">Restores inventory, triggers refund if paid</p>
+          </div>
+          <span className="text-[9px] font-bold text-red-400 bg-red-50 px-2 py-0.5 rounded-full border border-red-100">
+            Irreversible
+          </span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Helper: parse user address JSON to a usable object ─────────────────────
+function parseUserAddress(user) {
+  if (!user || !user.address) return null;
+  try {
+    const parsed = JSON.parse(user.address);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed.find(a => a.selected) || parsed[0];
+    } else if (parsed && typeof parsed === 'object') {
+      return parsed;
+    }
+  } catch (e) {
+    // plain text fallback
+    return { address: user.address, name: user.fullName };
+  }
+  return null;
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+export default function OrderManager({ initialTab = 'bookings' }) {
   const [orders, setOrders] = useState([]);
+  const [appointments, setAppointments] = useState([]);
+  const [visits, setVisits] = useState([]);
+  const [staffList, setStaffList] = useState([]);
+  const [activeSubTab, setActiveSubTab] = useState(initialTab);
+
+  useEffect(() => {
+    setActiveSubTab(initialTab);
+  }, [initialTab]);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [apptStatusFilter, setApptStatusFilter] = useState('ALL');
+  const [visitStatusFilter, setVisitStatusFilter] = useState('ALL');
   
+  // Advanced filters
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [paymentFilter, setPaymentFilter] = useState('ALL');
+  const [typeFilter, setTypeFilter] = useState('ALL');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
   const [selectedOrder, setSelectedOrder] = useState(null);
-  const [activeShiftMenu, setActiveShiftMenu] = useState(null);
+  const [pendingStatusChange, setPendingStatusChange] = useState(null); // { orderId, invoiceNumber, from, to }
 
   const [packingSlip, setPackingSlip] = useState(null);
   const [isSlipOpen, setIsSlipOpen] = useState(false);
+
+  // Selected Order Edit States
+  const [editCustomerName, setEditCustomerName] = useState('');
+  const [editCustomerPhone, setEditCustomerPhone] = useState('');
+  const [editCustomerEmail, setEditCustomerEmail] = useState('');
+  const [editCustomerAddress, setEditCustomerAddress] = useState('');
+  const [editOrderStatus, setEditOrderStatus] = useState('');
+  const [editPaymentStatus, setEditPaymentStatus] = useState('');
+  const [editFabricType, setEditFabricType] = useState('');
+  const [editCustomizations, setEditCustomizations] = useState('');
+  const [editTailorNotes, setEditTailorNotes] = useState('');
+  const [editMeasurements, setEditMeasurements] = useState({
+    fullLength: '',
+    shoulderWidth: '',
+    upperChest: '',
+    bust: '',
+    waist: '',
+    hip: '',
+    armLength: '',
+    sleeveLength: '',
+    neck: '',
+    skirtLength: '',
+    pantLength: ''
+  });
+
+  // Slide-over rescheduling states
+  const [rescheduleDate, setRescheduleDate] = useState('');
+  const [rescheduleTimeSlot, setRescheduleTimeSlot] = useState('10:00 AM - 11:30 AM');
+  const [rescheduleReason, setRescheduleReason] = useState('');
+  const [isRescheduling, setIsRescheduling] = useState(false);
+
+  const [customerProfiles, setCustomerProfiles] = useState([]);
+  const [selectedProfileId, setSelectedProfileId] = useState('none');
+  const [newProfileName, setNewProfileName] = useState('');
+  const [isCreatingNewProfile, setIsCreatingNewProfile] = useState(false);
+
+  useEffect(() => {
+    if (selectedOrder) {
+      setEditCustomerName(selectedOrder.customerName || '');
+      
+      const addrObj = parseUserAddress(selectedOrder.user);
+      const phone = addrObj?.phone || selectedOrder.user?.phoneNumber || '';
+      const email = selectedOrder.user?.email || '';
+      const addrText = addrObj 
+        ? [addrObj.address, addrObj.landmark ? `Near ${addrObj.landmark}` : null, addrObj.area, addrObj.city, addrObj.pincode].filter(Boolean).join(', ')
+        : selectedOrder.user?.address || '';
+      
+      setEditCustomerPhone(phone);
+      setEditCustomerEmail(email);
+      setEditCustomerAddress(addrText);
+      setEditOrderStatus(selectedOrder.status || 'PENDING');
+      setEditPaymentStatus(selectedOrder.paymentStatus || 'PENDING');
+      
+      const firstItem = selectedOrder.items?.[0];
+      setEditFabricType(selectedOrder.fabricType || firstItem?.fabricType || selectedOrder.product?.materialInfo || '');
+      setEditCustomizations(selectedOrder.customizations || '');
+      setEditTailorNotes(selectedOrder.tailorNotes || '');
+      
+      // Fetch customer measurement profiles on order selection
+      if (selectedOrder.userId) {
+        api.getMeasurements(selectedOrder.userId)
+          .then(profiles => {
+            setCustomerProfiles(profiles || []);
+            
+            // If the order already has a linked measurement profile, select and load it
+            if (selectedOrder.measurementProfileId || selectedOrder.measurementProfile) {
+              const profileId = selectedOrder.measurementProfileId || selectedOrder.measurementProfile?.id;
+              const matched = (profiles || []).find(p => p.id === profileId) || selectedOrder.measurementProfile;
+              if (matched) {
+                setSelectedProfileId(matched.id);
+                setEditMeasurements({
+                  fullLength: matched.fullLength || '',
+                  shoulderWidth: matched.shoulderWidth || '',
+                  upperChest: matched.upperChest || '',
+                  bust: matched.bust || '',
+                  waist: matched.waist || '',
+                  hip: matched.hip || '',
+                  armLength: matched.armLength || '',
+                  sleeveLength: matched.sleeveLength || '',
+                  neck: matched.neck || '',
+                  skirtLength: matched.skirtLength || '',
+                  pantLength: matched.pantLength || '',
+                });
+                return;
+              }
+            }
+
+            // Otherwise, if order has no linked profile but the user has profiles, select the first profile
+            if (profiles && profiles.length > 0) {
+              const mainProfile = profiles[0];
+              setSelectedProfileId(mainProfile.id);
+              setEditMeasurements({
+                fullLength: mainProfile.fullLength || '',
+                shoulderWidth: mainProfile.shoulderWidth || '',
+                upperChest: mainProfile.upperChest || '',
+                bust: mainProfile.bust || '',
+                waist: mainProfile.waist || '',
+                hip: mainProfile.hip || '',
+                armLength: mainProfile.armLength || '',
+                sleeveLength: mainProfile.sleeveLength || '',
+                neck: mainProfile.neck || '',
+                skirtLength: mainProfile.skirtLength || '',
+                pantLength: mainProfile.pantLength || '',
+              });
+            } else {
+              setSelectedProfileId('none');
+              setEditMeasurements({
+                fullLength: '', shoulderWidth: '', upperChest: '', bust: '',
+                waist: '', hip: '', armLength: '', sleeveLength: '',
+                neck: '', skirtLength: '', pantLength: ''
+              });
+            }
+          })
+          .catch(err => console.error('Error fetching measurements:', err));
+      } else {
+        setCustomerProfiles([]);
+        setSelectedProfileId('none');
+        setEditMeasurements({
+          fullLength: '', shoulderWidth: '', upperChest: '', bust: '',
+          waist: '', hip: '', armLength: '', sleeveLength: '',
+          neck: '', skirtLength: '', pantLength: ''
+        });
+      }
+      setIsCreatingNewProfile(false);
+      setNewProfileName('');
+
+      if (selectedOrder.booking) {
+        const dateObj = new Date(selectedOrder.booking.date || selectedOrder.booking.preferredDate);
+        const yyyy = dateObj.getUTCFullYear();
+        const mm = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+        const dd = String(dateObj.getUTCDate()).padStart(2, '0');
+        setRescheduleDate(`${yyyy}-${mm}-${dd}`);
+        setRescheduleTimeSlot(selectedOrder.booking.timeSlot || '10:00 AM - 11:30 AM');
+      } else {
+        const defaultDateObj = new Date(Date.now() + 86400000 * 2);
+        const yyyy = defaultDateObj.getUTCFullYear();
+        const mm = String(defaultDateObj.getUTCMonth() + 1).padStart(2, '0');
+        const dd = String(defaultDateObj.getUTCDate()).padStart(2, '0');
+        setRescheduleDate(`${yyyy}-${mm}-${dd}`);
+        setRescheduleTimeSlot('10:00 AM - 11:30 AM');
+      }
+      setRescheduleReason('');
+    }
+  }, [selectedOrder]);
+
+  // Admin Rescheduling states
+  const [adminRescheduleBooking, setAdminRescheduleBooking] = useState(null);
+  const [adminNewDate, setAdminNewDate] = useState('');
+  const [adminNewTimeSlot, setAdminNewTimeSlot] = useState('10:00 AM - 11:30 AM');
+
+  // Visit allocation and completion report states
+  const [activeVisitId, setActiveVisitId] = useState(null);
+  const [selectedStaffId, setSelectedStaffId] = useState('');
+  const [reportVisitId, setReportVisitId] = useState(null);
+  const [completionNotes, setCompletionNotes] = useState('');
+  const [mediaUrl, setMediaUrl] = useState('');
+
+  const handleTabChange = (tab) => {
+    setActiveSubTab(tab);
+    setSearchTerm('');
+  };
 
   const handleViewPackingSlip = async (orderId) => {
     try {
@@ -35,12 +481,239 @@ export default function OrderManager() {
   const handleDispatchOrder = async () => {
     if (!packingSlip || !packingSlip.orderId) return;
     try {
-      await handleUpdateStatus(packingSlip.orderId, 'SHIPPED');
+      await handleUpdateStatus(packingSlip.orderId, 'PROCESSING');
       setIsSlipOpen(false);
-      alert('Order successfully verified and marked as SHIPPED (Dispatched)!');
+      alert('Order verified and marked as Stitching!');
     } catch (err) {
       alert(err.message || 'Failed to update order status.');
     }
+  };
+
+  const handleOpenAdminReschedule = (booking) => {
+    setAdminRescheduleBooking(booking);
+    const dateObj = new Date(booking.date || booking.preferredDate);
+    const yyyy = dateObj.getFullYear();
+    const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const dd = String(dateObj.getDate()).padStart(2, '0');
+    setAdminNewDate(`${yyyy}-${mm}-${dd}`);
+    setAdminNewTimeSlot(booking.timeSlot || '10:00 AM - 11:30 AM');
+  };
+
+  const handleConfirmAdminReschedule = async () => {
+    if (!adminNewDate) {
+      alert('Please select a valid date.');
+      return;
+    }
+    try {
+      const isStudio = adminRescheduleBooking.type === 'STUDIO';
+      const formattedDate = new Date(adminNewDate).toISOString();
+      
+      if (isStudio) {
+        await api.updateAppointment(adminRescheduleBooking.id, {
+          date: formattedDate,
+          timeSlot: adminNewTimeSlot,
+        });
+      } else {
+        await api.updateStoreVisit(adminRescheduleBooking.id, {
+          preferredDate: formattedDate,
+          confirmedDate: formattedDate,
+        });
+      }
+
+      alert('Fitting session rescheduled successfully!');
+      
+      if (selectedOrder) {
+        const updatedBooking = {
+          ...selectedOrder.booking,
+          date: formattedDate,
+          ...(isStudio && { timeSlot: adminNewTimeSlot }),
+        };
+        setSelectedOrder(prev => ({
+          ...prev,
+          booking: updatedBooking,
+        }));
+      }
+      
+      setAdminRescheduleBooking(null);
+      loadOrders();
+    } catch (err) {
+      alert(err.message || 'Failed to reschedule.');
+    }
+  };
+
+  const handlePrintShippingLabel = (order) => {
+    // Use the shared helper to parse the address JSON
+    let addressObj = parseUserAddress(order.user);
+
+    if (!addressObj) {
+      addressObj = {
+        name: order.customerName || (order.user && order.user.fullName) || 'Customer',
+        address: order.user?.address || 'No Delivery Address Provided',
+        city: '',
+        area: '',
+        pincode: '',
+        phone: order.user?.phoneNumber || '',
+        phone2: '',
+      };
+    }
+
+    // Ensure phone/phone2 are populated from user-level fields when not in address JSON
+    if (!addressObj.phone && order.user?.phoneNumber) {
+      addressObj.phone = order.user.phoneNumber;
+    }
+    if (!addressObj.name) {
+      addressObj.name = order.customerName || order.user?.fullName || 'Customer';
+    }
+
+    const printWindow = window.open('', '_blank', 'width=600,height=800');
+    if (!printWindow) {
+      alert('Pop-up blocked! Please allow pop-ups to print shipping labels.');
+      return;
+    }
+
+    const isCod = order.paymentMethod === 'CASH' || order.paymentMethod === 'Cash';
+    const amountVal = Number(order.payableAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+
+    const labelHTML = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; border: 3px solid #000; width: 380px; margin: 10px auto; background-color: #fff; box-sizing: border-box; color: #000; font-size: 11px; line-height: 1.4;">
+        
+        <!-- Header Section -->
+        <div style="display: flex; border-bottom: 3px solid #000; min-height: 65px;">
+          <div style="flex: 1.3; padding: 12px; display: flex; flex-direction: column; justify-content: center; border-right: 3px solid #000; background-color: #000; color: #fff;">
+            <span style="font-size: 26px; font-weight: 900; letter-spacing: 2px; line-height: 1;">MARCOS</span>
+            <span style="font-size: 8px; font-weight: 700; letter-spacing: 1.5px; margin-top: 4px; text-transform: uppercase; opacity: 0.8;">Luxury Couture</span>
+          </div>
+          <div style="flex: 1; padding: 8px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;">
+            <span style="font-size: 8px; font-weight: 800; color: #555; letter-spacing: 0.5px; text-transform: uppercase;">Payment Mode</span>
+            <span style="font-size: 16px; font-weight: 900; margin-top: 4px; color: #000; padding: 3px 10px; border: 2px solid #000; background-color: ${isCod ? '#fff7ed' : '#f0fdf4'}; border-color: ${isCod ? '#ea580c' : '#16a34a'}; color: ${isCod ? '#ea580c' : '#16a34a'}; border-radius: 4px; font-family: monospace;">${isCod ? 'C.O.D.' : 'PREPAID'}</span>
+          </div>
+        </div>
+
+        <!-- Barcode Section -->
+        <div style="border-bottom: 3px solid #000; padding: 14px 12px; text-align: center; background-color: #fff;">
+          <!-- Barcode simulation -->
+          <div style="display: flex; justify-content: center; align-items: flex-end; height: 45px; margin: 0 auto 6px auto; width: 280px; gap: 1.5px;">
+            <div style="width: 3px; height: 100%; background: #000;"></div>
+            <div style="width: 1px; height: 100%; background: #000;"></div>
+            <div style="width: 2px; height: 100%; background: #000;"></div>
+            <div style="width: 4px; height: 100%; background: #000;"></div>
+            <div style="width: 1px; height: 100%; background: #000;"></div>
+            <div style="width: 3px; height: 100%; background: #000;"></div>
+            <div style="width: 1px; height: 100%; background: #000;"></div>
+            <div style="width: 2px; height: 100%; background: #000;"></div>
+            <div style="width: 4px; height: 100%; background: #000;"></div>
+            <div style="width: 1px; height: 100%; background: #000;"></div>
+            <div style="width: 3px; height: 100%; background: #000;"></div>
+            <div style="width: 2px; height: 100%; background: #000;"></div>
+            <div style="width: 1px; height: 100%; background: #000;"></div>
+            <div style="width: 4px; height: 100%; background: #000;"></div>
+            <div style="width: 2px; height: 100%; background: #000;"></div>
+            <div style="width: 1px; height: 100%; background: #000;"></div>
+            <div style="width: 3px; height: 100%; background: #000;"></div>
+            <div style="width: 2px; height: 100%; background: #000;"></div>
+            <div style="width: 1px; height: 100%; background: #000;"></div>
+            <div style="width: 4px; height: 100%; background: #000;"></div>
+            <div style="width: 3px; height: 100%; background: #000;"></div>
+            <div style="width: 1px; height: 100%; background: #000;"></div>
+            <div style="width: 2px; height: 100%; background: #000;"></div>
+            <div style="width: 4px; height: 100%; background: #000;"></div>
+            <div style="width: 1px; height: 100%; background: #000;"></div>
+            <div style="width: 3px; height: 100%; background: #000;"></div>
+            <div style="width: 2px; height: 100%; background: #000;"></div>
+            <div style="width: 1px; height: 100%; background: #000;"></div>
+            <div style="width: 4px; height: 100%; background: #000;"></div>
+            <div style="width: 1px; height: 100%; background: #000;"></div>
+            <div style="width: 3px; height: 100%; background: #000;"></div>
+            <div style="width: 2px; height: 100%; background: #000;"></div>
+            <div style="width: 1px; height: 100%; background: #000;"></div>
+            <div style="width: 4px; height: 100%; background: #000;"></div>
+          </div>
+          <div style="font-size: 10px; font-weight: 700; letter-spacing: 2px; color: #333; font-family: monospace;">
+            ${order.invoiceNumber}
+          </div>
+        </div>
+
+        <!-- Ship To Section -->
+        <div style="border-bottom: 3px solid #000; padding: 12px 14px;">
+          <span style="font-size: 8px; font-weight: 800; color: #555; letter-spacing: 1px; text-transform: uppercase; display: block; margin-bottom: 4px;">Delivery Address</span>
+          <div style="font-size: 16px; font-weight: 900; color: #000;">
+            ${addressObj.name.toUpperCase()}
+          </div>
+          <div style="font-size: 11px; font-weight: 600; margin-top: 6px; line-height: 1.4; color: #222; min-height: 38px;">
+            ${addressObj.address}${addressObj.landmark ? `, Near ${addressObj.landmark}` : ''}${addressObj.area ? `, ${addressObj.area}` : ''}
+          </div>
+          
+          ${(addressObj.city || addressObj.pincode) ? `
+          <!-- Large City & Pin Banner -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; background-color: #000; color: #fff; padding: 6px 12px; font-size: 13px; font-weight: 900;">
+            <span style="letter-spacing: 0.5px;">CITY: ${(addressObj.city || '').toUpperCase()}</span>
+            <span style="font-size: 14px; font-weight: 950; letter-spacing: 1px;">PIN: ${addressObj.pincode || ''}</span>
+          </div>
+          ` : ''}
+
+          ${(addressObj.phone || addressObj.phone2) ? `
+          <div style="font-size: 11px; font-weight: 800; margin-top: 10px; display: flex; align-items: center; gap: 4px;">
+            <span style="color: #555;">CONTACT:</span>
+            <span style="font-size: 12px; font-weight: 900; color: #000;">
+              ${[addressObj.phone, addressObj.phone2].filter(Boolean).join(' / ')}
+            </span>
+          </div>
+          ` : ''}
+        </div>
+
+        <!-- Payment & Order Info Block -->
+        <div style="border-bottom: 3px solid #000; display: flex; align-items: stretch; min-height: 85px;">
+          <!-- Left: Amount box -->
+          <div style="flex: 1; border-right: 3px solid #000; padding: 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; background-color: #fcfcfc;">
+            <span style="font-size: 8px; font-weight: 800; color: #555; letter-spacing: 0.5px; text-transform: uppercase;">Collectable Cash</span>
+            <span style="font-size: 24px; font-weight: 900; margin-top: 4px; color: #000; font-family: system-ui;">₹${isCod ? amountVal : '0.00'}</span>
+            <span style="font-size: 7px; font-weight: 800; color: #666; margin-top: 2px; text-transform: uppercase;">${isCod ? 'Collect Cash on Delivery' : 'Already Paid Online'}</span>
+          </div>
+          <!-- Right: Order Details -->
+          <div style="flex: 1; padding: 10px 12px; display: flex; flex-direction: column; justify-content: center; font-size: 9px; line-height: 1.4; color: #333;">
+            <div style="margin-bottom: 3px;"><strong>Order ID:</strong> <span style="font-family: monospace; font-size: 9.5px; font-weight: 700;">${order.id.substring(0, 12).toUpperCase()}</span></div>
+            <div style="margin-bottom: 3px;"><strong>Date:</strong> ${new Date(order.createdAt).toLocaleDateString('en-IN', {day: '2-digit', month: 'short', year: 'numeric'})}</div>
+            <div style="margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;"><strong>Item:</strong> ${order.items?.[0]?.productName || 'Apparel Item'}</div>
+            <div><strong>Qty:</strong> ${order.items?.reduce((sum, item) => sum + item.quantity, 0) || 1} item(s)</div>
+          </div>
+        </div>
+
+        <!-- Return Address Footer -->
+        <div style="padding: 10px 14px; background-color: #fff; font-size: 8px; line-height: 1.4; border-top: 1px dashed #ccc;">
+          <strong style="font-size: 8.5px; text-transform: uppercase; color: #000; display: block; margin-bottom: 2px; letter-spacing: 0.5px;">Return / Sender Address:</strong>
+          <span style="font-weight: 600; color: #444; text-transform: uppercase;">
+            MARCOS Luxury Couture, Aruppukottai, Tamil Nadu
+          </span>
+        </div>
+
+      </div>
+    `;
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Shipping Label - ${order.invoiceNumber}</title>
+          <style>
+            body { margin: 0; padding: 20px; background-color: #f5f5f5; font-family: sans-serif; }
+            .no-print-btn { text-align: center; margin-bottom: 16px; }
+            .no-print-btn button { background: #000; color: #fff; border: none; padding: 10px 28px; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer; letter-spacing: 1px; }
+            .no-print-btn button:hover { background: #333; }
+            @media print {
+              .no-print-btn { display: none; }
+              body { margin: 0; padding: 0; background: #fff; }
+              @page { size: auto; margin: 0mm; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="no-print-btn">
+            <button onclick="window.print()">🖨️ Print Shipping Label</button>
+          </div>
+          ${labelHTML}
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   useEffect(() => {
@@ -49,10 +722,116 @@ export default function OrderManager() {
 
   const loadOrders = async () => {
     try {
-      const list = await api.getOrders();
-      setOrders(list);
+      const [list, appList, visitList, staff] = await Promise.all([
+        api.getOrders().catch(() => []),
+        api.getAppointments().catch(() => []),
+        api.getStoreVisits().catch(() => []),
+        api.getStaffList().catch(() => [])
+      ]);
+
+      const enrichedOrders = list.map(order => {
+        if (order.booking) return order;
+
+        const appt = appList.find(a => (a.notes || '').includes(order.invoiceNumber));
+        const visit = visitList.find(v => (v.requirements || '').includes(order.invoiceNumber));
+
+        let booking = null;
+        if (appt) {
+          booking = {
+            id: appt.id,
+            type: 'STUDIO',
+            date: appt.date,
+            timeSlot: appt.timeSlot,
+            status: appt.status,
+            notes: appt.notes,
+          };
+        } else if (visit) {
+          booking = {
+            id: visit.id,
+            type: 'HOME_VISIT',
+            date: visit.confirmedDate || visit.preferredDate,
+            timeSlot: 'Home Visit Fitting',
+            status: visit.status,
+            requirements: visit.requirements,
+          };
+        }
+
+        return { ...order, booking };
+      });
+
+      setOrders(enrichedOrders);
+      setAppointments(appList);
+      setVisits(visitList);
+      setStaffList(staff);
+      if (staff.length > 0 && !selectedStaffId) {
+        setSelectedStaffId(staff[0].id);
+      }
+      window.dispatchEvent(new Event('sidebar_badge_refresh'));
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleUpdateAppStatus = async (id, status) => {
+    try {
+      await api.updateAppointmentStatus(id, status);
+      loadOrders();
+      if (selectedOrder && selectedOrder.booking?.id === id) {
+        setSelectedOrder(prev => ({
+          ...prev,
+          booking: {
+            ...prev.booking,
+            status,
+          }
+        }));
+      }
+    } catch (err) {
+      alert(err.message || 'Status update failed.');
+    }
+  };
+
+  const handleAssignStaff = async (e) => {
+    e.preventDefault();
+    if (!activeVisitId || !selectedStaffId) return;
+
+    try {
+      await api.assignStaffToVisit(activeVisitId, selectedStaffId);
+      setActiveVisitId(null);
+      loadOrders();
+    } catch (err) {
+      alert(err.message || 'Staff allocation failed.');
+    }
+  };
+
+  const handleCompleteVisit = async (e) => {
+    e.preventDefault();
+    if (!reportVisitId || !completionNotes.trim()) return;
+
+    const urls = mediaUrl.trim() ? [mediaUrl.trim()] : ['https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=500'];
+
+    try {
+      await api.completeStoreVisit(reportVisitId, completionNotes.trim(), urls);
+      setReportVisitId(null);
+      setCompletionNotes('');
+      setMediaUrl('');
+      loadOrders();
+    } catch (err) {
+      alert(err.message || 'Filing completion report failed.');
+    }
+  };
+
+  const getApptStatusStyle = (status) => {
+    switch (status) {
+      case 'CONFIRMED':
+      case 'COMPLETED':
+        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      case 'ASSIGNED':
+      case 'IN_PROGRESS':
+        return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'PENDING':
+        return 'bg-amber-50 text-amber-700 border-amber-200';
+      default:
+        return 'bg-red-50 text-red-700 border-red-200';
     }
   };
 
@@ -68,351 +847,1772 @@ export default function OrderManager() {
     }
   };
 
+  const handleUpdateQuickStatus = async (id, status) => {
+    try {
+      await api.updateQuickOrderStatus(id, status);
+      loadOrders();
+      if (selectedOrder && selectedOrder.id === id) {
+        setSelectedOrder(prev => ({ ...prev, quickOrderStatus: status }));
+      }
+      alert(`Quick order status updated to ${status}`);
+    } catch (err) {
+      alert(err.message || 'Quick order status update failed.');
+    }
+  };
+
+  // Stage a status change — opens the two-step confirmation dialog
+  const stageStatusChange = (order, newStatus) => {
+    if (order.status === newStatus) return;
+    const fromCfg = getStageConfig(order.status);
+    const toCfg = getStageConfig(newStatus);
+    setPendingStatusChange({
+      orderId: order.id,
+      invoiceNumber: order.invoiceNumber,
+      from: order.status,
+      fromLabel: fromCfg.label,
+      to: newStatus,
+      toLabel: toCfg.label,
+      toCfg,
+    });
+  };
+
+  const confirmStatusChange = async () => {
+    if (!pendingStatusChange) return;
+    await handleUpdateStatus(pendingStatusChange.orderId, pendingStatusChange.to);
+    setPendingStatusChange(null);
+  };
+
   const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          order.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch =
+      (order.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'ALL' || order.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    
+    let matchesDateFrom = true;
+    let matchesDateTo = true;
+    if (dateFrom) {
+      const d = new Date(order.createdAt).getTime();
+      matchesDateFrom = d >= new Date(dateFrom).getTime();
+    }
+    if (dateTo) {
+      const d = new Date(order.createdAt).getTime();
+      matchesDateTo = d <= new Date(dateTo).setHours(23, 59, 59, 999);
+    }
+    const matchesPayment = paymentFilter === 'ALL' || order.paymentMethod === paymentFilter || (paymentFilter === 'PAID' && order.paymentStatus === 'PAID');
+    const matchesType = typeFilter === 'ALL' || 
+      (typeFilter === 'OFFLINE' && order.isOfflineSales) || 
+      (typeFilter === 'ONLINE' && !order.isOfflineSales);
+
+    return !order.isQuickOrder && matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo && matchesPayment && matchesType;
+  });
+
+  const filteredQuickOrders = orders.filter(order => {
+    if (!order.isQuickOrder) return false;
+    const matchesSearch =
+      (order.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    let matchesDateFrom = true;
+    let matchesDateTo = true;
+    if (dateFrom) {
+      const d = new Date(order.createdAt).getTime();
+      matchesDateFrom = d >= new Date(dateFrom).getTime();
+    }
+    if (dateTo) {
+      const d = new Date(order.createdAt).getTime();
+      matchesDateTo = d <= new Date(dateTo).setHours(23, 59, 59, 999);
+    }
+    const matchesPayment = paymentFilter === 'ALL' || order.paymentMethod === paymentFilter || (paymentFilter === 'PAID' && order.paymentStatus === 'PAID');
+    const matchesType = typeFilter === 'ALL' || 
+      (typeFilter === 'OFFLINE' && order.isOfflineSales) || 
+      (typeFilter === 'ONLINE' && !order.isOfflineSales);
+
+    return matchesSearch && matchesDateFrom && matchesDateTo && matchesPayment && matchesType;
+  });
+
+  const filteredAppointments = appointments.filter(appt => {
+    const matchesSearch =
+      (appt.userName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (appt.productType || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = apptStatusFilter === 'ALL' || appt.status === apptStatusFilter;
+    
+    let matchesDateFrom = true;
+    let matchesDateTo = true;
+    if (dateFrom) {
+      const d = new Date(appt.date).getTime();
+      matchesDateFrom = d >= new Date(dateFrom).getTime();
+    }
+    if (dateTo) {
+      const d = new Date(appt.date).getTime();
+      matchesDateTo = d <= new Date(dateTo).setHours(23, 59, 59, 999);
+    }
+
+    return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo;
+  });
+
+  const filteredVisits = visits.filter(visit => {
+    const matchesSearch =
+      (visit.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (visit.address || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = visitStatusFilter === 'ALL' || visit.status === visitStatusFilter;
+    
+    let matchesDateFrom = true;
+    let matchesDateTo = true;
+    const visitDateStr = visit.confirmedDate || visit.preferredDate;
+    if (dateFrom && visitDateStr) {
+      const d = new Date(visitDateStr).getTime();
+      matchesDateFrom = d >= new Date(dateFrom).getTime();
+    }
+    if (dateTo && visitDateStr) {
+      const d = new Date(visitDateStr).getTime();
+      matchesDateTo = d <= new Date(dateTo).setHours(23, 59, 59, 999);
+    }
+
+    return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo;
   });
 
   const getStatusStyle = (status) => {
-    switch (status) {
-      case 'DELIVERED':
-      case 'PAID':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-100';
-      case 'PROCESSING':
-      case 'SHIPPED':
-        return 'bg-blue-50 text-blue-700 border-blue-100';
-      case 'PENDING':
-        return 'bg-amber-50 text-amber-700 border-amber-100';
-      default:
-        return 'bg-red-50 text-red-700 border-red-100';
+    const cfg = getStageConfig(status);
+    if (status === 'CANCELLED') return 'bg-red-50 text-red-700 border-red-100';
+    return `${cfg.bg} ${cfg.text} ${cfg.border}`;
+  };
+
+  const getStatusLabel = (status) => {
+    if (status === 'CANCELLED') return 'Cancelled';
+    return getStageConfig(status).label;
+  };
+
+  const handleSaveOrderChanges = async () => {
+    try {
+      let finalProfileId = selectedProfileId;
+      
+      if (isCreatingNewProfile) {
+        if (!newProfileName.trim()) {
+          alert('Please enter a name for the new profile.');
+          return;
+        }
+        // Create new profile
+        const newProfile = await api.createMeasurementProfile({
+          userId: selectedOrder.userId || selectedOrder.user?.id,
+          profileName: newProfileName.trim(),
+          fullLength: Number(editMeasurements.fullLength) || 0,
+          shoulderWidth: Number(editMeasurements.shoulderWidth) || 0,
+          upperChest: Number(editMeasurements.upperChest) || 0,
+          bust: Number(editMeasurements.bust) || 0,
+          waist: Number(editMeasurements.waist) || 0,
+          hip: Number(editMeasurements.hip) || 0,
+          armLength: Number(editMeasurements.armLength) || 0,
+          sleeveLength: Number(editMeasurements.sleeveLength) || 0,
+          neck: Number(editMeasurements.neck) || 0,
+          skirtLength: Number(editMeasurements.skirtLength) || 0,
+          pantLength: Number(editMeasurements.pantLength) || 0,
+          tailorNotes: editTailorNotes
+        });
+        finalProfileId = newProfile.id;
+      } else if (selectedProfileId && selectedProfileId !== 'none') {
+        // Update existing profile
+        await api.updateMeasurements(selectedProfileId, {
+          fullLength: Number(editMeasurements.fullLength),
+          shoulderWidth: Number(editMeasurements.shoulderWidth),
+          upperChest: Number(editMeasurements.upperChest),
+          bust: Number(editMeasurements.bust),
+          waist: Number(editMeasurements.waist),
+          hip: Number(editMeasurements.hip),
+          armLength: Number(editMeasurements.armLength),
+          sleeveLength: Number(editMeasurements.sleeveLength),
+          neck: Number(editMeasurements.neck),
+          skirtLength: Number(editMeasurements.skirtLength),
+          pantLength: Number(editMeasurements.pantLength),
+          tailorNotes: editTailorNotes
+        });
+      }
+
+      const updates = {
+        customerName: editCustomerName,
+        status: editOrderStatus,
+        paymentStatus: editPaymentStatus,
+        fabricType: editFabricType,
+        customizations: editCustomizations,
+        tailorNotes: editTailorNotes,
+        measurementProfileId: finalProfileId === 'none' ? null : finalProfileId,
+        user: {
+          ...selectedOrder.user,
+          fullName: editCustomerName,
+          phoneNumber: editCustomerPhone,
+          email: editCustomerEmail,
+          address: JSON.stringify({
+            selected: true,
+            fullName: editCustomerName,
+            address: editCustomerAddress,
+            phone: editCustomerPhone,
+          }),
+        }
+      };
+      
+      const updatedOrder = await api.updateOrderDetails(selectedOrder.id, updates);
+      
+      alert('Order and customer details updated successfully!');
+      setIsCreatingNewProfile(false);
+      setNewProfileName('');
+      setSelectedOrder(updatedOrder);
+      loadOrders();
+    } catch (err) {
+      alert(err.message || 'Failed to save order changes.');
     }
+  };
+
+  const handleUpdateBookingStatus = async (status) => {
+    let booking = selectedOrder.booking;
+    if (!booking) {
+      alert('No booking associated with this order.');
+      return;
+    }
+    
+    try {
+      if (booking.id.startsWith('appt-temp-') || booking.id.startsWith('appt-auto-')) {
+        const autoBookingData = {
+          type: 'MEASUREMENT',
+          date: booking.date,
+          timeSlot: booking.timeSlot,
+          productType: selectedOrder.items?.[0]?.productName || 'Luxury Custom Outfit',
+          notes: selectedOrder.invoiceNumber,
+          userId: selectedOrder.userId || selectedOrder.user?.id || undefined,
+        };
+        const newAppt = await api.createAppointment(autoBookingData);
+        booking = {
+          id: newAppt.id,
+          type: newAppt.type,
+          date: newAppt.date,
+          timeSlot: newAppt.timeSlot,
+          status: newAppt.status,
+          notes: newAppt.notes,
+        };
+        selectedOrder.booking = booking;
+      }
+
+      const isStudio = booking.type === 'STUDIO' || booking.type === 'MEASUREMENT';
+      if (isStudio) {
+        await api.updateAppointmentStatus(booking.id, status);
+      } else {
+        let dbStatus = 'PENDING';
+        if (status === 'CONFIRMED') dbStatus = 'ASSIGNED';
+        else if (status === 'COMPLETED') dbStatus = 'COMPLETED';
+        else if (status === 'CANCELLED') dbStatus = 'PENDING';
+        
+        await api.updateStoreVisit(booking.id, { status: dbStatus });
+      }
+      
+      setSelectedOrder(prev => ({
+        ...prev,
+        booking: {
+          ...prev.booking,
+          id: booking.id,
+          status
+        }
+      }));
+      
+      alert(`Appointment marked as ${status.toLowerCase()}!`);
+      loadOrders();
+    } catch (err) {
+      alert(err.message || 'Failed to update booking status.');
+    }
+  };
+
+  const handleRescheduleAppointment = async () => {
+    if (!rescheduleDate) {
+      alert('Please select a valid date.');
+      return;
+    }
+    
+    let booking = selectedOrder.booking;
+    try {
+      const formattedDate = new Date(rescheduleDate).toISOString();
+
+      if (!booking || booking.id.startsWith('appt-temp-') || booking.id.startsWith('appt-auto-')) {
+        const autoBookingData = {
+          type: 'MEASUREMENT',
+          date: formattedDate,
+          timeSlot: rescheduleTimeSlot,
+          productType: selectedOrder.items?.[0]?.productName || 'Luxury Custom Outfit',
+          notes: selectedOrder.invoiceNumber,
+          userId: selectedOrder.userId || selectedOrder.user?.id || undefined,
+        };
+        const newAppt = await api.createAppointment(autoBookingData);
+        booking = {
+          id: newAppt.id,
+          type: newAppt.type,
+          date: newAppt.date,
+          timeSlot: newAppt.timeSlot,
+          status: newAppt.status,
+          notes: newAppt.notes,
+        };
+        selectedOrder.booking = booking;
+      }
+
+      const isStudio = booking.type === 'STUDIO' || booking.type === 'MEASUREMENT';
+      
+      if (isStudio) {
+        await api.updateAppointment(booking.id, {
+          date: formattedDate,
+          timeSlot: rescheduleTimeSlot,
+          status: 'CONFIRMED',
+        });
+      } else {
+        await api.updateStoreVisit(booking.id, {
+          preferredDate: formattedDate,
+          confirmedDate: formattedDate,
+          status: booking.status === 'COMPLETED' ? 'COMPLETED' : 'ASSIGNED',
+        });
+      }
+      
+      const historyEvent = {
+        date: formattedDate,
+        timeSlot: isStudio ? rescheduleTimeSlot : 'Home Visit',
+        reason: rescheduleReason || 'Administrative update',
+        timestamp: new Date().toISOString(),
+      };
+      
+      const updatedHistory = [...(selectedOrder.rescheduleHistory || []), historyEvent];
+      
+      await api.updateOrderDetails(selectedOrder.id, {
+        rescheduleHistory: updatedHistory,
+      });
+      
+      alert('Fitting session rescheduled successfully!');
+      
+      setSelectedOrder(prev => ({
+        ...prev,
+        booking: {
+          ...prev.booking,
+          id: booking.id,
+          date: formattedDate,
+          timeSlot: isStudio ? rescheduleTimeSlot : 'Home Visit',
+          status: isStudio ? 'CONFIRMED' : (booking.status === 'COMPLETED' ? 'COMPLETED' : 'ASSIGNED')
+        },
+        rescheduleHistory: updatedHistory
+      }));
+      
+      setIsRescheduling(false);
+      setRescheduleReason('');
+      loadOrders();
+    } catch (err) {
+      alert(err.message || 'Failed to reschedule.');
+    }
+  };
+
+  const handleCreateMockBooking = () => {
+    const newBooking = {
+      id: `appt-auto-${Date.now()}`,
+      type: 'STUDIO',
+      date: new Date(Date.now() + 86400000 * 2).toISOString(),
+      timeSlot: '10:00 AM - 11:30 AM',
+      status: 'PENDING',
+      notes: selectedOrder.invoiceNumber,
+    };
+    
+    setSelectedOrder(prev => ({
+      ...prev,
+      booking: newBooking
+    }));
+  };
+
+  const getActivityTimeline = () => {
+    const timeline = [];
+    if (!selectedOrder) return timeline;
+    
+    if (selectedOrder.booking) {
+      timeline.push({
+        title: 'Appointment Booking Created',
+        description: `Appointment initialized automatically for invoice ${selectedOrder.invoiceNumber}.`,
+        date: new Date(selectedOrder.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
+        icon: 'plus',
+        status: 'completed',
+      });
+    } else {
+      timeline.push({
+        title: 'Order Placed',
+        description: `Order successfully placed. Awaiting custom sizing fitting session schedule.`,
+        date: new Date(selectedOrder.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
+        icon: 'plus',
+        status: 'completed',
+      });
+    }
+
+    if (selectedOrder.booking) {
+      const b = selectedOrder.booking;
+      
+      if (b.status === 'CONFIRMED' || b.status === 'COMPLETED') {
+        timeline.push({
+          title: 'Customer Confirmed Slot',
+          description: `Appointment confirmed for slot ${formatBookingDateUTC(b.date)} at ${b.timeSlot}.`,
+          date: new Date(b.updatedAt || selectedOrder.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
+          icon: 'check',
+          status: 'completed',
+        });
+      }
+      
+      if (b.status === 'COMPLETED') {
+        timeline.push({
+          title: 'Fitting Session Completed',
+          description: `Measurements verified and filed by tailoring staff.`,
+          date: new Date(b.updatedAt || Date.now()).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
+          icon: 'award',
+          status: 'completed',
+        });
+      }
+      
+      if (b.status === 'CANCELLED') {
+        timeline.push({
+          title: 'Appointment Rejected',
+          description: `Booking declined by admin or cancelled by client.`,
+          date: new Date(b.updatedAt || Date.now()).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
+          icon: 'x',
+          status: 'cancelled',
+        });
+      }
+    }
+    
+    if (selectedOrder.rescheduleHistory) {
+      selectedOrder.rescheduleHistory.forEach((item) => {
+        timeline.push({
+          title: 'Appointment Rescheduled',
+          description: `Rescheduled to ${formatBookingDateUTC(item.date)} at ${item.timeSlot}. Reason: ${item.reason}`,
+          date: new Date(item.timestamp).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
+          icon: 'clock',
+          status: 'warning',
+        });
+      });
+    }
+
+    return timeline;
+  };
+
+  const renderAdvancedFilters = () => {
+    if (!showAdvancedFilters) return null;
+    return (
+      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-wrap gap-4 items-end animate-slide-in mt-4 w-full">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">From Date</label>
+          <input 
+            type="date" 
+            value={dateFrom} 
+            onChange={e => setDateFrom(e.target.value)}
+            className="px-3 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors"
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">To Date</label>
+          <input 
+            type="date" 
+            value={dateTo} 
+            onChange={e => setDateTo(e.target.value)}
+            className="px-3 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors"
+          />
+        </div>
+        {(activeSubTab === 'bookings' || activeSubTab === 'quick_orders') && (
+          <>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Payment Method</label>
+              <select 
+                value={paymentFilter} 
+                onChange={e => setPaymentFilter(e.target.value)}
+                className="px-3 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors"
+              >
+                <option value="ALL">All Methods</option>
+                <option value="CARD">Card / Online</option>
+                <option value="UPI">UPI</option>
+                <option value="CASH">Cash</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Order Source</label>
+              <select 
+                value={typeFilter} 
+                onChange={e => setTypeFilter(e.target.value)}
+                className="px-3 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors"
+              >
+                <option value="ALL">All Sources</option>
+                <option value="ONLINE">Online App</option>
+                <option value="OFFLINE">Offline Store</option>
+              </select>
+            </div>
+          </>
+        )}
+        <div className="flex items-end">
+          <button 
+            onClick={() => { setDateFrom(''); setDateTo(''); setPaymentFilter('ALL'); setTypeFilter('ALL'); }}
+            className="px-4 py-2 text-xs font-bold text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+          >
+            Clear Filters
+          </button>
+        </div>
+      </div>
+    );
   };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-extrabold text-slate-800 tracking-tight">Orders & Invoices</h2>
-        <p className="text-xs text-slate-500 font-medium">Track customer orders, manage processing cycles, and inspect invoices</p>
-      </div>
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          /* Hide all page content */
+          body * {
+            visibility: hidden !important;
+          }
+          
+          /* Show only the invoice card and its descendants */
+          .printable-invoice-card,
+          .printable-invoice-card * {
+            visibility: visible !important;
+          }
+          
+          /* Reset root layout styles during print to allow natural page height and flow */
+          html, body, #root, .fixed, .fixed > div {
+            background: none !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            position: relative !important;
+          }
 
-      <div className="flex flex-col sm:flex-row gap-4 justify-between sm:items-center w-full">
-        <div className="relative flex-1 max-w-md w-full">
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            placeholder="Search invoice number, client name..."
-            className="w-full pl-9 pr-4 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors"
-          />
-          <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+          /* Force modal wrapper to align to top left of page */
+          .fixed {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            display: block !important;
+          }
+
+          .fixed > div {
+            display: block !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+          }
+          
+          /* Style and position the printable invoice card on the page */
+          .printable-invoice-card {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            padding: 30px !important;
+            margin: 0 !important;
+            background: #fff !important;
+            border: none !important;
+            box-shadow: none !important;
+          }
+          
+          /* Completely remove elements marked with no-print */
+          .no-print,
+          .no-print * {
+            display: none !important;
+          }
+          
+          /* Show elements marked with print-only */
+          .print-only {
+            display: block !important;
+            visibility: visible !important;
+          }
+          
+          /* Text colors and legibility for printing */
+          .printable-invoice-card text,
+          .printable-invoice-card span,
+          .printable-invoice-card p,
+          .printable-invoice-card div,
+          .printable-invoice-card td,
+          .printable-invoice-card th {
+            color: #000 !important;
+          }
+          
+          /* Table print styling */
+          .printable-invoice-card table {
+            border-collapse: collapse !important;
+            width: 100% !important;
+            margin-top: 15px !important;
+            margin-bottom: 15px !important;
+          }
+          
+          .printable-invoice-card th,
+          .printable-invoice-card td {
+            border: 1px solid #e2e8f0 !important;
+            padding: 8px 12px !important;
+          }
+          
+          .printable-invoice-card th {
+            background-color: #f8fafc !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+        }
+        
+        .print-only {
+          display: none;
+        }
+        
+        @keyframes slideIn {
+          from {
+            transform: translateX(100%);
+          }
+          to {
+            transform: translateX(0);
+          }
+        }
+        .animate-slide-in {
+          animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+      `}} />
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-extrabold text-slate-800 tracking-tight">Bookings &amp; Fittings Console</h2>
+          <p className="text-xs text-slate-500 font-medium">Track customer bookings, manage delivery stages, tailors schedules, and home visits</p>
         </div>
-
-        <select
-          value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value)}
-          className="w-full sm:w-auto text-xs font-bold border border-slate-200 rounded-xl py-2 px-3 bg-white text-slate-650 focus:outline-none focus:border-brand-500 transition-colors"
-        >
-          <option value="ALL">All Statuses</option>
-          <option value="PENDING">Pending</option>
-          <option value="PAID">Paid</option>
-          <option value="PROCESSING">Processing</option>
-          <option value="SHIPPED">Shipped</option>
-          <option value="DELIVERED">Delivered</option>
-          <option value="CANCELLED">Cancelled</option>
-        </select>
-      </div>
-
-      <div className="bg-white border border-slate-200/60 rounded-3xl overflow-hidden shadow-premium hidden md:block">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/50 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                <th className="py-3 px-6">Invoice No.</th>
-                <th className="py-3 px-6">Customer Name</th>
-                <th className="py-3 px-6">Sale Type</th>
-                <th className="py-3 px-6">Payment Method</th>
-                <th className="py-3 px-6">Payable</th>
-                <th className="py-3 px-6">Order Status</th>
-                <th className="py-3 px-6 text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-xs">
-              {filteredOrders.length === 0 ? (
-                <tr>
-                  <td colSpan="7" className="py-12 text-center text-slate-400 font-bold">No orders found.</td>
-                </tr>
-              ) : (
-                filteredOrders.map((order) => (
-                  <tr key={order.id} className="hover:bg-slate-50/20 transition-colors">
-                    <td className="py-4 px-6 font-extrabold text-slate-800">{order.invoiceNumber}</td>
-                    <td className="py-4 px-6 text-slate-600 font-medium">{order.customerName}</td>
-                    <td className="py-4 px-6">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${order.isOfflineSales ? 'bg-amber-50 text-amber-800' : 'bg-blue-50 text-blue-800'}`}>
-                        {order.isOfflineSales ? 'Offline' : 'Online App'}
-                      </span>
-                    </td>
-                    <td className="py-4 px-6 font-semibold text-slate-500">{order.paymentMethod}</td>
-                    <td className="py-4 px-6 font-extrabold text-slate-800">
-                      ₹{Number(order.payableAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="py-4 px-6">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold border ${getStatusStyle(order.status)}`}>
-                        {order.status}
-                      </span>
-                    </td>
-                    <td className="py-4 px-6 text-center">
-                      <div className="flex justify-center items-center gap-2">
-                        <button
-                          onClick={() => setSelectedOrder(order)}
-                          className="p-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-500 transition-colors"
-                          title="View Invoice Detail"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        
-                        <div className="relative">
-                          <button 
-                            onClick={() => setActiveShiftMenu(activeShiftMenu === order.id ? null : order.id)}
-                            className="p-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-500 flex items-center gap-0.5"
-                          >
-                            <span className="text-[10px] font-bold">Shift</span>
-                            <ChevronDown className="w-3 h-3" />
-                          </button>
-                          
-                          {activeShiftMenu === order.id && (
-                            <>
-                              <div className="fixed inset-0 z-20" onClick={() => setActiveShiftMenu(null)} />
-                              <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg p-1 space-y-1 z-35 w-28 animate-fadeIn">
-                                {['PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'].map((st) => (
-                                  <button
-                                    key={st}
-                                    onClick={() => {
-                                      handleUpdateStatus(order.id, st);
-                                      setActiveShiftMenu(null);
-                                    }}
-                                    className={`w-full text-left px-2.5 py-1.5 text-[10px] font-bold rounded-lg transition-colors ${order.status === st ? 'bg-brand-55 text-brand-600 font-extrabold' : 'text-slate-600 hover:bg-slate-50'}`}
-                                  >
-                                    {st}
-                                  </button>
-                                ))}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div className="flex gap-2">
+          <button
+            onClick={loadOrders}
+            className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl text-xs font-bold transition-all shadow-sm bg-white"
+          >
+            Refresh Data
+          </button>
         </div>
       </div>
 
-      <div className="md:hidden space-y-3">
-        {filteredOrders.length === 0 ? (
-          <div className="py-12 text-center text-slate-400 font-bold bg-white border border-slate-200/60 rounded-3xl shadow-premium">
-            No orders found.
+      {/* Sub-tab selector removed as these are now subpages in the sidebar */}
+
+      {/* ── Tab Contents ── */}
+      {activeSubTab === 'bookings' && (
+        <>
+          {/* ── Filter bar ── */}
+          <div className="flex flex-col mb-4">
+            <div className="flex flex-col sm:flex-row gap-4 justify-between sm:items-center w-full">
+              <div className="relative flex-1 max-w-md w-full">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  placeholder="Search invoice number, client name..."
+                  className="w-full pl-9 pr-4 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors"
+                />
+                <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+              </div>
+
+              <div className="flex gap-2 w-full sm:w-auto">
+                <select
+                  value={statusFilter}
+                  onChange={e => setStatusFilter(e.target.value)}
+                  className="flex-1 sm:flex-none text-xs font-bold border border-slate-200 rounded-xl py-2 px-3 bg-white text-slate-650 focus:outline-none focus:border-brand-500 transition-colors"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="PENDING">Order Placed</option>
+                  <option value="PAID">Measurement Session</option>
+                  <option value="PROCESSING">Order Stitching</option>
+                  <option value="SHIPPED">Product Completed</option>
+                  <option value="OUT_FOR_DELIVERY">Product Out for Delivery</option>
+                  <option value="DELIVERED">Delivered</option>
+                  <option value="CANCELLED">Cancelled</option>
+                </select>
+                <button 
+                  onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                  className={`flex items-center justify-center gap-2 px-4 py-2 border rounded-xl text-xs font-bold transition-colors ${showAdvancedFilters || dateFrom || dateTo || paymentFilter !== 'ALL' || typeFilter !== 'ALL' ? 'border-brand-500 text-brand-600 bg-brand-50' : 'border-slate-200 text-slate-600 bg-white hover:bg-slate-50'}`}
+                >
+                  <Filter className="w-4 h-4" />
+                  <span className="hidden sm:inline">Advanced</span>
+                </button>
+              </div>
+            </div>
+            {renderAdvancedFilters()}
           </div>
-        ) : (
-          filteredOrders.map((order) => (
-            <div key={order.id} className="bg-white border border-slate-200/60 rounded-3xl p-4 space-y-3 shadow-sm hover:shadow transition-shadow">
-              <div className="flex justify-between items-center">
-                <span className="font-extrabold text-slate-800 text-sm">{order.invoiceNumber}</span>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${order.isOfflineSales ? 'bg-amber-50 text-amber-800' : 'bg-blue-50 text-blue-800'}`}>
-                  {order.isOfflineSales ? 'Offline' : 'Online App'}
-                </span>
+
+          {/* ── Desktop Table ── */}
+          <div className="bg-white border border-slate-200/60 rounded-3xl overflow-hidden shadow-premium hidden md:block">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/50 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    <th className="py-3 px-6">Invoice No.</th>
+                    <th className="py-3 px-6">Customer Name</th>
+                    <th className="py-3 px-6">Sale Type</th>
+                    <th className="py-3 px-6">Payment</th>
+                    <th className="py-3 px-6">Payable</th>
+                    <th className="py-3 px-6">Delivery Stage</th>
+                    <th className="py-3 px-6 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs">
+                  {filteredOrders.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" className="py-12 text-center text-slate-400 font-bold">No orders found.</td>
+                    </tr>
+                  ) : (
+                    filteredOrders.map((order) => (
+                      <tr key={order.id} className="hover:bg-slate-50/20 transition-colors">
+                        <td className="py-4 px-6 font-extrabold text-slate-800">{order.invoiceNumber}</td>
+                        <td className="py-4 px-6 text-slate-600 font-medium">{order.customerName}</td>
+                        <td className="py-4 px-6">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${order.isOfflineSales ? 'bg-amber-50 text-amber-800' : 'bg-blue-50 text-blue-800'}`}>
+                            {order.isOfflineSales ? 'Offline' : 'Online App'}
+                          </span>
+                        </td>
+                        <td className="py-4 px-6 font-semibold text-slate-500">{order.paymentMethod}</td>
+                        <td className="py-4 px-6 font-extrabold text-slate-800">
+                          ₹{Number(order.payableAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="py-4 px-6">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold border ${getStatusStyle(order.status)}`}>
+                            {getStatusLabel(order.status)}
+                          </span>
+                        </td>
+                        <td className="py-4 px-6 text-center">
+                          <button
+                            onClick={() => setSelectedOrder(order)}
+                            className="p-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-500 transition-colors"
+                            title="View order &amp; manage delivery stage"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ── Mobile Cards ── */}
+          <div className="md:hidden space-y-3">
+            {filteredOrders.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 font-bold bg-white border border-slate-200/60 rounded-3xl shadow-premium">
+                No orders found.
               </div>
-              <div className="text-xs space-y-1 text-slate-600">
-                <p className="font-bold text-slate-800">{order.customerName}</p>
-                <p className="font-medium text-slate-400">{order.paymentMethod}</p>
-              </div>
-              <div className="flex justify-between items-center border-t border-slate-50 pt-3">
-                <div className="space-y-1">
-                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold border ${getStatusStyle(order.status)}`}>
-                    {order.status}
-                  </span>
-                  <p className="font-extrabold text-slate-800 text-sm">
-                    ₹{Number(order.payableAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setSelectedOrder(order)}
-                    className="p-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-500 transition-colors"
-                  >
-                    <Eye className="w-4 h-4" />
-                  </button>
-                  <div className="relative">
-                    <button 
-                      onClick={() => setActiveShiftMenu(activeShiftMenu === order.id ? null : order.id)}
-                      className="p-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-500 flex items-center gap-0.5"
+            ) : (
+              filteredOrders.map((order) => (
+                <div key={order.id} className="bg-white border border-slate-200/60 rounded-3xl p-4 space-y-3 shadow-sm hover:shadow transition-shadow">
+                  <div className="flex justify-between items-center">
+                    <span className="font-extrabold text-slate-800 text-sm">{order.invoiceNumber}</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${order.isOfflineSales ? 'bg-amber-50 text-amber-800' : 'bg-blue-50 text-blue-800'}`}>
+                      {order.isOfflineSales ? 'Offline' : 'Online'}
+                    </span>
+                  </div>
+                  <div className="text-xs space-y-1 text-slate-600">
+                    <p className="font-bold text-slate-800">{order.customerName}</p>
+                    <p className="font-medium text-slate-400">{order.paymentMethod}</p>
+                  </div>
+                  <div className="flex justify-between items-center border-t border-slate-50 pt-3">
+                    <div className="space-y-1">
+                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold border ${getStatusStyle(order.status)}`}>
+                        {getStatusLabel(order.status)}
+                      </span>
+                      <p className="font-extrabold text-slate-800 text-sm">
+                        ₹{Number(order.payableAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setSelectedOrder(order)}
+                      className="p-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-500 transition-colors"
                     >
-                      <span className="text-[10px] font-bold">Shift</span>
-                      <ChevronDown className="w-3 h-3" />
+                      <Eye className="w-4 h-4" />
                     </button>
-                    {activeShiftMenu === order.id && (
-                      <>
-                        <div className="fixed inset-0 z-20" onClick={() => setActiveShiftMenu(null)} />
-                        <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg p-1 space-y-1 z-35 w-28 animate-fadeIn">
-                          {['PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'].map((st) => (
-                            <button
-                              key={st}
-                              onClick={() => {
-                                handleUpdateStatus(order.id, st);
-                                setActiveShiftMenu(null);
-                              }}
-                              className={`w-full text-left px-2.5 py-1.5 text-[10px] font-bold rounded-lg transition-colors ${order.status === st ? 'bg-brand-55 text-brand-650 font-extrabold' : 'text-slate-600 hover:bg-slate-50'}`}
-                            >
-                              {st}
-                            </button>
-                          ))}
-                        </div>
-                      </>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      )}
+
+      {activeSubTab === 'fittings' && (
+        <>
+          {/* ── Fittings Filter Bar ── */}
+          <div className="flex flex-col mb-4">
+            <div className="flex flex-col sm:flex-row gap-4 justify-between sm:items-center w-full">
+              <div className="relative flex-1 max-w-md w-full">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  placeholder="Search customer name, product type..."
+                  className="w-full pl-9 pr-4 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors"
+                />
+                <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+              </div>
+
+              <div className="flex gap-2 w-full sm:w-auto">
+                <select
+                  value={apptStatusFilter}
+                  onChange={e => setApptStatusFilter(e.target.value)}
+                  className="flex-1 sm:flex-none text-xs font-bold border border-slate-200 rounded-xl py-2 px-3 bg-white text-slate-650 focus:outline-none focus:border-brand-500 transition-colors"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="PENDING">Pending</option>
+                  <option value="CONFIRMED">Confirmed</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="CANCELLED">Cancelled</option>
+                </select>
+                <button 
+                  onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                  className={`flex items-center justify-center gap-2 px-4 py-2 border rounded-xl text-xs font-bold transition-colors ${showAdvancedFilters || dateFrom || dateTo ? 'border-brand-500 text-brand-600 bg-brand-50' : 'border-slate-200 text-slate-600 bg-white hover:bg-slate-50'}`}
+                >
+                  <Filter className="w-4 h-4" />
+                  <span className="hidden sm:inline">Advanced</span>
+                </button>
+              </div>
+            </div>
+            {renderAdvancedFilters()}
+          </div>
+
+          {/* ── Studio Fittings List Grid ── */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {filteredAppointments.length === 0 ? (
+              <div className="md:col-span-2 text-center text-slate-400 py-16 font-semibold bg-white border border-slate-200/60 rounded-3xl shadow-premium">
+                No scheduled fittings found.
+              </div>
+            ) : (
+              filteredAppointments.map((app) => (
+                <div 
+                  key={app.id} 
+                  className="p-5 rounded-3xl border border-slate-200/60 bg-white hover:bg-slate-50/20 hover:border-slate-300 transition-all shadow-sm hover:shadow-premium flex flex-col justify-between space-y-4"
+                >
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-start gap-4">
+                      <div>
+                        <span className="text-base font-extrabold text-slate-800 block leading-tight">{app.userName}</span>
+                        <p className="text-xs text-slate-400 mt-1 font-semibold">Product Type: <span className="text-slate-600">{app.productType}</span></p>
+                      </div>
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border shrink-0 ${getApptStatusStyle(app.status)}`}>
+                        {app.status}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 font-semibold pt-1">
+                      <span className="flex items-center gap-1.5 bg-slate-100/80 px-2.5 py-1 rounded-lg">
+                        <Clock className="w-3.5 h-3.5 text-slate-400" />
+                        {formatBookingDateUTC(app.date, { weekday: 'short' })} at {app.timeSlot}
+                      </span>
+                      <span className="bg-brand-50 text-brand-700 py-1 px-2.5 rounded-lg uppercase text-[10px] tracking-wide border border-brand-100">
+                        {app.type?.replace(/_/g, ' ') || 'Studio Fitting'}
+                      </span>
+                    </div>
+
+                    {app.notes && (
+                      <div className="text-xs text-slate-600 bg-slate-50/50 border border-slate-100 rounded-xl p-3 leading-relaxed">
+                        <strong className="text-slate-700 block mb-1">Tailor Notes:</strong>
+                        {app.notes}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex justify-between items-center gap-2 pt-2 border-t border-slate-100/60">
+                    <button
+                      onClick={() => handleOpenAdminReschedule({ ...app, type: 'STUDIO' })}
+                      className="py-2 px-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-brand-600 text-xs font-bold transition-all shadow-sm"
+                    >
+                      Reschedule
+                    </button>
+                    {app.status === 'PENDING' && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleUpdateAppStatus(app.id, 'CONFIRMED')}
+                          className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-all"
+                        >
+                          Confirm Slot
+                        </button>
+                        <button
+                          onClick={() => handleUpdateAppStatus(app.id, 'CANCELLED')}
+                          className="py-2 px-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-400 text-xs font-bold transition-all"
+                        >
+                          Reject
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
+              ))
+            )}
+          </div>
+        </>
+      )}
+
+      {activeSubTab === 'visits' && (
+        <>
+          {/* ── Visits Filter Bar ── */}
+          <div className="flex flex-col mb-4">
+            <div className="flex flex-col sm:flex-row gap-4 justify-between sm:items-center w-full">
+              <div className="relative flex-1 max-w-md w-full">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  placeholder="Search customer name, address..."
+                  className="w-full pl-9 pr-4 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors"
+                />
+                <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+              </div>
+
+              <div className="flex gap-2 w-full sm:w-auto">
+                <select
+                  value={visitStatusFilter}
+                  onChange={e => setVisitStatusFilter(e.target.value)}
+                  className="flex-1 sm:flex-none text-xs font-bold border border-slate-200 rounded-xl py-2 px-3 bg-white text-slate-650 focus:outline-none focus:border-brand-500 transition-colors"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="PENDING">Pending</option>
+                  <option value="ASSIGNED">Assigned</option>
+                  <option value="COMPLETED">Completed</option>
+                </select>
+                <button 
+                  onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                  className={`flex items-center justify-center gap-2 px-4 py-2 border rounded-xl text-xs font-bold transition-colors ${showAdvancedFilters || dateFrom || dateTo ? 'border-brand-500 text-brand-600 bg-brand-50' : 'border-slate-200 text-slate-600 bg-white hover:bg-slate-50'}`}
+                >
+                  <Filter className="w-4 h-4" />
+                  <span className="hidden sm:inline">Advanced</span>
+                </button>
               </div>
             </div>
-          ))
-        )}
-      </div>
+            {renderAdvancedFilters()}
+          </div>
 
-      {selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-lg shadow-2xl p-6 relative flex flex-col max-h-[85vh] overflow-y-auto">
-            <button
-              onClick={() => setSelectedOrder(null)}
-              className="absolute top-4 right-4 p-1.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-655 transition-colors focus:outline-none"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex-1 space-y-6 pt-4">
-              <div className="flex justify-between items-start border-b border-slate-100 pb-4">
-                <div>
-                  <h3 className="font-black text-slate-800 text-lg tracking-tight">MARCOS STUDIO</h3>
-                  <p className="text-[10px] text-slate-400">Custom Luxury Tailoring & Apparel</p>
-                </div>
-                <div className="text-right">
-                  <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold border ${getStatusStyle(selectedOrder.status)}`}>
-                    {selectedOrder.status}
-                  </span>
-                  <p className="text-[10px] text-slate-450 mt-1.5">{selectedOrder.invoiceNumber}</p>
-                </div>
+          {/* ── Home Visits List Grid ── */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {filteredVisits.length === 0 ? (
+              <div className="md:col-span-2 text-center text-slate-400 py-16 font-semibold bg-white border border-slate-200/60 rounded-3xl shadow-premium">
+                No home visit requests found.
               </div>
+            ) : (
+              filteredVisits.map((visit) => (
+                <div 
+                  key={visit.id} 
+                  className="p-5 rounded-3xl border border-slate-200/60 bg-white hover:bg-slate-50/20 hover:border-slate-300 transition-all shadow-sm hover:shadow-premium flex flex-col justify-between space-y-4"
+                >
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-start gap-4">
+                      <div>
+                        <span className="text-base font-extrabold text-slate-800 block leading-tight">{visit.customerName}</span>
+                        <div className="text-xs text-slate-505 mt-1.5 flex items-start gap-1">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                          <span className="leading-tight">{visit.address}</span>
+                        </div>
+                      </div>
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border shrink-0 ${getApptStatusStyle(visit.status)}`}>
+                        {visit.status}
+                      </span>
+                    </div>
 
-              <div className="grid grid-cols-2 gap-4 text-xs">
-                <div>
-                  <p className="text-[10px] text-slate-400 uppercase font-bold">Billed To</p>
-                  <p className="font-bold text-slate-800 mt-1">{selectedOrder.customerName}</p>
-                  <p className="text-slate-500">
-                    {selectedOrder.isOfflineSales ? 'Walk-In Customer' : 'App Registered Client'}
-                  </p>
+                    <div className="text-xs text-slate-605 bg-slate-50/50 border border-slate-100 rounded-xl p-3 leading-relaxed">
+                      <strong className="text-slate-700 block mb-1">Tailoring Requirements:</strong>
+                      {visit.requirements}
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 font-bold pt-1 border-t border-slate-100/60">
+                      <span className="bg-slate-100 px-2.5 py-1 rounded-lg text-slate-600 flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 text-slate-400" />
+                        Preferred: {formatBookingDateUTC(visit.preferredDate)}
+                      </span>
+                      <span className="text-slate-500">
+                        Assigned Tailor: <span className="text-brand-600 font-extrabold">{visit.assignedStaffName || 'Unassigned'}</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center gap-2 pt-2 border-t border-slate-100/60">
+                    <button
+                      onClick={() => handleOpenAdminReschedule({ ...visit, type: 'VISIT' })}
+                      className="py-2 px-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-brand-600 text-xs font-bold transition-all shadow-sm"
+                    >
+                      Reschedule
+                    </button>
+                    
+                    <div className="flex gap-2">
+                      {visit.status === 'PENDING' && (
+                        <button
+                          onClick={() => {
+                            setActiveVisitId(visit.id);
+                            setReportVisitId(null);
+                          }}
+                          className="py-2 px-3 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold shadow-sm transition-all"
+                        >
+                          Assign Tailor
+                        </button>
+                      )}
+
+                      {visit.status === 'ASSIGNED' && (
+                        <button
+                          onClick={() => {
+                            setReportVisitId(visit.id);
+                            setActiveVisitId(null);
+                          }}
+                          className="py-2 px-3 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold shadow-sm transition-all"
+                        >
+                          File Report
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {visit.status === 'COMPLETED' && visit.completionNotes && (
+                    <div className="p-3 bg-emerald-50/20 border border-emerald-100 rounded-2xl text-xs text-slate-600 space-y-1.5 mt-2">
+                      <p className="font-extrabold text-slate-700 flex items-center gap-1.5">
+                        <CheckCircle className="w-4 h-4 text-emerald-600" />
+                        <span>Completion Report Summary:</span>
+                      </p>
+                      <p className="italic leading-relaxed font-medium">"{visit.completionNotes}"</p>
+                      {visit.mediaUrls && visit.mediaUrls.length > 0 && (
+                        <div className="pt-2 flex gap-1.5">
+                          {visit.mediaUrls.map((url, idx) => (
+                            <img key={idx} src={url} alt="fitting media" className="w-12 h-12 rounded-lg object-cover border border-slate-200" />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div className="text-right">
-                  <p className="text-[10px] text-slate-400 uppercase font-bold">Details</p>
-                  <p className="font-semibold text-slate-700 mt-1">{selectedOrder.paymentMethod} Payment</p>
-                  <p className="text-slate-500">
-                    {new Date(selectedOrder.createdAt).toLocaleDateString()}
-                  </p>
-                </div>
+              ))
+            )}
+          </div>
+        </>
+      )}
+
+      {activeSubTab === 'quick_orders' && (
+        <>
+          <div className="flex flex-col mb-4">
+            <div className="flex flex-col sm:flex-row gap-4 justify-between sm:items-center w-full">
+              <div className="relative flex-1 max-w-md w-full">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  placeholder="Search invoice number, client name..."
+                  className="w-full pl-9 pr-4 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors"
+                />
+                <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
               </div>
-
-              <div className="border border-slate-200 rounded-2xl overflow-hidden text-xs">
-                <table className="w-full text-left">
-                  <thead className="bg-slate-50 text-[9px] font-bold text-slate-400 uppercase">
+              <div className="flex gap-2 w-full sm:w-auto">
+                <button 
+                  onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                  className={`flex items-center justify-center gap-2 px-4 py-2 border rounded-xl text-xs font-bold transition-colors ${showAdvancedFilters || dateFrom || dateTo || paymentFilter !== 'ALL' || typeFilter !== 'ALL' ? 'border-brand-500 text-brand-600 bg-brand-50' : 'border-slate-200 text-slate-600 bg-white hover:bg-slate-50'}`}
+                >
+                  <Filter className="w-4 h-4" />
+                  <span className="hidden sm:inline">Advanced</span>
+                </button>
+              </div>
+            </div>
+            {renderAdvancedFilters()}
+          </div>
+          <div className="bg-white border border-slate-200/60 rounded-3xl overflow-hidden shadow-premium">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/50 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    <th className="py-3 px-6">Invoice No.</th>
+                    <th className="py-3 px-6">Customer Name</th>
+                    <th className="py-3 px-6">Expected Date</th>
+                    <th className="py-3 px-6">Reason</th>
+                    <th className="py-3 px-6">Status</th>
+                    <th className="py-3 px-6 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs">
+                  {filteredQuickOrders.length === 0 ? (
                     <tr>
-                      <th className="py-2 px-3">Product Item</th>
-                      <th className="py-2 px-3 text-center">Qty</th>
-                      <th className="py-2 px-3 text-right">Price</th>
-                      <th className="py-2 px-3 text-right">Total</th>
+                      <td colSpan="5" className="py-12 text-center text-slate-400 font-bold">No quick orders found.</td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {selectedOrder.items.map((item) => (
-                      <tr key={item.id}>
-                        <td className="py-2.5 px-3 font-bold text-slate-800">{item.productName}</td>
-                        <td className="py-2.5 px-3 text-center font-bold text-slate-505">{item.quantity}</td>
-                        <td className="py-2.5 px-3 text-right text-slate-600">₹{Number(item.price).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                        <td className="py-2.5 px-3 text-right font-extrabold text-slate-800">
-                          ₹{(item.price * item.quantity).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  ) : (
+                    filteredQuickOrders.map((order) => (
+                      <tr key={order.id} className="hover:bg-slate-50/20 transition-colors">
+                        <td className="py-4 px-6 font-extrabold text-slate-800">{order.invoiceNumber}</td>
+                        <td className="py-4 px-6 text-slate-600 font-medium">{order.customerName}</td>
+                        <td className="py-4 px-6 text-slate-600 font-medium whitespace-nowrap">
+                          {order.quickOrderExpectedDate ? new Date(order.quickOrderExpectedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                        </td>
+                        <td className="py-4 px-6 text-slate-600 font-medium max-w-xs truncate" title={order.quickOrderReason}>{order.quickOrderReason}</td>
+                        <td className="py-4 px-6">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold border ${order.quickOrderStatus === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : order.quickOrderStatus === 'REJECTED' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                            {order.quickOrderStatus || 'PENDING'}
+                          </span>
+                        </td>
+                        <td className="py-4 px-6 text-center">
+                          <div className="flex gap-2 justify-center">
+                            {(!order.quickOrderStatus || order.quickOrderStatus === 'PENDING') && (
+                              <>
+                                <button
+                                  onClick={() => handleUpdateQuickStatus(order.id, 'APPROVED')}
+                                  className="p-1.5 border border-emerald-200 bg-emerald-50 rounded-lg hover:bg-emerald-100 text-emerald-600 transition-colors"
+                                  title="Approve Quick Order"
+                                >
+                                  <CheckCircle className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleUpdateQuickStatus(order.id, 'REJECTED')}
+                                  className="p-1.5 border border-red-200 bg-red-50 rounded-lg hover:bg-red-100 text-red-600 transition-colors"
+                                  title="Reject Quick Order"
+                                >
+                                  <XCircle className="w-4 h-4" />
+                                </button>
+                              </>
+                            )}
+                            <button
+                              onClick={() => setSelectedOrder(order)}
+                              className="p-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-500 transition-colors"
+                              title="View order"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Redesigned Unified Order + Appointment Management Slide-Over Panel ── */}
+      {selectedOrder && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/60 backdrop-blur-sm transition-opacity duration-300 animate-fadeIn">
+          {/* Backdrop Overlay */}
+          <div className="absolute inset-0 cursor-pointer" onClick={() => setSelectedOrder(null)} />
+
+          {/* Slide-over panel container */}
+          <div className="relative w-full md:w-[80%] max-w-7xl bg-slate-50 border-l border-slate-200 shadow-2xl flex flex-col h-full z-10 animate-slide-in">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-5 bg-white border-b border-slate-100 flex-shrink-0">
+              <div>
+                <span className="text-[10px] font-bold text-brand-605 bg-brand-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  Order Management Console
+                </span>
+                <h3 className="font-black text-slate-800 text-lg tracking-tight mt-1 flex items-center gap-2">
+                  <span>Manage Order {selectedOrder.invoiceNumber}</span>
+                  <span className={`text-xs px-2.5 py-0.5 rounded-full border ${getStatusStyle(selectedOrder.status)}`}>
+                    {getStatusLabel(selectedOrder.status)}
+                  </span>
+                </h3>
+              </div>
+              <button
+                onClick={() => setSelectedOrder(null)}
+                className="p-1.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 transition-colors focus:outline-none"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Scrollable Columns Container */}
+            <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                
+                {/* ── LEFT COLUMN: Order Details ── */}
+                <div className="lg:col-span-7 space-y-6">
+                  
+                  {/* Customer Information Card */}
+                  <div className="bg-white border border-slate-200/60 rounded-3xl p-6 shadow-sm hover:shadow-premium transition-shadow space-y-4">
+                    <h4 className="font-extrabold text-slate-800 text-sm border-b border-slate-50 pb-2">
+                      Customer Information
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Customer Name</label>
+                        <input
+                          type="text"
+                          value={editCustomerName}
+                          onChange={e => setEditCustomerName(e.target.value)}
+                          className="w-full text-xs font-semibold border border-slate-200 rounded-xl py-2 px-3 focus:outline-none focus:border-brand-500"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Phone Number</label>
+                        <input
+                          type="text"
+                          value={editCustomerPhone}
+                          onChange={e => setEditCustomerPhone(e.target.value)}
+                          className="w-full text-xs font-semibold border border-slate-200 rounded-xl py-2 px-3 focus:outline-none focus:border-brand-500"
+                        />
+                      </div>
+                      <div className="space-y-1 md:col-span-2">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Email Address</label>
+                        <input
+                          type="email"
+                          value={editCustomerEmail}
+                          onChange={e => setEditCustomerEmail(e.target.value)}
+                          className="w-full text-xs font-semibold border border-slate-200 rounded-xl py-2 px-3 focus:outline-none focus:border-brand-500"
+                        />
+                      </div>
+                      <div className="space-y-1 md:col-span-2">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Delivery Address</label>
+                        <textarea
+                          value={editCustomerAddress}
+                          onChange={e => setEditCustomerAddress(e.target.value)}
+                          rows="2"
+                          className="w-full text-xs font-semibold border border-slate-200 rounded-xl py-2 px-3 focus:outline-none focus:border-brand-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Order Details Card */}
+                  <div className="bg-white border border-slate-200/60 rounded-3xl p-6 shadow-sm hover:shadow-premium transition-shadow space-y-4">
+                    <h4 className="font-extrabold text-slate-800 text-sm border-b border-slate-50 pb-2">
+                      Order Metadata
+                    </h4>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Order ID</span>
+                        <span className="text-xs font-bold text-slate-800 truncate block mt-1" title={selectedOrder.id}>
+                          {selectedOrder.id?.substring(0, 8)}...
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Invoice Number</span>
+                        <span className="text-xs font-bold text-slate-800 block mt-1">
+                          {selectedOrder.invoiceNumber}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Order Date</span>
+                        <span className="text-xs font-semibold text-slate-800 block mt-1">
+                          {new Date(selectedOrder.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </span>
+                      </div>
+                      <div className="space-y-1 col-span-2 md:col-span-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Order Status</label>
+                        <select
+                          value={editOrderStatus}
+                          onChange={e => setEditOrderStatus(e.target.value)}
+                          className="w-full text-xs font-bold border border-slate-200 rounded-xl py-1.5 px-2.5 bg-white text-slate-700 focus:outline-none focus:border-brand-500"
+                        >
+                          <option value="PENDING">Order Placed</option>
+                          <option value="PAID">Measurement Session</option>
+                          <option value="PROCESSING">Order Stitching</option>
+                          <option value="SHIPPED">Product Completed</option>
+                          <option value="OUT_FOR_DELIVERY">Product Out for Delivery</option>
+                          <option value="DELIVERED">Delivered</option>
+                          <option value="CANCELLED">Cancelled</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1 col-span-2 md:col-span-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Payment Status</label>
+                        <select
+                          value={editPaymentStatus}
+                          onChange={e => setEditPaymentStatus(e.target.value)}
+                          className="w-full text-xs font-bold border border-slate-200 rounded-xl py-1.5 px-2.5 bg-white text-slate-700 focus:outline-none focus:border-brand-500"
+                        >
+                          <option value="PENDING">Pending</option>
+                          <option value="COMPLETED">Completed</option>
+                          <option value="FAILED">Failed</option>
+                          <option value="REFUNDED">Refunded</option>
+                        </select>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Payment Method</span>
+                        <span className="text-xs font-extrabold text-slate-800 block mt-1.5">
+                          {selectedOrder.paymentMethod}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Product Details & Tailoring Customizations */}
+                  <div className="bg-white border border-slate-200/60 rounded-3xl p-6 shadow-sm hover:shadow-premium transition-shadow space-y-4">
+                    <h4 className="font-extrabold text-slate-800 text-sm border-b border-slate-50 pb-2">
+                      Product Details &amp; Custom Sizing
+                    </h4>
+
+                    {selectedOrder.items?.map((item) => (
+                      <div key={item.id} className="flex gap-4 p-3.5 bg-slate-50 rounded-2xl border border-slate-100 items-start">
+                        <img
+                          src={selectedOrder.product?.images?.[0] || 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=120'}
+                          alt={item.productName}
+                          className="w-16 h-16 object-cover rounded-xl border border-slate-200 flex-shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-[9px] bg-slate-200 text-slate-650 px-2 py-0.5 rounded-full font-bold uppercase">
+                            Qty: {item.quantity}
+                          </span>
+                          <h5 className="font-extrabold text-slate-800 text-sm truncate mt-1">
+                            {item.productName}
+                          </h5>
+                          <p className="text-[10px] text-slate-405 font-medium mt-0.5">
+                            Category: {selectedOrder.product?.category?.name || 'Luxury Custom Outfit'}
+                          </p>
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-              </div>
 
-              <div className="w-1/2 ml-auto space-y-2 text-xs border-t border-slate-100 pt-3">
-                 <div className="flex justify-between text-slate-500">
-                  <span>Subtotal</span>
-                  <span className="font-semibold text-slate-800">₹{Number(selectedOrder.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Fabric Type</label>
+                        <input
+                          type="text"
+                          value={editFabricType}
+                          onChange={e => setEditFabricType(e.target.value)}
+                          placeholder="e.g. Raw Banarasi Silk"
+                          className="w-full text-xs font-semibold border border-slate-200 rounded-xl py-2 px-3 focus:outline-none focus:border-brand-500"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Customizations</label>
+                        <input
+                          type="text"
+                          value={editCustomizations}
+                          onChange={e => setEditCustomizations(e.target.value)}
+                          placeholder="e.g. Velvet Lapel, Golden Buttons"
+                          className="w-full text-xs font-semibold border border-slate-200 rounded-xl py-2 px-3 focus:outline-none focus:border-brand-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Sizing Dimensions Sheet */}
+                    <div className="space-y-3 pt-3 border-t border-slate-100">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <label className="text-[10px] font-bold text-slate-450 uppercase flex items-center gap-1">
+                          <Ruler className="w-3.5 h-3.5 text-brand-500" />
+                          <span>Custom Sizing Profile Dimensions (Inches)</span>
+                        </label>
+                        
+                        {selectedOrder.userId && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase">Profile:</span>
+                            <select
+                              value={isCreatingNewProfile ? 'new' : (selectedProfileId || 'none')}
+                              onChange={e => {
+                                const val = e.target.value;
+                                if (val === 'new') {
+                                  setIsCreatingNewProfile(true);
+                                  setNewProfileName('');
+                                } else {
+                                  setIsCreatingNewProfile(false);
+                                  setSelectedProfileId(val);
+                                  if (val === 'none') {
+                                    setEditMeasurements({
+                                      fullLength: '', shoulderWidth: '', upperChest: '', bust: '',
+                                      waist: '', hip: '', armLength: '', sleeveLength: '',
+                                      neck: '', skirtLength: '', pantLength: ''
+                                    });
+                                  } else {
+                                    const matched = customerProfiles.find(p => p.id === val);
+                                    if (matched) {
+                                      setEditMeasurements({
+                                        fullLength: matched.fullLength || '',
+                                        shoulderWidth: matched.shoulderWidth || '',
+                                        upperChest: matched.upperChest || '',
+                                        bust: matched.bust || '',
+                                        waist: matched.waist || '',
+                                        hip: matched.hip || '',
+                                        armLength: matched.armLength || '',
+                                        sleeveLength: matched.sleeveLength || '',
+                                        neck: matched.neck || '',
+                                        skirtLength: matched.skirtLength || '',
+                                        pantLength: matched.pantLength || '',
+                                      });
+                                    }
+                                  }
+                                }
+                              }}
+                              className="text-[10px] font-bold border border-slate-200 rounded-lg py-1 px-2 bg-white text-slate-650 focus:outline-none focus:border-brand-500"
+                            >
+                              <option value="none">None (No profile)</option>
+                              {customerProfiles.map(p => (
+                                <option key={p.id} value={p.id}>{p.profileName}</option>
+                              ))}
+                              <option value="new">+ Create New Profile...</option>
+                            </select>
+                          </div>
+                        )}
+                      </div>
+
+                      {isCreatingNewProfile && (
+                        <div className="bg-brand-50/50 border border-brand-100 rounded-xl p-2.5 space-y-1.5 animate-fadeIn">
+                          <label className="text-[9px] font-bold text-brand-700 uppercase block">New Profile Name</label>
+                          <input
+                            type="text"
+                            value={newProfileName}
+                            onChange={e => setNewProfileName(e.target.value)}
+                            placeholder="e.g. Wedding Suit, Silk Lehenga"
+                            className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-lg py-1 px-2 focus:outline-none focus:border-brand-500"
+                            required
+                          />
+                        </div>
+                      )}
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                        {[
+                          { key: 'bust', label: 'Bust Size' },
+                          { key: 'waist', label: 'Waist Size' },
+                          { key: 'hip', label: 'Hip Size' },
+                          { key: 'fullLength', label: 'Full Length' },
+                          { key: 'shoulderWidth', label: 'Shoulder' },
+                          { key: 'upperChest', label: 'Upper Chest' },
+                          { key: 'armLength', label: 'Arm Length' },
+                          { key: 'sleeveLength', label: 'Sleeve' },
+                          { key: 'neck', label: 'Neck' },
+                          { key: 'skirtLength', label: 'Skirt' },
+                          { key: 'pantLength', label: 'Pant Length' },
+                        ].map((dim) => (
+                          <div key={dim.key} className="space-y-1 bg-slate-50 border border-slate-100 rounded-xl p-2 relative flex flex-col">
+                            <span className="text-[8px] font-bold text-slate-400 uppercase block">{dim.label}</span>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={editMeasurements[dim.key] || ''}
+                              onChange={e => setEditMeasurements({
+                                ...editMeasurements,
+                                [dim.key]: e.target.value
+                              })}
+                              className="w-full font-bold text-slate-750 bg-white border border-slate-200 rounded-lg p-1 text-xs focus:outline-none focus:border-brand-500 mt-1"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1 pt-2">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Tailor Notes</label>
+                      <textarea
+                        value={editTailorNotes}
+                        onChange={e => setEditTailorNotes(e.target.value)}
+                        placeholder="styling notes, sizing overrides, or customer fabric selection preferences..."
+                        rows="2.5"
+                        className="w-full text-xs font-semibold border border-slate-200 rounded-xl py-2 px-3 focus:outline-none focus:border-brand-500"
+                      />
+                    </div>
+                  </div>
+
                 </div>
-                <div className="flex justify-between text-slate-500">
-                  <span>Discount</span>
-                  <span className="font-semibold text-red-500">-₹{Number(selectedOrder.discountAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+
+                {/* ── RIGHT COLUMN: Appointment Management ── */}
+                <div className="lg:col-span-5 space-y-6">
+                  
+                  {/* Appointment Details & Status */}
+                  <div className="bg-white border border-slate-200/60 rounded-3xl p-6 shadow-sm hover:shadow-premium transition-shadow space-y-4">
+                    <div className="flex justify-between items-center border-b border-slate-50 pb-2">
+                      <h4 className="font-extrabold text-slate-800 text-sm">
+                        Appointment Management
+                      </h4>
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border shrink-0 ${selectedOrder.booking ? getApptStatusStyle(selectedOrder.booking.status) : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                        {selectedOrder.booking ? selectedOrder.booking.status : 'UNSCHEDULED'}
+                      </span>
+                    </div>
+
+                    {!selectedOrder.booking ? (
+                      <div className="space-y-4">
+                        <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50 text-center">
+                          <Calendar className="w-8 h-8 text-slate-400 mb-2" />
+                          <span className="text-xs font-bold text-slate-600 block">No Fitting Session Booked</span>
+                          <span className="text-[10px] text-slate-400 mt-1 block">This order does not have an active appointment yet.</span>
+                          {!isRescheduling && (
+                            <button
+                              type="button"
+                              onClick={() => setIsRescheduling(true)}
+                              className="mt-4 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white font-extrabold text-xs rounded-xl shadow-premium shadow-brand-500/10 transition-all focus:outline-none"
+                            >
+                              Schedule Fitting Session
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Reschedule Section (Drawer) */}
+                        {isRescheduling && (
+                          <div className="p-4 border border-brand-100 bg-brand-50/20 rounded-2xl space-y-3.5 animate-fadeIn">
+                            <h5 className="font-bold text-slate-805 text-xs">Schedule Fitting Session</h5>
+                            <div className="space-y-3">
+                              <div className="space-y-1">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase">Select Date</label>
+                                <input
+                                  type="date"
+                                  value={rescheduleDate}
+                                  onChange={e => setRescheduleDate(e.target.value)}
+                                  className="w-full px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-200 rounded-lg focus:outline-none"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase">Select Time Window</label>
+                                <select
+                                  value={rescheduleTimeSlot}
+                                  onChange={e => setRescheduleTimeSlot(e.target.value)}
+                                  className="w-full px-2.5 py-1.5 text-xs font-bold bg-white border border-slate-200 rounded-lg focus:outline-none"
+                                >
+                                  <option value="10:00 AM - 11:30 AM">10:00 AM - 11:30 AM</option>
+                                  <option value="11:30 AM - 01:00 PM">11:30 AM - 01:00 PM</option>
+                                  <option value="02:00 PM - 03:30 PM">02:00 PM - 03:30 PM</option>
+                                  <option value="03:30 PM - 05:00 PM">03:30 PM - 05:00 PM</option>
+                                  <option value="05:00 PM - 06:30 PM">05:00 PM - 06:30 PM</option>
+                                </select>
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase">Notes</label>
+                                <input
+                                  type="text"
+                                  value={rescheduleReason}
+                                  onChange={e => setRescheduleReason(e.target.value)}
+                                  placeholder="e.g. Schedule fitting for luxury outfit"
+                                  className="w-full px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-200 rounded-lg focus:outline-none"
+                                />
+                              </div>
+                              <div className="flex gap-2 pt-1.5">
+                                <button
+                                  type="button"
+                                  onClick={handleRescheduleAppointment}
+                                  className="flex-1 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-bold text-[10px] shadow"
+                                >
+                                  Confirm Slot
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setIsRescheduling(false)}
+                                  className="py-1.5 px-3 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-500 font-bold text-[10px]"
+                                >
+                                  Dismiss
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (() => {
+                      const booking = selectedOrder.booking;
+
+                      return (
+                        <div className="space-y-4">
+                          <div className="flex flex-col gap-1.5 p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                            <div className="flex justify-between items-center text-xs font-bold text-slate-700">
+                              <span>Appointment Type:</span>
+                              <span className="text-brand-605 uppercase">
+                                {(booking.type === 'STUDIO' || booking.type === 'MEASUREMENT') ? 'Studio Fitting' : 'Home Visit'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs text-slate-605 mt-2">
+                              <span>Date:</span>
+                              <span className="font-bold">
+                                {formatBookingDateUTC(booking.date, { weekday: 'long' })}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs text-slate-650 mt-1">
+                              <span>Time Slot:</span>
+                              <span className="font-bold">{booking.timeSlot}</span>
+                            </div>
+                          </div>
+
+                          {/* Scheduling Controls */}
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase block">Scheduling Controls</label>
+                            <div className="grid grid-cols-2 gap-2">
+                              {booking.status === 'PENDING' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateBookingStatus('CONFIRMED')}
+                                  className="py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-sm transition-all col-span-2"
+                                >
+                                  Confirm Slot
+                                </button>
+                              )}
+                              
+                              {booking.status === 'CONFIRMED' && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsRescheduling(!isRescheduling)}
+                                    className="py-2 px-3 border border-slate-200 hover:bg-slate-50 text-brand-605 font-bold rounded-xl text-xs shadow-sm transition-all"
+                                  >
+                                    {isRescheduling ? 'Cancel Reschedule' : 'Reschedule'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateBookingStatus('CANCELLED')}
+                                    className="py-2 px-3 border border-slate-200 hover:bg-red-50 text-red-600 font-bold rounded-xl text-xs transition-all"
+                                  >
+                                    Reject Appointment
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateBookingStatus('COMPLETED')}
+                                    className="py-2 px-3 bg-emerald-50 text-emerald-700 border border-emerald-100 hover:bg-emerald-100 font-bold rounded-xl text-xs transition-all col-span-2"
+                                  >
+                                    Mark Completed
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Reschedule Section (Drawer) */}
+                          {isRescheduling && (
+                            <div className="p-4 border border-brand-100 bg-brand-50/20 rounded-2xl space-y-3.5 animate-fadeIn">
+                              <h5 className="font-bold text-slate-850 text-xs">Reschedule Sizing Fitting</h5>
+                              <div className="space-y-3">
+                                <div className="space-y-1">
+                                  <label className="text-[9px] font-bold text-slate-400 uppercase">Select Date</label>
+                                  <input
+                                    type="date"
+                                    value={rescheduleDate}
+                                    onChange={e => setRescheduleDate(e.target.value)}
+                                    className="w-full px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-200 rounded-lg focus:outline-none"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[9px] font-bold text-slate-400 uppercase">Select Time Window</label>
+                                  <select
+                                    value={rescheduleTimeSlot}
+                                    onChange={e => setRescheduleTimeSlot(e.target.value)}
+                                    className="w-full px-2.5 py-1.5 text-xs font-bold bg-white border border-slate-200 rounded-lg focus:outline-none"
+                                  >
+                                    <option value="10:00 AM - 11:30 AM">10:00 AM - 11:30 AM</option>
+                                    <option value="11:30 AM - 01:00 PM">11:30 AM - 01:00 PM</option>
+                                    <option value="02:00 PM - 03:30 PM">02:00 PM - 03:30 PM</option>
+                                    <option value="03:30 PM - 05:00 PM">03:30 PM - 05:00 PM</option>
+                                    <option value="05:00 PM - 06:30 PM">05:00 PM - 06:30 PM</option>
+                                  </select>
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[9px] font-bold text-slate-400 uppercase">Reason for Rescheduling</label>
+                                  <input
+                                    type="text"
+                                    value={rescheduleReason}
+                                    onChange={e => setRescheduleReason(e.target.value)}
+                                    placeholder="e.g. Tailor unavailable / Customer request"
+                                    className="w-full px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-200 rounded-lg focus:outline-none"
+                                  />
+                                </div>
+                                <div className="flex gap-2 pt-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={handleRescheduleAppointment}
+                                    className="flex-1 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-bold text-[10px] shadow"
+                                  >
+                                    Confirm Reschedule
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsRescheduling(false)}
+                                    className="py-1.5 px-3 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-500 font-bold text-[10px]"
+                                  >
+                                    Dismiss
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Activity Timeline */}
+                  <div className="bg-white border border-slate-200/60 rounded-3xl p-6 shadow-sm hover:shadow-premium transition-shadow space-y-4">
+                    <h4 className="font-extrabold text-slate-800 text-sm border-b border-slate-50 pb-2">
+                      Activity Timeline
+                    </h4>
+                    <div className="relative border-l border-slate-200 pl-4 ml-2.5 space-y-5 py-2">
+                      {getActivityTimeline().map((event, idx) => (
+                        <div key={idx} className="relative">
+                          {/* Indicator Dot */}
+                          <span className="absolute -left-[22px] top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-white ring-4 ring-white shadow-sm border border-slate-100">
+                            <div className={`h-1.5 w-1.5 rounded-full ${
+                              event.status === 'completed' ? 'bg-emerald-500' : event.status === 'warning' ? 'bg-amber-500' : 'bg-red-500'
+                            }`} />
+                          </span>
+                          <div className="flex justify-between items-start text-xs gap-3">
+                            <div>
+                              <p className="font-extrabold text-slate-800 leading-tight">{event.title}</p>
+                              <p className="text-slate-500 mt-1 text-[11px] leading-relaxed">{event.description}</p>
+                            </div>
+                            <span className="text-[10px] text-slate-450 font-bold shrink-0">{event.date}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
                 </div>
-                <div className="flex justify-between text-slate-500">
-                  <span>Taxes (GST 18%)</span>
-                  <span className="font-semibold text-slate-800">₹{Number(selectedOrder.taxAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                </div>
-                <div className="flex justify-between border-t border-slate-100 pt-2 text-sm font-extrabold text-slate-800">
-                  <span>Payable Amount</span>
-                  <span>₹{Number(selectedOrder.payableAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                </div>
+
               </div>
             </div>
 
-            <div className="mt-6 border-t border-slate-100 pt-4 flex gap-3">
-              <button
-                onClick={() => window.print()}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-605 font-bold text-xs"
-              >
-                <Printer className="w-4 h-4" />
-                <span>Print Invoice</span>
-              </button>
-              <button
-                onClick={() => handleViewPackingSlip(selectedOrder.id)}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-605 font-bold text-xs"
-              >
-                <ShoppingBag className="w-4 h-4" />
-                <span>Packing Slip</span>
-              </button>
-              <button
-                onClick={() => alert('Mock Email Dispatched: Invoice Sent to Customer.')}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs shadow-sm"
-              >
-                <Mail className="w-4 h-4" />
-                <span>Email Invoice</span>
-              </button>
+            {/* Sticky Bottom Action Bar */}
+            <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 z-20 flex-shrink-0">
+              
+              {/* Secondary Actions */}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-3 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-655 font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Print Invoice</span>
+                </button>
+                
+                <a
+                  href={`https://wa.me/${editCustomerPhone.replace(/\D/g, '')}?text=Hello%20${encodeURIComponent(editCustomerName)},%20this%20is%20MARCOS%20Luxury%20Couture.%20Regarding%20your%20order%20${selectedOrder.invoiceNumber}...`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-655 font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all"
+                >
+                  <Mail className="w-4 h-4" />
+                  <span>WhatsApp Message</span>
+                </a>
+
+                <a
+                  href={`tel:${editCustomerPhone}`}
+                  className="px-3 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-655 font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all"
+                >
+                  <Phone className="w-4 h-4 text-slate-550" />
+                  <span>Call Customer</span>
+                </a>
+              </div>
+
+              {/* Primary Actions */}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveOrderChanges}
+                  className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-[0.98]"
+                >
+                  Save Changes
+                </button>
+                
+                {selectedOrder.booking && selectedOrder.booking.status === 'PENDING' && (
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateBookingStatus('CONFIRMED')}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-[0.98]"
+                  >
+                    Confirm Appointment
+                  </button>
+                )}
+              </div>
             </div>
+
           </div>
         </div>
       )}
 
+      {/* ── Packing Slip Modal ── */}
       {isSlipOpen && packingSlip && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md shadow-2xl p-6 relative flex flex-col">
             <button
               onClick={() => setIsSlipOpen(false)}
-              className="absolute top-4 right-4 p-1.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-655 transition-colors focus:outline-none"
+              className="absolute top-4 right-4 p-1.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
 
             <div className="space-y-4 pt-2">
               <div className="border-b border-slate-100 pb-3">
-                <h3 className="font-extrabold text-slate-800 text-base">Packing Checklist Slip</h3>
+                <h3 className="font-extrabold text-slate-800 text-base">Packing Checklist</h3>
                 <p className="text-xs text-slate-400 font-semibold">{packingSlip.invoiceNumber}</p>
               </div>
 
               <div className="space-y-2.5 max-h-[300px] overflow-y-auto">
                 {(packingSlip.packingItems || packingSlip.items || []).map((item, idx) => (
                   <label key={idx} className="flex items-center gap-3 p-3 hover:bg-slate-50 rounded-xl border border-slate-100 transition-colors cursor-pointer select-none">
-                    <input type="checkbox" className="w-4 h-4 rounded text-brand-500 border-slate-300 focus:ring-brand-55" />
+                    <input type="checkbox" className="w-4 h-4 rounded text-brand-500 border-slate-300" />
                     <div className="flex-1 text-xs">
                       <p className="font-bold text-slate-800">{item.name}</p>
                       {(item.sku || item.material) && (
@@ -428,15 +2628,200 @@ export default function OrderManager() {
                 ))}
               </div>
 
-              <div className="border-t border-slate-100 pt-4 flex gap-2">
+              <div className="border-t border-slate-100 pt-4">
                 <button
                   onClick={handleDispatchOrder}
-                  className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-md transition-all text-center"
+                  className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-md transition-all"
                 >
-                  Verify & Ready for Dispatch
+                  ✓ Verify &amp; Mark as Shipped
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Two-step Status Confirmation Dialog ── */}
+      {pendingStatusChange && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-sm shadow-2xl p-6 space-y-5 animate-fadeIn">
+            <div className="space-y-1">
+              <h3 className="font-black text-slate-800 text-base tracking-tight">Confirm Stage Update</h3>
+              <p className="text-xs text-slate-500 font-medium">
+                Order <span className="font-bold text-slate-700">{pendingStatusChange.invoiceNumber}</span>
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 bg-slate-50 rounded-2xl px-4 py-3">
+              <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${getStatusStyle(pendingStatusChange.from)}`}>
+                {pendingStatusChange.fromLabel}
+              </span>
+              <span className="text-slate-400 text-xs font-bold flex-shrink-0">→</span>
+              <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${pendingStatusChange.to === 'CANCELLED' ? 'bg-red-50 text-red-700 border-red-100' : getStatusStyle(pendingStatusChange.to)}`}>
+                {pendingStatusChange.toLabel}
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-500">
+              {pendingStatusChange.to === 'CANCELLED'
+                ? 'This will cancel the order, restore inventory, and trigger a refund if applicable. This cannot be undone.'
+                : 'The customer will be notified in real-time via the app. This action cannot be automatically undone.'}
+            </p>
+
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => setPendingStatusChange(null)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition-colors"
+              >
+                Go Back
+              </button>
+              <button
+                onClick={confirmStatusChange}
+                className={`flex-1 py-2.5 rounded-xl text-white font-bold text-xs shadow-sm transition-all ${
+                  pendingStatusChange.to === 'CANCELLED'
+                    ? 'bg-red-500 hover:bg-red-600'
+                    : 'bg-slate-900 hover:bg-slate-800'
+                }`}
+              >
+                {pendingStatusChange.to === 'CANCELLED' ? 'Cancel Order' : 'Confirm →'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Admin Reschedule Modal ── */}
+      {adminRescheduleBooking && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-sm shadow-2xl p-6 space-y-5 animate-fadeIn">
+            <div className="space-y-1">
+              <h3 className="font-black text-slate-800 text-base tracking-tight">Reschedule Fitting</h3>
+              <p className="text-xs text-slate-500 font-medium">
+                Update date/time for {adminRescheduleBooking.type === 'STUDIO' ? 'Studio Visit' : 'Home Visit'}
+              </p>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="block text-[10px] text-slate-400 font-bold uppercase mb-1">Select Date</label>
+                <input
+                  type="date"
+                  value={adminNewDate}
+                  onChange={e => setAdminNewDate(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-brand-500 font-semibold"
+                />
+              </div>
+
+              {adminRescheduleBooking.type === 'STUDIO' && (
+                <div>
+                  <label className="block text-[10px] text-slate-400 font-bold uppercase mb-1">Select Time Window</label>
+                  <select
+                    value={adminNewTimeSlot}
+                    onChange={e => setAdminNewTimeSlot(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-brand-500 font-bold"
+                  >
+                    <option value="10:00 AM - 11:30 AM">10:00 AM - 11:30 AM</option>
+                    <option value="11:30 AM - 01:00 PM">11:30 AM - 01:00 PM</option>
+                    <option value="02:00 PM - 03:30 PM">02:00 PM - 03:30 PM</option>
+                    <option value="03:30 PM - 05:00 PM">03:30 PM - 05:00 PM</option>
+                    <option value="05:00 PM - 06:30 PM">05:00 PM - 06:30 PM</option>
+                  </select>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => setAdminRescheduleBooking(null)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmAdminReschedule}
+                className="flex-1 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-sm transition-all"
+              >
+                Save Updates
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assign Tailor Staff Overlay */}
+      {activeVisitId && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+              <h4 className="font-extrabold text-slate-800 text-sm">Assign Tailoring Staff</h4>
+              <button onClick={() => setActiveVisitId(null)} className="text-slate-400 hover:text-slate-600 text-xs font-extrabold">Close</button>
+            </div>
+            
+            <form onSubmit={handleAssignStaff} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Select Staff Member</label>
+                <select
+                  value={selectedStaffId}
+                  onChange={e => setSelectedStaffId(e.target.value)}
+                  className="w-full text-xs border border-slate-200 rounded-xl py-2.5 px-3 bg-white focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 font-semibold"
+                >
+                  {staffList.map(s => (
+                    <option key={s.id} value={s.id}>{s.fullName} ({s.role})</option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs shadow-md transition-all"
+              >
+                Confirm Allocation
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Completion Report Overlay */}
+      {reportVisitId && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+              <h4 className="font-extrabold text-slate-800 text-sm">Submit Visit Completion Report</h4>
+              <button onClick={() => setReportVisitId(null)} className="text-slate-400 hover:text-slate-605 text-xs font-extrabold">Close</button>
+            </div>
+            
+            <form onSubmit={handleCompleteVisit} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Completion Notes *</label>
+                <textarea
+                  value={completionNotes}
+                  onChange={e => setCompletionNotes(e.target.value)}
+                  placeholder="Describe physical measurements taken, items fabric selection..."
+                  rows="3"
+                  className="w-full text-xs border border-slate-200 rounded-xl p-2.5 focus:outline-none focus:border-brand-500"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Media Attachment URL (Optional)</label>
+                <input
+                  type="text"
+                  value={mediaUrl}
+                  onChange={e => setMediaUrl(e.target.value)}
+                  placeholder="https://example.com/fitting-photo.jpg"
+                  className="w-full text-xs border border-slate-200 rounded-xl py-2 px-3 focus:outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs shadow-md transition-all"
+              >
+                Submit Completion File
+              </button>
+            </form>
           </div>
         </div>
       )}

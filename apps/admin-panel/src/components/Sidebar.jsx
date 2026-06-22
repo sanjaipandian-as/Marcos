@@ -18,7 +18,13 @@ import {
   Flame,
   Globe,
   Database,
-  Layers
+  Layers,
+  IndianRupee,
+  Clock,
+  Package,
+  Box,
+  LineChart,
+  Briefcase
 } from 'lucide-react';
 import api from '../utils/api';
 
@@ -39,6 +45,7 @@ export default function Sidebar({
     appointments: 0,
     support: 0
   });
+  const [expandedMenu, setExpandedMenu] = React.useState('reports');
 
   const fetchCounts = async () => {
     try {
@@ -55,9 +62,14 @@ export default function Sidebar({
         p => p.stockStatus === 'LOW_STOCK' || p.stockStatus === 'OUT_OF_STOCK' || p.inventoryQty <= 10
       ).length;
 
-      // Count pending/processing orders
-      const pendingOrdersCount = (orders || []).filter(
-        o => o.status === 'PENDING' || o.status === 'PROCESSING'
+      // Count pending/processing orders (exclude quick orders)
+      const normalPendingOrdersCount = (orders || []).filter(
+        o => !o.isQuickOrder && (o.status === 'PENDING' || o.status === 'PROCESSING')
+      ).length;
+
+      // Count quick orders
+      const quickOrdersCount = (orders || []).filter(
+        o => o.isQuickOrder && (!o.quickOrderStatus || o.quickOrderStatus === 'PENDING')
       ).length;
 
       // Count pending appointments + active/assigned visits
@@ -71,8 +83,11 @@ export default function Sidebar({
 
       setCounts({
         products: lowStockCount,
-        orders: pendingOrdersCount,
-        appointments: pendingAppts + activeVisits,
+        orders: normalPendingOrdersCount + quickOrdersCount + pendingAppts + activeVisits,
+        'orders-bookings': normalPendingOrdersCount,
+        'orders-fittings': pendingAppts,
+        'orders-visits': activeVisits,
+        'orders-quick': quickOrdersCount,
         support: pendingSupport
       });
     } catch (err) {
@@ -101,14 +116,37 @@ export default function Sidebar({
       title: 'MAIN',
       items: [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { id: 'reports', label: 'Reports & Analytics', icon: BarChart3 },
+        { 
+          id: 'reports', 
+          label: 'Reports & Analytics', 
+          icon: BarChart3,
+          subItems: [
+            { id: 'reports-customer', label: 'Customer Intelligence', icon: UsersRound },
+            { id: 'reports-orders', label: 'Order Intelligence', icon: ShoppingBag },
+            { id: 'reports-revenue', label: 'Revenue Intelligence', icon: LineChart },
+            { id: 'reports-time', label: 'Time Based Patterns', icon: Clock },
+            { id: 'reports-sales', label: 'Product Sales', icon: Package },
+            { id: 'reports-promotions', label: 'Promotions & Discounts', icon: Tags },
+            { id: 'reports-inventory', label: 'Inventory Health', icon: Box }
+          ]
+        },
       ]
     },
     {
       title: 'SALES & CHECKOUT',
       items: [
         { id: 'checkout', label: 'Manual Checkout', icon: ShoppingCart },
-        { id: 'orders', label: 'Orders & Invoices', icon: ShoppingBag },
+        { 
+          id: 'orders', 
+          label: 'Bookings & Fittings', 
+          icon: ShoppingBag,
+          subItems: [
+            { id: 'orders-bookings', label: 'Product Bookings', icon: ShoppingBag },
+            { id: 'orders-fittings', label: 'Studio Fittings', icon: Calendar },
+            { id: 'orders-visits', label: 'Home Visits', icon: Briefcase },
+            { id: 'orders-quick', label: 'Quick Orders', icon: Clock }
+          ]
+        },
         { id: 'coupons', label: 'Coupon Builder', icon: Ticket },
         { id: 'banners', label: 'Promo Banners', icon: Image },
       ]
@@ -124,7 +162,6 @@ export default function Sidebar({
       title: 'CORE OPERATIONS',
       items: [
         { id: 'customers', label: 'Customers & Sizing', icon: Users },
-        { id: 'appointments', label: 'Fittings & Visits', icon: Calendar },
         { id: 'support', label: 'Support Tickets', icon: LifeBuoy },
       ]
     },
@@ -139,7 +176,6 @@ export default function Sidebar({
       title: 'SECURITY & SYSTEM',
       items: [
         { id: 'audits', label: 'Audit Log Viewer', icon: ShieldAlert },
-        { id: 'staff', label: 'Staff Roles', icon: UsersRound },
         { id: 'settings', label: 'Platform Settings', icon: Settings },
       ]
     }
@@ -151,6 +187,25 @@ export default function Sidebar({
     setApiMode(nextMode);
     window.location.reload();
   };
+
+  const user = api.getCurrentUser();
+  const userRole = user ? user.role : 'CUSTOMER';
+
+  const isTabAllowed = (tabId) => {
+    if (userRole === 'SUPERADMIN' || userRole === 'ADMIN') return true;
+    if (userRole === 'STAFF') {
+      const allowedTabs = ['orders', 'orders-bookings', 'orders-fittings', 'orders-visits', 'orders-quick', 'products', 'categories', 'customers', 'support'];
+      return allowedTabs.includes(tabId);
+    }
+    return false;
+  };
+
+  const filteredMenuGroups = menuGroups
+    .map(group => ({
+      ...group,
+      items: group.items.filter(item => isTabAllowed(item.id))
+    }))
+    .filter(group => group.items.length > 0);
 
   return (
     <>
@@ -186,52 +241,101 @@ export default function Sidebar({
 
         {/* Sidebar Navigation Links */}
         <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
-          {menuGroups.map((group, groupIdx) => (
+          {filteredMenuGroups.map((group, groupIdx) => (
             <div key={groupIdx} className="space-y-1.5">
               <span className="text-[10px] font-bold text-slate-400/80 uppercase tracking-widest px-3 block">
                 {group.title}
               </span>
               {group.items.map((item) => {
                 const Icon = item.icon;
-                const isActive = activeTab === item.id;
+                const isSubItemActive = item.subItems && item.subItems.some(sub => sub.id === activeTab);
+                const isActive = activeTab === item.id || isSubItemActive;
+                const isExpanded = expandedMenu === item.id;
                 const badgeCount = counts[item.id] || 0;
+                
                 return (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      setActiveTab(item.id);
-                      setIsSidebarOpen(false);
-                    }}
-                    className={`
-                      relative w-full flex items-center text-sm font-medium rounded-xl transition-all duration-200 group overflow-hidden
-                      ${isActive 
-                        ? 'bg-brand-500 text-white shadow-premium shadow-brand-500/20' 
-                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}
-                      ${badgeCount > 0 ? 'pr-12' : 'pr-3'}
-                      pl-3 py-2.5
-                    `}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Icon className={`w-4.5 h-4.5 transition-transform duration-200 group-hover:scale-110 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'}`} />
-                      <span>{item.label}</span>
-                    </div>
-                    {badgeCount > 0 && (
-                      <span className={`
-                        absolute top-0 bottom-0 right-0 w-10 flex items-center justify-center border-l font-extrabold text-xs transition-all duration-200
+                  <div key={item.id} className="space-y-1">
+                    <button
+                      onClick={() => {
+                        if (item.subItems) {
+                          setExpandedMenu(isExpanded ? null : item.id);
+                          if (!isExpanded) setActiveTab(item.subItems[0].id);
+                        } else {
+                          setActiveTab(item.id);
+                          setIsSidebarOpen(false);
+                        }
+                      }}
+                      className={`
+                        relative w-full flex items-center justify-between text-sm font-medium rounded-xl transition-all duration-200 group overflow-hidden
                         ${isActive 
-                          ? 'border-white/20 text-white bg-white/10' 
-                          : item.id === 'products'
-                            ? 'border-red-200 text-red-600 bg-red-50'
-                            : item.id === 'support'
-                              ? 'border-amber-200 text-amber-600 bg-amber-50'
-                              : item.id === 'orders'
-                                ? 'border-indigo-200 text-indigo-650 bg-indigo-50'
-                                : 'border-emerald-200 text-emerald-700 bg-emerald-50'}
-                      `}>
-                        {badgeCount}
-                      </span>
+                          ? 'bg-brand-500 text-white shadow-premium shadow-brand-500/20' 
+                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}
+                        ${badgeCount > 0 ? 'pr-12' : 'pr-3'}
+                        pl-3 py-2.5
+                      `}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Icon className={`w-4.5 h-4.5 transition-transform duration-200 group-hover:scale-110 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                        <span>{item.label}</span>
+                      </div>
+                      
+                      {item.subItems && (
+                        <div className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}>
+                          <svg className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      )}
+
+                      {badgeCount > 0 && (
+                        <span className={`
+                          absolute top-0 bottom-0 right-0 w-10 flex items-center justify-center border-l font-extrabold text-xs transition-all duration-200
+                          ${isActive 
+                            ? 'border-white/20 text-white bg-white/10' 
+                            : item.id === 'products'
+                              ? 'border-red-200 text-red-600 bg-red-50'
+                              : item.id === 'support'
+                                ? 'border-amber-200 text-amber-600 bg-amber-50'
+                                : item.id === 'orders'
+                                  ? 'border-indigo-200 text-indigo-650 bg-indigo-50'
+                                  : 'border-emerald-200 text-emerald-700 bg-emerald-50'}
+                        `}>
+                          {badgeCount}
+                        </span>
+                      )}
+                    </button>
+                    
+                    {item.subItems && isExpanded && (
+                      <div className="pl-4 pr-2 space-y-1 mt-1 mb-2 animate-in slide-in-from-top-2 fade-in duration-200">
+                        {item.subItems.map(sub => {
+                          const SubIcon = sub.icon;
+                          const isSubActive = activeTab === sub.id;
+                          return (
+                            <button
+                              key={sub.id}
+                              onClick={() => {
+                                setActiveTab(sub.id);
+                                setIsSidebarOpen(false);
+                              }}
+                              className={`relative w-full flex items-center justify-between text-xs font-medium rounded-lg py-2.5 px-3 transition-all duration-200 group ${isSubActive ? 'bg-brand-50 text-brand-700 shadow-sm' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}
+                            >
+                              <div className="flex items-center gap-3">
+                                {SubIcon && (
+                                  <SubIcon className={`w-4 h-4 transition-transform duration-200 group-hover:scale-110 ${isSubActive ? 'text-brand-600' : 'text-slate-400 group-hover:text-slate-500'}`} />
+                                )}
+                                <span>{sub.label}</span>
+                              </div>
+                              {counts[sub.id] > 0 && (
+                                <span className="bg-brand-500 text-white px-2 py-0.5 rounded-full text-[9px] font-bold shadow-sm">
+                                  {counts[sub.id]}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
                     )}
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -240,37 +344,6 @@ export default function Sidebar({
 
         {/* Configurations Controls Box at Sidebar Bottom */}
         <div className="p-4 border-t border-slate-100 bg-slate-50/50 space-y-4 shrink-0">
-          {/* Design Layout Toggler */}
-          <div className="space-y-1.5">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
-              DASHBOARD THEME
-            </span>
-            <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-xl">
-              <button
-                onClick={() => setTheme('oripiofin')}
-                className={`
-                  py-1.5 px-2 text-xs font-semibold rounded-lg transition-all
-                  ${theme === 'oripiofin' 
-                    ? 'bg-white text-emerald-800 shadow-sm' 
-                    : 'text-slate-500 hover:text-slate-900'}
-                `}
-              >
-                OripioFin
-              </button>
-              <button
-                onClick={() => setTheme('ezmart')}
-                className={`
-                  py-1.5 px-2 text-xs font-semibold rounded-lg transition-all
-                  ${theme === 'ezmart' 
-                    ? 'bg-white text-orange-800 shadow-sm' 
-                    : 'text-slate-500 hover:text-slate-900'}
-                `}
-              >
-                EzMart
-              </button>
-            </div>
-          </div>
-
           {/* Fallback Mode Toggle */}
           <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-200/60 shadow-sm">
             <div className="flex items-center gap-2">

@@ -22,6 +22,7 @@ import {
   X,
   ChevronLeft
 } from 'lucide-react-native';
+import { CustomCartAddIcon, CustomCartAddedIcon } from '../../components/CartIcons';
 
 export default function WishlistScreen({ navigation }) {
   const { theme, fonts, shadows } = useTheme();
@@ -88,7 +89,8 @@ export default function WishlistScreen({ navigation }) {
         navigation.navigate('Cart');
       }
     } catch (err) {
-      console.error('Error adding to cart:', err);
+      const errorMsg = err?.message || 'Unable to add item to cart. Please try again.';
+      Alert.alert('Error', errorMsg);
     }
   };
 
@@ -140,24 +142,29 @@ export default function WishlistScreen({ navigation }) {
           <View style={styles.priceRow}>
             <View style={styles.priceContainer}>
               <Text style={[styles.prodPrice, { color: theme.brand[500], fontFamily: fonts.bold }]}>
-                ₹{Number(product.price).toLocaleString('en-IN')}
+                ₹{Number(product.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
               </Text>
               <Text style={[styles.originalPrice, { fontFamily: fonts.regular }]}>
-                ₹{originalPrice.toLocaleString('en-IN')}
+                ₹{originalPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
               </Text>
             </View>
             
             <TouchableOpacity 
-              style={[styles.cartIconBtn, { backgroundColor: theme.brand[500] }]} 
-              onPress={() => handleAddToCart(product.id)}
-              activeOpacity={0.7}
-            >
-              {cartItems.has(product.id) ? (
-                <ShoppingCart size={14} color="#ffffff" />
-              ) : (
-                <ShoppingBag size={14} color="#ffffff" />
-              )}
-            </TouchableOpacity>
+               style={[
+                 styles.cartIconBtn,
+                 cartItems.has(product.id)
+                   ? { backgroundColor: theme.brand[500], borderWidth: 1, borderColor: theme.brand[500] }
+                   : { backgroundColor: '#ffffff', borderWidth: 1, borderColor: theme.brand[500] }
+               ]} 
+               onPress={() => handleAddToCart(product.id)}
+               activeOpacity={0.7}
+             >
+               {cartItems.has(product.id) ? (
+                 <CustomCartAddedIcon color="#ffffff" size={18} />
+               ) : (
+                 <CustomCartAddIcon color={theme.brand[500]} size={18} />
+               )}
+             </TouchableOpacity>
           </View>
         </View>
       </TouchableOpacity>
@@ -175,7 +182,7 @@ export default function WishlistScreen({ navigation }) {
           My Wishlist
         </Text>
         <TouchableOpacity style={[styles.headerBtn, shadows.premium]} onPress={() => navigation.navigate('Cart')} activeOpacity={0.7}>
-          <ShoppingBag size={20} color="#1e1e1e" />
+          <ShoppingCart size={20} color="#1e1e1e" />
         </TouchableOpacity>
       </View>
       

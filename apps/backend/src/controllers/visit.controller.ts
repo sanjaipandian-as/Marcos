@@ -21,40 +21,64 @@ export const visitAssignSchema = z.object({
   }),
 });
 
+export const visitUpdateSchema = z.object({
+  body: z.object({
+    preferredDate: z.string().datetime().optional(),
+    confirmedDate: z.string().datetime().optional(),
+    address: z.string().min(1).optional(),
+    requirements: z.string().min(1).optional(),
+    status: z.enum(['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']).optional(),
+  }),
+});
+
 export class VisitController {
   /**
    * GET /visits
    */
   static async getVisits(req: Request, res: Response, next: NextFunction) {
     const user = req.user!;
+    const { page = 1, limit = 20 } = req.query as any;
+    const skip = (Number(page) - 1) * Number(limit);
+
     try {
       const where: any = {};
       if (user.role === Role.CUSTOMER) {
         where.customerId = user.id;
       }
-      const visits = await prisma.storeVisit.findMany({
-        where,
-        orderBy: { preferredDate: 'asc' },
-        include: {
-          customer: {
-            select: {
-              fullName: true,
-              email: true,
-              phoneNumber: true,
+      const [visits, total] = await Promise.all([
+        prisma.storeVisit.findMany({
+          where,
+          orderBy: { preferredDate: 'asc' },
+          skip,
+          take: Number(limit),
+          include: {
+            customer: {
+              select: {
+                fullName: true,
+                email: true,
+                phoneNumber: true,
+              },
             },
-          },
-          assignedStaff: {
-            select: {
-              fullName: true,
+            assignedStaff: {
+              select: {
+                fullName: true,
+              },
             },
+            report: true,
           },
-          report: true,
-        },
-      });
+        }),
+        prisma.storeVisit.count({ where }),
+      ]);
 
       return res.status(200).json({
         success: true,
         data: visits,
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total,
+          pages: Math.ceil(total / Number(limit)),
+        },
       });
     } catch (error) {
       next(error);
@@ -248,6 +272,63 @@ export class VisitController {
       }
 
       return res.status(200).json({ success: true, data: updatedVisit });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PUT /visits/:id
+   * General update for store visit (e.g. rescheduling)
+   */
+  static async updateVisit(req: Request, res: Response, next: NextFunction) {
+    const user = req.user!;
+    const { id } = req.params;
+    const { preferredDate, confirmedDate, address, requirements, status } = req.body;
+
+    try {
+      const visit = await prisma.storeVisit.findUnique({
+        where: { id },
+      });
+
+      if (!visit) {
+        return res.status(404).json({ success: false, message: 'Store visit not found' });
+      }
+
+      // Check ownership/permissions
+      if (visit.customerId !== user.id && user.role === Role.CUSTOMER) {
+        return res.status(403).json({ success: false, message: 'Forbidden: You do not own this visit request' });
+      }
+
+      // Reset to PENDING if user reschedules so admin can re-confirm/assign staff
+      let targetStatus = status;
+      if (preferredDate && user.role === Role.CUSTOMER) {
+        targetStatus = 'PENDING';
+      }
+
+      const updated = await prisma.storeVisit.update({
+        where: { id },
+        data: {
+          ...(preferredDate && { preferredDate: new Date(preferredDate) }),
+          ...(confirmedDate && { confirmedDate: new Date(confirmedDate) }),
+          ...(address && { address }),
+          ...(requirements && { requirements }),
+          ...(targetStatus && { status: targetStatus as VisitStatus }),
+        },
+      });
+
+      // Broadcast WebSocket notification to Staff, Customer and Admins
+      const io = getIO();
+      if (io) {
+        io.to(`user:${visit.customerId}`).to('admins').emit('visit:status_changed', {
+          visitId: updated.id,
+          status: updated.status,
+          preferredDate: updated.preferredDate,
+          confirmedDate: updated.confirmedDate,
+        });
+      }
+
+      return res.status(200).json({ success: true, data: updated });
     } catch (error) {
       next(error);
     }

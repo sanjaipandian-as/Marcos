@@ -16,6 +16,7 @@ const banner_routes_js_1 = __importDefault(require("./banner.routes.js"));
 const ticket_routes_js_1 = __importDefault(require("./ticket.routes.js"));
 const order_routes_js_1 = __importDefault(require("./order.routes.js"));
 const category_routes_js_1 = __importDefault(require("./category.routes.js"));
+const system_routes_js_1 = __importDefault(require("./system.routes.js"));
 const router = (0, express_1.Router)();
 router.use('/auth', auth_routes_js_1.default);
 router.use('/products', product_routes_js_1.default); // Maps both `/products` and `/cart` since they are combined
@@ -29,4 +30,5 @@ router.use('/banners', banner_routes_js_1.default);
 router.use('/tickets', ticket_routes_js_1.default);
 router.use('/orders', order_routes_js_1.default);
 router.use('/categories', category_routes_js_1.default);
+router.use('/system', system_routes_js_1.default);
 exports.default = router;

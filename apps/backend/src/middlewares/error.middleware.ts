@@ -23,9 +23,21 @@ export function errorMiddleware(
     },
   });
 
+  let cleanMessage = message;
+
+  if (process.env.NODE_ENV === 'production') {
+    if (statusCode === 500) {
+      cleanMessage = 'Internal Server Error';
+    }
+    // Filter out detailed Prisma/SQL errors
+    if (err.name?.startsWith('Prisma') || err.message?.includes('prisma') || err.message?.includes('Database')) {
+      cleanMessage = 'A database conflict or constraint occurred. Access denied.';
+    }
+  }
+
   res.status(statusCode).json({
     success: false,
-    message,
+    message: cleanMessage,
     ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
     ...(err.details && { details: err.details }),
   });

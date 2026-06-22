@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,7 +10,9 @@ import {
   ActivityIndicator,
   Platform,
   Dimensions,
-  Alert
+  Alert,
+  Modal,
+  PanResponder
 } from 'react-native';
 import { useTheme } from '../../styles/ThemeContext';
 import api from '../../utils/api';
@@ -23,6 +25,7 @@ import {
   ChevronRight,
   X
 } from 'lucide-react-native';
+import { CustomCartAddIcon, CustomCartAddedIcon } from '../../components/CartIcons';
 
 const { width } = Dimensions.get('window');
 
@@ -34,9 +37,90 @@ export default function ProductsCatalogScreen({ navigation, route }) {
   const [categories, setCategories] = useState([]);
   const [favorites, setFavorites] = useState(new Set());
   const [cartItems, setCartItems] = useState(new Set());
-  const [selectedTab, setSelectedTab] = useState('All'); // 'All', 'Men', 'Women', 'Girls'
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [activeFilterTab, setActiveFilterTab] = useState('Product'); // 'Product' or 'Price'
+  const [minPrice, setMinPrice] = useState('0');
+  const [maxPrice, setMaxPrice] = useState('50000');
+  const [absoluteMin, setAbsoluteMin] = useState(0);
+  const [absoluteMax, setAbsoluteMax] = useState(50000);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
+  const [activeThumb, setActiveThumb] = useState('right');
+
+  // Slider Dragging Logic — use refs so PanResponder closures always read fresh values
+  const [sliderWidth, setSliderWidth] = useState(1);
+  const minPriceRef = useRef(Number(minPrice) || 0);
+  const maxPriceRef = useRef(Number(maxPrice) || 50000);
+  const absoluteMinRef = useRef(absoluteMin);
+  const absoluteMaxRef = useRef(absoluteMax);
+  const sliderWidthRef = useRef(sliderWidth);
+  const leftStartX = useRef(0);
+  const rightStartX = useRef(0);
+  
+  useEffect(() => {
+    minPriceRef.current = Number(minPrice) || 0;
+    maxPriceRef.current = Number(maxPrice) || 0;
+  }, [minPrice, maxPrice]);
+
+  useEffect(() => {
+    absoluteMinRef.current = absoluteMin;
+    absoluteMaxRef.current = absoluteMax;
+  }, [absoluteMin, absoluteMax]);
+
+  useEffect(() => {
+    sliderWidthRef.current = sliderWidth;
+  }, [sliderWidth]);
+
+  const leftThumbPanResponder = useMemo(() =>
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 2,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => {
+         setActiveThumb('left');
+         leftStartX.current = minPriceRef.current;
+      },
+      onPanResponderMove: (evt, gestureState) => {
+         const aMin = absoluteMinRef.current;
+         const aMax = absoluteMaxRef.current;
+         const sWidth = sliderWidthRef.current;
+         const range = aMax - aMin;
+         const minGapPrice = Math.max(1, Math.round(range * 0.01)); // 1% gap for smooth sliding
+         if (range <= 0 || sWidth <= 0) return;
+         const deltaPrice = (gestureState.dx / sWidth) * range;
+         let newMin = Math.round(leftStartX.current + deltaPrice);
+         if (newMin < aMin) newMin = aMin;
+         if (newMin > maxPriceRef.current - minGapPrice) newMin = maxPriceRef.current - minGapPrice;
+         setMinPrice(newMin.toString());
+      },
+    }),
+  []);
+
+  const rightThumbPanResponder = useMemo(() =>
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 2,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => {
+         setActiveThumb('right');
+         rightStartX.current = maxPriceRef.current;
+      },
+      onPanResponderMove: (evt, gestureState) => {
+         const aMin = absoluteMinRef.current;
+         const aMax = absoluteMaxRef.current;
+         const sWidth = sliderWidthRef.current;
+         const range = aMax - aMin;
+         const minGapPrice = Math.max(1, Math.round(range * 0.01)); // 1% gap for smooth sliding
+         if (range <= 0 || sWidth <= 0) return;
+         const deltaPrice = (gestureState.dx / sWidth) * range;
+         let newMax = Math.round(rightStartX.current + deltaPrice);
+         if (newMax > aMax) newMax = aMax;
+         if (newMax < minPriceRef.current + minGapPrice) newMax = minPriceRef.current + minGapPrice;
+         setMaxPrice(newMax.toString());
+      },
+    }),
+  []);
 
   // Sync search query parameter from HomeScreen if passed
   useEffect(() => {
@@ -57,7 +141,21 @@ export default function ProductsCatalogScreen({ navigation, route }) {
         api.get('/products/cart').catch(() => ({ success: false, data: [] }))
       ]);
 
-      if (productsRes.success) setProducts(productsRes.data || []);
+      if (productsRes.success) {
+        const prods = productsRes.data || [];
+        setProducts(prods);
+        
+        // Dynamically calculate the real lowest and highest product budgets
+        if (prods.length > 0 && minPrice === '0' && maxPrice === '50000') {
+           const prices = prods.map(p => Number(p.price) || 0);
+           const lowest = Math.floor(Math.min(...prices));
+           const highest = Math.ceil(Math.max(...prices));
+           setAbsoluteMin(lowest);
+           setAbsoluteMax(highest);
+           setMinPrice(lowest.toString());
+           setMaxPrice(highest.toString());
+        }
+      }
       if (categoriesRes.success) setCategories(categoriesRes.data || []);
       if (favRes.success && favRes.data) {
         setFavorites(new Set(favRes.data.map(item => item.productId)));
@@ -78,6 +176,26 @@ export default function ProductsCatalogScreen({ navigation, route }) {
     });
     return unsubscribe;
   }, [navigation, products]);
+
+  // Recalculate price range when category changes
+  useEffect(() => {
+    if (products.length === 0) return;
+    
+    let relevantProducts = products;
+    if (selectedCategory !== 'All') {
+      relevantProducts = products.filter(p => p.categoryId === selectedCategory);
+    }
+    
+    if (relevantProducts.length > 0) {
+      const prices = relevantProducts.map(p => Number(p.price) || 0);
+      const lowest = Math.floor(Math.min(...prices));
+      const highest = Math.ceil(Math.max(...prices));
+      setAbsoluteMin(lowest);
+      setAbsoluteMax(highest);
+      setMinPrice(lowest.toString());
+      setMaxPrice(highest.toString());
+    }
+  }, [selectedCategory, products]);
 
   const toggleFavorite = async (productId) => {
     try {
@@ -119,7 +237,8 @@ export default function ProductsCatalogScreen({ navigation, route }) {
         navigation.navigate('Cart');
       }
     } catch (err) {
-      console.error('Error adding to cart:', err);
+      const errorMsg = err?.message || 'Unable to add item to cart. Please try again.';
+      Alert.alert('Error', errorMsg);
     }
   };
 
@@ -127,23 +246,18 @@ export default function ProductsCatalogScreen({ navigation, route }) {
   const getFilteredProducts = () => {
     let result = products;
 
-    // Filter by Category Tab
-    if (selectedTab !== 'All') {
-      result = result.filter(product => {
-        const category = categories.find(c => c.id === product.categoryId);
-        if (!category) return false;
+    // Filter by Category
+    if (selectedCategory !== 'All') {
+      result = result.filter(product => product.categoryId === selectedCategory);
+    }
 
-        const slug = category.slug;
-        if (selectedTab === 'Men') {
-          return slug === 'sherwanis' || slug === 'blazers-suits';
-        }
-        if (selectedTab === 'Women') {
-          return slug === 'bridal-lehengas' || slug === 'anarkali-sets';
-        }
-        if (selectedTab === 'Girls') {
-          return slug === 'anarkali-sets';
-        }
-        return true;
+    // Filter by Price Range
+    if (minPrice !== '' && maxPrice !== '') {
+      const min = Number(minPrice) || 0;
+      const max = Number(maxPrice) || Infinity;
+      result = result.filter(product => {
+        const price = Number(product.price);
+        return price >= min && price <= max;
       });
     }
 
@@ -157,6 +271,21 @@ export default function ProductsCatalogScreen({ navigation, route }) {
     }
 
     return result;
+  };
+
+  // Helper functions for visual slider positions
+  const getThumbLeftPercent = () => {
+    if (absoluteMax <= absoluteMin) return 0;
+    const currentMin = Number(minPrice) || 0;
+    const minPercent = ((currentMin - absoluteMin) / (absoluteMax - absoluteMin)) * 100;
+    return Math.max(0, Math.min(100, minPercent));
+  };
+
+  const getThumbRightPercent = () => {
+    if (absoluteMax <= absoluteMin) return 100;
+    const currentMax = Number(maxPrice) || 0;
+    const maxPercent = ((currentMax - absoluteMin) / (absoluteMax - absoluteMin)) * 100;
+    return Math.max(0, Math.min(100, maxPercent));
   };
 
   if (loading && products.length === 0) {
@@ -221,8 +350,8 @@ export default function ProductsCatalogScreen({ navigation, route }) {
             </TouchableOpacity>
           )}
         </View>
-        <TouchableOpacity style={[styles.filterSettingsBtn, { backgroundColor: theme.bg.card }, shadows.premium]} activeOpacity={0.7}>
-          <SlidersHorizontal size={18} color="#1e1e1e" />
+        <TouchableOpacity style={[styles.filterSettingsBtn, { backgroundColor: showFilters ? theme.brand[500] : theme.bg.card }, shadows.premium]} activeOpacity={0.7} onPress={() => setShowFilters(v => !v)}>
+          <SlidersHorizontal size={18} color={showFilters ? '#ffffff' : '#1e1e1e'} />
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.wishlistHeaderBtn, { backgroundColor: theme.bg.card }, shadows.premium]} 
@@ -235,59 +364,26 @@ export default function ProductsCatalogScreen({ navigation, route }) {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         
-        {/* Categories Section */}
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-            Categories
-          </Text>
-          <Text style={[styles.seeAllText, { fontFamily: fonts.medium, color: theme.text.muted }]}>
-            See All
-          </Text>
-        </View>
 
-        {/* Categories Tabs Row */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoriesTabsRow}>
-          {['All', 'Men', 'Women', 'Girls'].map((tab) => {
-            const isActive = selectedTab === tab;
-            return (
-              <TouchableOpacity
-                key={tab}
-                style={[
-                  styles.categoryTab,
-                  isActive ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.card },
-                  shadows.premium
-                ]}
-                activeOpacity={0.8}
-                onPress={() => setSelectedTab(tab)}
-              >
-                <Text
-                  style={[
-                    styles.categoryTabText,
-                    { fontFamily: fonts.medium },
-                    isActive ? { color: '#ffffff' } : { color: theme.text.primary }
-                  ]}
-                >
-                  {tab}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
 
         {/* Popular Product Header */}
         <View style={styles.sectionHeader}>
           <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-            Popular Product
+            Products
           </Text>
           <TouchableOpacity 
-            onPress={() => setSelectedTab('All')}
+            onPress={() => { 
+              setSelectedCategory('All'); 
+              setMinPrice(absoluteMin.toString()); 
+              setMaxPrice(absoluteMax.toString()); 
+            }}
             style={[styles.seeAllBtn, { backgroundColor: theme.brand[50] }]}
             activeOpacity={0.7}
           >
             <Text style={[styles.seeAllBtnText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>
-              See All
+              Clear Filters
             </Text>
-            <ChevronRight size={12} color={theme.brand[500]} />
+            <X size={12} color={theme.brand[500]} />
           </TouchableOpacity>
         </View>
 
@@ -330,21 +426,26 @@ export default function ProductsCatalogScreen({ navigation, route }) {
                   <View style={styles.priceRow}>
                     <View style={styles.priceContainer}>
                       <Text style={[styles.productPrice, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-                        ₹{Number(item.price).toLocaleString('en-IN')}
+                        ₹{Number(item.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                       </Text>
                       <Text style={styles.originalPriceText}>
-                        ₹{originalPrice.toLocaleString('en-IN')}
+                        ₹{originalPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                       </Text>
                     </View>
                     <TouchableOpacity
-                      style={[styles.cartBtn, { backgroundColor: theme.brand[500] }]}
+                      style={[
+                        styles.cartBtn,
+                        inCart
+                          ? { backgroundColor: theme.brand[500], borderWidth: 1, borderColor: theme.brand[500] }
+                          : { backgroundColor: '#ffffff', borderWidth: 1, borderColor: theme.brand[500] }
+                      ]}
                       onPress={() => handleAddToCart(item.id)}
                       activeOpacity={0.7}
                     >
                       {inCart ? (
-                        <ShoppingCart size={14} color="#ffffff" />
+                        <CustomCartAddedIcon color="#ffffff" size={18} />
                       ) : (
-                        <ShoppingBag size={14} color="#ffffff" />
+                        <CustomCartAddIcon color={theme.brand[500]} size={18} />
                       )}
                     </TouchableOpacity>
                   </View>
@@ -363,6 +464,165 @@ export default function ProductsCatalogScreen({ navigation, route }) {
           </View>
         )}
       </ScrollView>
+
+      {/* Filters Modal */}
+      <Modal
+        visible={showFilters}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowFilters(false)}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowFilters(false)}>
+          <TouchableOpacity activeOpacity={1} style={[styles.modalContent, { backgroundColor: theme.bg.main }, shadows.premium]}>
+            {/* Custom Tabs Header */}
+            <View style={styles.filterTabsHeader}>
+              <TouchableOpacity onPress={() => setActiveFilterTab('Product')} style={styles.topFilterTabBtn} activeOpacity={0.7}>
+                <Text style={[styles.topFilterTabText, activeFilterTab === 'Product' && styles.topFilterTabTextActive]}>Product Filter</Text>
+                {activeFilterTab === 'Product' && <View style={styles.activeTabIndicator} />}
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setActiveFilterTab('Price')} style={styles.topFilterTabBtn} activeOpacity={0.7}>
+                <Text style={[styles.topFilterTabText, activeFilterTab === 'Price' && styles.topFilterTabTextActive]}>Price Filter</Text>
+                {activeFilterTab === 'Price' && <View style={styles.activeTabIndicator} />}
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+              {activeFilterTab === 'Product' ? (
+                <View>
+                  <Text style={[styles.filterLabel, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                    Category
+                  </Text>
+                  <View style={styles.filterTabsGrid}>
+                    <TouchableOpacity
+                      style={[
+                        styles.filterTabPill,
+                        selectedCategory === 'All' ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.card }
+                      ]}
+                      activeOpacity={0.8}
+                      onPress={() => setSelectedCategory('All')}
+                    >
+                      <Text
+                        style={[
+                          styles.filterTabText,
+                          { fontFamily: fonts.medium },
+                          selectedCategory === 'All' ? { color: '#ffffff' } : { color: theme.text.primary }
+                        ]}
+                      >
+                        All
+                      </Text>
+                    </TouchableOpacity>
+                    {categories.map((cat) => {
+                      const isActive = selectedCategory === cat.id;
+                      return (
+                        <TouchableOpacity
+                          key={cat.id}
+                          style={[
+                            styles.filterTabPill,
+                            isActive ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.card }
+                          ]}
+                          activeOpacity={0.8}
+                          onPress={() => setSelectedCategory(cat.id)}
+                        >
+                          <Text
+                            style={[
+                              styles.filterTabText,
+                              { fontFamily: fonts.medium },
+                              isActive ? { color: '#ffffff' } : { color: theme.text.primary }
+                            ]}
+                          >
+                            {cat.name}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.priceFilterContainer}>
+                  {/* Interactive Slider */}
+                  <View 
+                    style={styles.sliderVisualContainer} 
+                    onLayout={(e) => setSliderWidth(e.nativeEvent.layout.width)}
+                  >
+                    <View style={styles.sliderTrackLine} />
+                    <View style={[styles.sliderActiveLine, { left: `${getThumbLeftPercent()}%`, width: `${Math.max(0, getThumbRightPercent() - getThumbLeftPercent())}%` }]} />
+                    
+                    <View 
+                      style={[styles.sliderThumbContainer, { left: `${getThumbLeftPercent()}%`, zIndex: activeThumb === 'left' ? 20 : 10 }]}
+                      {...leftThumbPanResponder.panHandlers}
+                      hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                    >
+                      <View style={styles.tooltipBubble}>
+                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>◀</Text>
+                      </View>
+                      <View style={styles.tooltipPointer} />
+                      <View style={styles.trackDot} />
+                    </View>
+
+                    <View 
+                      style={[styles.sliderThumbContainer, { left: `${getThumbRightPercent()}%`, zIndex: activeThumb === 'right' ? 20 : 10 }]}
+                      {...rightThumbPanResponder.panHandlers}
+                      hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                    >
+                      <View style={styles.tooltipBubble}>
+                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>▶</Text>
+                      </View>
+                      <View style={styles.tooltipPointer} />
+                      <View style={styles.trackDot} />
+                    </View>
+                  </View>
+
+                  {/* From To Boxes */}
+                  <View style={styles.priceInputsRow}>
+                    <View style={styles.priceInputBox}>
+                      <Text style={styles.priceInputLabel}>From :</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={styles.priceCurrencySymbol}>₹</Text>
+                        <TextInput
+                          style={styles.priceInputValue}
+                          value={minPrice}
+                          onChangeText={setMinPrice}
+                          keyboardType="numeric"
+                        />
+                      </View>
+                    </View>
+                    <View style={styles.priceInputBox}>
+                      <Text style={styles.priceInputLabel}>To :</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={styles.priceCurrencySymbol}>₹</Text>
+                        <TextInput
+                          style={styles.priceInputValue}
+                          value={maxPrice}
+                          onChangeText={setMaxPrice}
+                          keyboardType="numeric"
+                        />
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              )}
+              
+              <View style={styles.filterActionsRow}>
+                <TouchableOpacity 
+                  style={styles.applyFilterBtnBlack} 
+                  onPress={() => setShowFilters(false)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.applyFilterBtnBlackText, { fontFamily: fonts.bold }]}>Apply</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.cancelFilterBtn} 
+                  onPress={() => setShowFilters(false)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.cancelFilterBtnText, { fontFamily: fonts.bold }]}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
     </View>
   );
 }
@@ -427,19 +687,199 @@ const styles = StyleSheet.create({
   seeAllText: {
     fontSize: 12,
   },
-  categoriesTabsRow: {
-    paddingLeft: 20,
-    paddingRight: 8,
-    gap: 10,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    paddingTop: 16,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    maxHeight: '90%',
+  },
+  filterTabsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f4f4f5',
+    paddingHorizontal: 20,
   },
-  categoryTab: {
+  topFilterTabBtn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 16,
+    position: 'relative',
+  },
+  topFilterTabText: {
+    fontSize: 15,
+    color: '#a1a1aa', // gray
+  },
+  topFilterTabTextActive: {
+    color: '#000000',
+    fontWeight: 'bold',
+  },
+  activeTabIndicator: {
+    position: 'absolute',
+    bottom: -1,
+    width: 40,
+    height: 4,
+    backgroundColor: '#000000',
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4,
+  },
+  filterLabel: {
+    fontSize: 16,
     paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 12,
+    marginBottom: 16,
+    marginTop: 8,
   },
-  categoryTabText: {
+  filterTabsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 24,
+    gap: 12,
+    marginBottom: 20,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  filterTabPill: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterTabText: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  priceFilterContainer: {
+    paddingHorizontal: 24,
+    paddingTop: 20,
+  },
+  sliderVisualContainer: {
+    height: 90,
+    justifyContent: 'center',
+    marginBottom: 10,
+    position: 'relative',
+    marginHorizontal: 20,
+  },
+  sliderTrackLine: {
+    height: 2,
+    width: '100%',
+    backgroundColor: '#e5e5e5',
+    position: 'absolute',
+    top: 60,
+  },
+  sliderActiveLine: {
+    height: 4,
+    backgroundColor: '#ea580c',
+    position: 'absolute',
+    top: 59,
+  },
+  sliderThumbContainer: {
+    position: 'absolute',
+    width: 48,
+    height: 60,
+    marginLeft: -24,
+    top: 10,
+    alignItems: 'center',
+  },
+  tooltipBubble: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#ea580c',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tooltipPointer: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 5,
+    borderRightWidth: 5,
+    borderTopWidth: 6,
+    borderStyle: 'solid',
+    backgroundColor: 'transparent',
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#ea580c',
+  },
+  trackDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#ea580c',
+    position: 'absolute',
+    bottom: 4,
+  },
+  priceInputsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 16,
+    marginBottom: 10,
+  },
+  priceInputBox: {
+    flex: 1,
+    backgroundColor: '#f4f4f5',
+    padding: 16,
+    borderRadius: 16,
+  },
+  priceInputLabel: {
+    color: '#71717a',
     fontSize: 13,
+    marginBottom: 6,
+  },
+  priceCurrencySymbol: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#000000',
+    marginRight: 4,
+  },
+  priceInputValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#000000',
+    padding: 0,
+    flex: 1,
+  },
+  filterActionsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 24,
+    marginTop: 30,
+    gap: 16,
+  },
+  applyFilterBtnBlack: {
+    flex: 2,
+    backgroundColor: '#000000',
+    borderRadius: 16,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  applyFilterBtnBlackText: {
+    color: '#ffffff',
+    fontSize: 16,
+  },
+  cancelFilterBtn: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e5e5',
+    borderRadius: 16,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelFilterBtnText: {
+    color: '#000000',
+    fontSize: 16,
   },
   gridContainer: {
     flexDirection: 'row',
@@ -500,9 +940,9 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   cartBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 9,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
