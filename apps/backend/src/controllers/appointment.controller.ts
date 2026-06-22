@@ -4,6 +4,7 @@ import prisma from '../config/db.js';
 import { Role, AppointmentStatus, AppointmentType } from '@prisma/client';
 import { getIO } from '../socket/socket.handler.js';
 import { createAuditLog } from '../utils/audit.js';
+import redis from '../config/redis.js';
 
 export const appointmentCreateSchema = z.object({
   body: z.object({
@@ -12,6 +13,9 @@ export const appointmentCreateSchema = z.object({
     productType: z.string().min(1),
     type: z.enum(['MEASUREMENT', 'CONSULTATION', 'PRODUCT_SELECTION']),
     notes: z.string().optional(),
+    userId: z.string().uuid().optional(),
+    adminOverride: z.boolean().optional(),
+    staffId: z.string().uuid().optional(),
   }),
 });
 
@@ -87,13 +91,38 @@ export class AppointmentController {
    */
   static async createAppointment(req: Request, res: Response, next: NextFunction) {
     const user = req.user!;
-    const { date, timeSlot, productType, type, notes } = req.body;
+    const { date, timeSlot, productType, type, notes, userId, adminOverride, staffId } = req.body;
+
+    const appointmentDate = new Date(date);
+    const lockKey = `lock:appointment:${appointmentDate.toISOString()}:${timeSlot}`;
+    let lockAcquired = false;
 
     try {
-      const appointmentDate = new Date(date);
+      const settings = await prisma.systemSettings.findUnique({ where: { id: 'default' } });
+      const maxSlots = settings?.maxBookingsPerSlot || 5;
+      const bypassLimits = adminOverride && (user.role === Role.ADMIN || user.role === Role.SUPERADMIN || user.role === Role.STAFF);
 
-      // Check slot constraint to prevent double-booking
-      const existingAppointment = await prisma.appointment.findFirst({
+      if (!bypassLimits) {
+        // Acquire Redis lock
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const resLock = await redis.set(lockKey, 'locked', 'PX', 3000, 'NX');
+          if (resLock === 'OK') {
+            lockAcquired = true;
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 50 + Math.random() * 100));
+        }
+
+        if (!lockAcquired) {
+          return res.status(429).json({
+            success: false,
+            message: 'Too many concurrent booking requests for this slot. Please try again.',
+          });
+        }
+      }
+
+      // Check slot constraint to allow up to 5 bookings per slot
+      const slotCount = await prisma.appointment.count({
         where: {
           date: appointmentDate,
           timeSlot,
@@ -101,39 +130,54 @@ export class AppointmentController {
         },
       });
 
-      if (existingAppointment) {
+      if (slotCount >= maxSlots && !bypassLimits) {
+        if (lockAcquired) await redis.del(lockKey);
         return res.status(409).json({
           success: false,
-          message: 'The requested appointment slot is already booked. Please choose another time.',
+          message: `The requested appointment slot is fully booked (maximum ${maxSlots} bookings). Please choose another time.`,
         });
+      }
+
+      let targetUserId = user.id;
+      if (user.role !== Role.CUSTOMER) {
+        targetUserId = userId || null;
       }
 
       const appointment = await prisma.appointment.create({
         data: {
-          userId: user.id,
+          userId: targetUserId,
           date: appointmentDate,
           timeSlot,
           productType,
           type: type as AppointmentType,
           notes,
+          assignedStaffId: staffId,
         },
-        include: { user: { select: { fullName: true, email: true } } },
+        include: { user: { select: { fullName: true, email: true } }, assignedStaff: { select: { fullName: true } } },
       });
+
+      if (lockAcquired) {
+        await redis.del(lockKey);
+      }
 
       // Broadcast appointment:created event to admins
       const io = getIO();
       if (io) {
         io.to('admins').emit('appointment:created', {
           id: appointment.id,
-          customerName: appointment.user.fullName,
+          customerName: appointment.user ? appointment.user.fullName : 'Walk-In Customer',
           date: appointment.date,
           timeSlot: appointment.timeSlot,
           type: appointment.type,
+          assignedStaff: appointment.assignedStaff ? appointment.assignedStaff.fullName : null,
         });
       }
 
       return res.status(201).json({ success: true, data: appointment });
     } catch (error) {
+      if (lockAcquired) {
+        await redis.del(lockKey).catch(() => {});
+      }
       next(error);
     }
   }
@@ -145,6 +189,9 @@ export class AppointmentController {
     const user = req.user!;
     const { id } = req.params;
     const { date, timeSlot, status, notes } = req.body;
+
+    let lockKey: string | null = null;
+    let lockAcquired = false;
 
     try {
       const appointment = await prisma.appointment.findUnique({
@@ -174,12 +221,31 @@ export class AppointmentController {
         }
       }
 
-      // Check double-booking slot constraints if changing date/time
+      // Check double-booking slot constraints if changing date/time (allow up to 5)
       if (date || timeSlot) {
         const checkDate = date ? new Date(date) : appointment.date;
         const checkSlot = timeSlot || appointment.timeSlot;
 
-        const conflict = await prisma.appointment.findFirst({
+        lockKey = `lock:appointment:${new Date(checkDate).toISOString()}:${checkSlot}`;
+
+        // Acquire Redis lock
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const resLock = await redis.set(lockKey, 'locked', 'PX', 3000, 'NX');
+          if (resLock === 'OK') {
+            lockAcquired = true;
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 50 + Math.random() * 100));
+        }
+
+        if (!lockAcquired) {
+          return res.status(429).json({
+            success: false,
+            message: 'Too many concurrent booking requests for this slot. Please try again.',
+          });
+        }
+
+        const slotCount = await prisma.appointment.count({
           where: {
             id: { not: id },
             date: checkDate,
@@ -188,10 +254,14 @@ export class AppointmentController {
           },
         });
 
-        if (conflict) {
+        const settings = await prisma.systemSettings.findUnique({ where: { id: 'default' } });
+        const maxSlots = settings?.maxBookingsPerSlot || 5;
+
+        if (slotCount >= maxSlots) {
+          if (lockAcquired) await redis.del(lockKey);
           return res.status(409).json({
             success: false,
-            message: 'Slot conflict: The updated time slot is already booked.',
+            message: `Slot conflict: The updated time slot is fully booked (maximum ${maxSlots} bookings).`,
           });
         }
       }
@@ -205,6 +275,10 @@ export class AppointmentController {
           ...(notes !== undefined && { notes }),
         },
       });
+
+      if (lockAcquired && lockKey) {
+        await redis.del(lockKey);
+      }
 
       if ((status === 'CANCELLED' || status === AppointmentStatus.CANCELLED) && user.role !== Role.CUSTOMER) {
         await createAuditLog({
@@ -222,6 +296,9 @@ export class AppointmentController {
 
       return res.status(200).json({ success: true, data: updated });
     } catch (error) {
+      if (lockAcquired && lockKey) {
+        await redis.del(lockKey).catch(() => {});
+      }
       next(error);
     }
   }

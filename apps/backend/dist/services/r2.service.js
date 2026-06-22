@@ -48,12 +48,10 @@ class R2Service {
         // Local Storage Fallback
         try {
             const uploadsDir = path_1.default.resolve(process.cwd(), 'uploads');
-            if (!fs_1.default.existsSync(uploadsDir)) {
-                fs_1.default.mkdirSync(uploadsDir, { recursive: true });
-            }
+            await fs_1.default.promises.mkdir(uploadsDir, { recursive: true });
             const fileName = `${Date.now()}-${key.replace(/\//g, '_')}`;
             const filePath = path_1.default.join(uploadsDir, fileName);
-            fs_1.default.writeFileSync(filePath, buffer);
+            await fs_1.default.promises.writeFile(filePath, buffer);
             return `http://localhost:${env_js_1.default.PORT}/uploads/${fileName}`;
         }
         catch (error) {
@@ -70,9 +68,7 @@ class R2Service {
             try {
                 const fileName = fileUrl.split('/uploads/')[1];
                 const filePath = path_1.default.join(process.cwd(), 'uploads', fileName);
-                if (fs_1.default.existsSync(filePath)) {
-                    fs_1.default.unlinkSync(filePath);
-                }
+                await fs_1.default.promises.unlink(filePath).catch(() => { });
             }
             catch (error) {
                 logger_js_1.default.error('Failed to delete local file', { metadata: { error: error.message } });

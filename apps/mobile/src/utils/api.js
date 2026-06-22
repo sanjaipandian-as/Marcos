@@ -7,40 +7,61 @@ import Constants from 'expo-constants';
 // Auto-detects local host IP from Expo Constants when running in local development mode
 // so that testing on physical mobile devices connects successfully to the server.
 const getApiUrl = () => {
-  // Manual overrides based on user's ipconfig:
-  // 10.147.177.142 -> Ethernet adapter Ethernet 3 (Most likely for physical device on network)
-  // 172.22.192.1   -> vEthernet (WSL/Hyper-V)
-  const PRIMARY_IP = '192.168.29.63';
-  const SECONDARY_IP = '172.22.192.1';
+  // If running in production mode (production APK/AAB or App Store bundle), use the public production URL
+  if (typeof __DEV__ !== 'undefined' && !__DEV__) {
+    const prodUrl = 'https://api.marcosbespoke.com/api/v1'; // Replace with your production domain
+    console.log('[API] Production build: using server URL:', prodUrl);
+    return prodUrl;
+  }
 
-  // 1. For Android (Emulator/USB-Device), using localhost with 'adb reverse tcp:5000 tcp:5000' is the most reliable.
-  // This bypasses Windows Defender Firewall blocking incoming connections on the host machine.
-  if (Platform.OS === 'android') {
+  // ── Connection Strategy (Development) ────────────────────────────────────────
+  // BEST: Use 'adb reverse tcp:5000 tcp:5000' (USB physical device) → set to 'localhost'
+  // ALT:  Use your machine's LAN IP (Wi-Fi/Ethernet) for physical device on same network.
+  //
+  // Current active LAN IP: 192.168.29.63 (Wi-Fi)
+  // adb reverse IS ACTIVE → using localhost (most reliable for USB).
+  const PRIMARY_IP = 'localhost'; // ← adb reverse active
+  const SECONDARY_IP = '192.168.29.63'; // LAN IP fallback if adb reverse fails
+
+  // 1. If adb reverse is active (PRIMARY_IP = 'localhost') — most reliable for USB devices.
+  if (PRIMARY_IP === 'localhost') {
     const url = 'http://localhost:5000/api/v1';
-    console.log('[API] Android detected. Using localhost (Run: adb reverse tcp:5000 tcp:5000):', url);
+    console.log('[API] Using adb reverse tunnel (localhost):', url);
     return url;
   }
 
   // 2. Try to get the host machine's IP from Expo Constants.
+  // This auto-detects the IP for physical devices / emulators on the same Wi-Fi network.
   const hostUri = Constants.expoConfig?.hostUri || Constants.manifest?.hostUri;
 
   if (hostUri) {
     const localIp = hostUri.split(':')[0];
     if (localIp && localIp !== 'localhost' && localIp !== '127.0.0.1') {
       const url = `http://${localIp}:5000/api/v1`;
-      console.log('[API] Using Expo hostUri IP:', url);
+      console.log('[API] Auto-detected Expo hostUri IP:', url);
       return url;
     }
   }
 
-  // 3. Fallback to the primary manually provided IPv4 address (Ethernet 3)
+  // 3. Android EMULATOR loopback — 10.0.2.2 maps to host's 127.0.0.1 inside the emulator.
+  // NOTE: Only use this for emulators, NOT physical devices (10.0.2.2 won't work on real devices).
+  // To detect emulator: device model is typically 'sdk_gphone' or similar.
+  const isEmulator = Constants.expoConfig?.hostUri?.includes('10.0.2.2') ||
+    Constants.manifest?.hostUri?.includes('10.0.2.2');
+  if (Platform.OS === 'android' && isEmulator) {
+    const url = 'http://10.0.2.2:5000/api/v1';
+    console.log('[API] Android emulator: using 10.0.2.2 loopback:', url);
+    return url;
+  }
+
+  // 4. Fallback to the primary manually provided IPv4 address
   if (PRIMARY_IP) {
     const url = `http://${PRIMARY_IP}:5000/api/v1`;
     console.log('[API] Using primary manual IPv4 fallback:', url);
     return url;
   }
 
-  // 4. Fallback to secondary (WSL)
+  // 5. Fallback to secondary
   if (SECONDARY_IP) {
     const url = `http://${SECONDARY_IP}:5000/api/v1`;
     console.log('[API] Using secondary manual IPv4 fallback:', url);
@@ -65,9 +86,14 @@ const api = axios.create({
 });
 
 let logoutHandler = null;
+let tokenRefreshHandler = null;
 
 export const setLogoutHandler = (handler) => {
   logoutHandler = handler;
+};
+
+export const setTokenRefreshHandler = (handler) => {
+  tokenRefreshHandler = handler;
 };
 
 // Request interceptor: Attach Access Token
@@ -86,6 +112,19 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// Token refresh mutex — prevents concurrent refresh storms that would trigger RTR security revocation
+let isRefreshing = false;
+let refreshSubscribers = [];
+
+function onTokenRefreshed(newToken) {
+  refreshSubscribers.forEach((callback) => callback(newToken));
+  refreshSubscribers = [];
+}
+
+function addRefreshSubscriber(callback) {
+  refreshSubscribers.push(callback);
+}
+
 // Response interceptor: Handle expired tokens & auto-refresh
 api.interceptors.response.use(
   (response) => response.data,
@@ -103,6 +142,19 @@ api.interceptors.response.use(
 
     if (error.response?.status === 401 && !originalRequest._retry && !isAuthRoute) {
       originalRequest._retry = true;
+
+      // If a refresh is already in progress, queue this request
+      if (isRefreshing) {
+        return new Promise((resolve) => {
+          addRefreshSubscriber((newToken) => {
+            originalRequest.headers.Authorization = `Bearer ${newToken}`;
+            resolve(api(originalRequest));
+          });
+        });
+      }
+
+      isRefreshing = true;
+
       try {
         const refreshToken = await AsyncStorage.getItem('refreshToken');
         if (!refreshToken) {
@@ -126,10 +178,21 @@ api.interceptors.response.use(
         await AsyncStorage.setItem('refreshToken', newRefreshToken);
         await AsyncStorage.setItem('userProfile', JSON.stringify(user));
 
+        if (tokenRefreshHandler) {
+          tokenRefreshHandler(newAccessToken);
+        }
+
+        // Notify all queued requests with the new token
+        isRefreshing = false;
+        onTokenRefreshed(newAccessToken);
+
         // Retry original request with new token
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
         return api(originalRequest);
       } catch (refreshError) {
+        isRefreshing = false;
+        refreshSubscribers = [];
+
         // If refresh fails, clear credentials and sign out
         await AsyncStorage.removeItem('accessToken');
         await AsyncStorage.removeItem('refreshToken');

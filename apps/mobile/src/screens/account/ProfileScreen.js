@@ -14,18 +14,15 @@ import { useTheme } from '../../styles/ThemeContext';
 import api from '../../utils/api';
 import {
   ChevronLeft,
-  Menu,
   User,
   Bell,
-  Mail,
-  MapPin,
   LogOut,
   Phone,
   Edit,
   ChevronRight,
   Shield,
-  LifeBuoy,
-  CreditCard
+  Package,
+  Gift
 } from 'lucide-react-native';
 
 export default function ProfileScreen({ navigation, onLogout }) {
@@ -134,9 +131,7 @@ export default function ProfileScreen({ navigation, onLogout }) {
         <Text style={[styles.headerTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
           Account
         </Text>
-        <TouchableOpacity style={[styles.headerBtn, shadows.premium]}>
-          <Menu size={20} color="#1e1e1e" />
-        </TouchableOpacity>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -159,7 +154,7 @@ export default function ProfileScreen({ navigation, onLogout }) {
               </Text>
             </View>
           </View>
-          <TouchableOpacity style={[styles.editBtn, { borderColor: theme.border }]} activeOpacity={0.7}>
+          <TouchableOpacity style={[styles.editBtn, { borderColor: theme.border }]} activeOpacity={0.7} onPress={() => navigation.navigate('AccountDetails')}>
             <Edit size={16} color={theme.text.primary} />
           </TouchableOpacity>
         </View>
@@ -169,20 +164,38 @@ export default function ProfileScreen({ navigation, onLogout }) {
           Settings
         </Text>
         <View style={styles.settingsList}>
+          {/* My Orders - Special prominent card */}
+          <TouchableOpacity
+            style={[styles.ordersCard, { backgroundColor: theme.brand[500] }, shadows.premium]}
+            onPress={() => navigation.navigate('Orders')}
+            activeOpacity={0.85}
+          >
+            <View style={styles.ordersCardLeft}>
+              <View style={styles.ordersIconBg}>
+                <Package size={20} color={theme.brand[500]} />
+              </View>
+              <View>
+                <Text style={[styles.ordersLabel, { fontFamily: fonts.bold }]}>My Orders</Text>
+                <Text style={[styles.ordersSublabel, { fontFamily: fonts.medium }]}>Track & view your orders</Text>
+              </View>
+            </View>
+            <ChevronRight size={18} color="#ffffff" />
+          </TouchableOpacity>
+
           {renderSettingItem(
             <User size={18} color="#1e1e1e" />,
             'Account Details',
             () => navigation.navigate('AccountDetails')
           )}
           {renderSettingItem(
+            <Gift size={18} color="#1e1e1e" />,
+            'Invite & Earn',
+            () => navigation.navigate('Loyalty')
+          )}
+          {renderSettingItem(
             <Bell size={18} color="#1e1e1e" />,
             'Notifications',
             () => navigation.navigate('NotificationHistory')
-          )}
-          {renderSettingItem(
-            <CreditCard size={18} color="#1e1e1e" />,
-            'Payments',
-            () => navigation.navigate('Payments')
           )}
           {renderSettingItem(
             <Shield size={18} color="#1e1e1e" />,
@@ -342,5 +355,35 @@ const styles = StyleSheet.create({
   },
   settingLabel: {
     fontSize: 14,
+  },
+  ordersCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  ordersCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  ordersIconBg: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ordersLabel: {
+    fontSize: 15,
+    color: '#ffffff',
+  },
+  ordersSublabel: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 2,
   },
 });

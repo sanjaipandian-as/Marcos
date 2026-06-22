@@ -14,6 +14,7 @@ const envSchema = zod_1.z.object({
     REDIS_URL: zod_1.z.string().url(),
     JWT_ACCESS_SECRET: zod_1.z.string().min(8),
     JWT_REFRESH_SECRET: zod_1.z.string().min(8),
+    ALLOWED_ORIGINS: zod_1.z.string().default(''),
     // Cloudflare R2
     CLOUDFLARE_R2_ACCESS_KEY: zod_1.z.string().optional(),
     CLOUDFLARE_R2_SECRET_KEY: zod_1.z.string().optional(),

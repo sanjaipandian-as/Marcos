@@ -89,14 +89,14 @@ export default function AppointmentManager() {
     switch (status) {
       case 'CONFIRMED':
       case 'COMPLETED':
-        return 'bg-emerald-50 text-emerald-750 border-emerald-200';
+        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
       case 'ASSIGNED':
       case 'IN_PROGRESS':
-        return 'bg-blue-50 text-blue-750 border-blue-200';
+        return 'bg-blue-50 text-blue-700 border-blue-200';
       case 'PENDING':
-        return 'bg-amber-50 text-amber-755 border-amber-200';
+        return 'bg-amber-50 text-amber-700 border-amber-200';
       default:
-        return 'bg-red-50 text-red-750 border-red-200';
+        return 'bg-red-50 text-red-700 border-red-200';
     }
   };
 
@@ -110,7 +110,7 @@ export default function AppointmentManager() {
         <div className="flex gap-2">
           <button
             onClick={loadData}
-            className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-550 rounded-xl text-xs font-bold transition-all shadow-sm"
+            className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl text-xs font-bold transition-all shadow-sm"
           >
             Refresh Logs
           </button>
@@ -123,7 +123,7 @@ export default function AppointmentManager() {
           className={`pb-3 text-sm font-extrabold transition-all border-b-2 -mb-[2px] focus:outline-none flex items-center gap-2 ${
             activeTab === 'fittings'
               ? 'border-brand-500 text-brand-600'
-              : 'border-transparent text-slate-405 hover:text-slate-650'
+              : 'border-transparent text-slate-400 hover:text-slate-600'
           }`}
         >
           <Calendar className="w-5 h-5" />
@@ -134,7 +134,7 @@ export default function AppointmentManager() {
           className={`pb-3 text-sm font-extrabold transition-all border-b-2 -mb-[2px] focus:outline-none flex items-center gap-2 ${
             activeTab === 'visits'
               ? 'border-brand-500 text-brand-600'
-              : 'border-transparent text-slate-405 hover:text-slate-650'
+              : 'border-transparent text-slate-400 hover:text-slate-600'
           }`}
         >
           <Briefcase className="w-5 h-5" />
@@ -162,7 +162,7 @@ export default function AppointmentManager() {
                 appointments.map((app) => (
                   <div 
                     key={app.id} 
-                    className="p-5 rounded-2xl border border-slate-150 bg-slate-50/10 hover:bg-slate-50/30 hover:border-slate-300 transition-all shadow-sm hover:shadow-md flex flex-col justify-between space-y-4"
+                    className="p-5 rounded-2xl border border-slate-200 bg-slate-50/10 hover:bg-slate-50/30 hover:border-slate-300 transition-all shadow-sm hover:shadow-md flex flex-col justify-between space-y-4"
                   >
                     <div className="space-y-2">
                       <div className="flex justify-between items-start gap-4">
@@ -175,12 +175,12 @@ export default function AppointmentManager() {
                         </span>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-550 font-semibold pt-1">
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 font-semibold pt-1">
                         <span className="flex items-center gap-1 bg-slate-100/80 px-2 py-1 rounded-lg">
                           <Clock className="w-3.5 h-3.5 text-slate-400" />
                           {new Date(app.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} at {app.timeSlot}
                         </span>
-                        <span className="bg-brand-55 text-brand-700 py-1 px-2.5 rounded-lg uppercase text-[10px] tracking-wide border border-brand-100">
+                        <span className="bg-brand-50 text-brand-700 py-1 px-2.5 rounded-lg uppercase text-[10px] tracking-wide border border-brand-100">
                           {app.type.replace(/_/g, ' ')}
                         </span>
                       </div>
@@ -197,13 +197,13 @@ export default function AppointmentManager() {
                       <div className="grid grid-cols-2 gap-2 pt-2">
                         <button
                           onClick={() => handleUpdateAppStatus(app.id, 'CONFIRMED')}
-                          className="w-full py-2 rounded-xl bg-emerald-650 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-all"
+                          className="w-full py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-all"
                         >
                           Confirm Slot
                         </button>
                         <button
                           onClick={() => handleUpdateAppStatus(app.id, 'CANCELLED')}
-                          className="w-full py-2 rounded-xl border border-slate-205 hover:bg-slate-50 text-slate-400 text-xs font-bold transition-all"
+                          className="w-full py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-400 text-xs font-bold transition-all"
                         >
                           Reject
                         </button>
@@ -233,13 +233,13 @@ export default function AppointmentManager() {
                 visits.map((visit) => (
                   <div 
                     key={visit.id} 
-                    className="p-5 rounded-2xl border border-slate-150 bg-slate-50/10 hover:bg-slate-50/30 hover:border-slate-300 transition-all shadow-sm hover:shadow-md flex flex-col justify-between space-y-4"
+                    className="p-5 rounded-2xl border border-slate-200 bg-slate-50/10 hover:bg-slate-50/30 hover:border-slate-300 transition-all shadow-sm hover:shadow-md flex flex-col justify-between space-y-4"
                   >
                     <div className="space-y-3">
                       <div className="flex justify-between items-start gap-4">
                         <div>
                           <span className="text-base font-extrabold text-slate-80 block leading-tight">{visit.customerName}</span>
-                          <div className="text-xs text-slate-505 mt-1.5 flex items-start gap-1">
+                          <div className="text-xs text-slate-500 mt-1.5 flex items-start gap-1">
                             <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
                             <span className="leading-tight">{visit.address}</span>
                           </div>
@@ -249,12 +249,12 @@ export default function AppointmentManager() {
                         </span>
                       </div>
 
-                      <div className="text-xs text-slate-655 bg-white border border-slate-100 rounded-xl p-3 leading-relaxed">
+                      <div className="text-xs text-slate-600 bg-white border border-slate-100 rounded-xl p-3 leading-relaxed">
                         <strong className="text-slate-700 block mb-1">Tailoring Requirements:</strong>
                         {visit.requirements}
                       </div>
 
-                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-450 font-bold pt-1 border-t border-slate-100/60">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 font-bold pt-1 border-t border-slate-100/60">
                         <span className="bg-slate-100 px-2 py-1 rounded-lg text-slate-600">
                           Preferred: {new Date(visit.preferredDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                         </span>
@@ -270,7 +270,7 @@ export default function AppointmentManager() {
                           setActiveVisitId(visit.id);
                           setReportVisitId(null);
                         }}
-                        className="w-full py-2 rounded-xl border border-slate-250 hover:bg-slate-550 text-slate-700 text-xs font-bold transition-all mt-2"
+                        className="w-full py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-bold transition-all mt-2"
                       >
                         Assign Tailor Member
                       </button>
@@ -289,8 +289,8 @@ export default function AppointmentManager() {
                     )}
 
                     {visit.status === 'COMPLETED' && visit.completionNotes && (
-                      <div className="p-3 bg-emerald-50/30 border border-emerald-100 rounded-xl text-xs text-slate-655 space-y-1.5 mt-2">
-                        <p className="font-extrabold text-slate-750 flex items-center gap-1.5">
+                      <div className="p-3 bg-emerald-50/30 border border-emerald-100 rounded-xl text-xs text-slate-600 space-y-1.5 mt-2">
+                        <p className="font-extrabold text-slate-700 flex items-center gap-1.5 animate-pulse">
                           <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
                           <span>Completion Report Summary:</span>
                         </p>
@@ -322,7 +322,7 @@ export default function AppointmentManager() {
             
             <form onSubmit={handleAssignStaff} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-450 uppercase">Select Staff Member</label>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Select Staff Member</label>
                 <select
                   value={selectedStaffId}
                   onChange={e => setSelectedStaffId(e.target.value)}
@@ -350,7 +350,7 @@ export default function AppointmentManager() {
           <div className="bg-white border border-slate-200 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4">
             <div className="flex justify-between items-center pb-2 border-b border-slate-100">
               <h4 className="font-extrabold text-slate-800 text-sm">Submit Visit Completion Report</h4>
-              <button onClick={() => setReportVisitId(null)} className="text-slate-400 hover:text-slate-650 text-xs font-extrabold">Close</button>
+              <button onClick={() => setReportVisitId(null)} className="text-slate-400 hover:text-slate-600 text-xs font-extrabold">Close</button>
             </div>
             
             <form onSubmit={handleCompleteVisit} className="space-y-4">

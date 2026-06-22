@@ -75,7 +75,7 @@ export default function Login({ onLoginSuccess }) {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="marcos@zipppy.com"
+                  placeholder="marcos@zippy.com"
                   className="w-full pl-10 pr-4 py-3 rounded-2xl bg-slate-950/30 border border-slate-700/60 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25 text-white placeholder-slate-500 text-xs font-semibold transition-all duration-300"
                 />
                 <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5" />

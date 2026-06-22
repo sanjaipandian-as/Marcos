@@ -90,15 +90,31 @@ export class NotificationController {
    */
   static async getHistory(req: Request, res: Response, next: NextFunction) {
     const user = req.user!;
+    const { page = 1, limit = 20 } = req.query as any;
+    const skip = (Number(page) - 1) * Number(limit);
 
     try {
-      const history = await prisma.notificationRecipient.findMany({
-        where: { userId: user.id },
-        include: { notification: true },
-        orderBy: { notification: { createdAt: 'desc' } },
-      });
+      const [history, total] = await Promise.all([
+        prisma.notificationRecipient.findMany({
+          where: { userId: user.id },
+          include: { notification: true },
+          orderBy: { notification: { createdAt: 'desc' } },
+          skip,
+          take: Number(limit),
+        }),
+        prisma.notificationRecipient.count({ where: { userId: user.id } }),
+      ]);
 
-      return res.status(200).json({ success: true, data: history });
+      return res.status(200).json({
+        success: true,
+        data: history,
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total,
+          pages: Math.ceil(total / Number(limit)),
+        },
+      });
     } catch (error) {
       next(error);
     }

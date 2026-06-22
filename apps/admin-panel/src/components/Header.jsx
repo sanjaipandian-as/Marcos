@@ -37,7 +37,8 @@ export default function Header({
   setIsSidebarOpen,
   apiMode,
   onToggleLiveFeed,
-  hasUnreadAlerts
+  hasUnreadAlerts,
+  currentUser
 }) {
   const [copied, setCopied] = useState(false);
   const [showMailDropdown, setShowMailDropdown] = useState(false);
@@ -216,8 +217,12 @@ export default function Header({
             className="w-8 h-8 sm:w-9 h-9 rounded-xl object-cover ring-2 ring-slate-100"
           />
           <div className="hidden lg:flex flex-col">
-            <span className="text-xs font-bold text-slate-800 leading-tight">Marcus George</span>
-            <span className="text-[10px] text-slate-400 leading-none">Super Admin</span>
+            <span className="text-xs font-bold text-slate-800 leading-tight">
+              {currentUser?.fullName || 'Marcus George'}
+            </span>
+            <span className="text-[10px] text-slate-400 leading-none">
+              {currentUser?.role === 'SUPERADMIN' ? 'Super Admin' : currentUser?.role === 'ADMIN' ? 'Admin' : currentUser?.role === 'STAFF' ? 'Staff' : 'Guest'}
+            </span>
           </div>
         </div>
 

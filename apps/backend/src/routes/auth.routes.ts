@@ -1,5 +1,19 @@
 import { Router } from 'express';
-import { AuthController, registerSchema, loginSchema, otpSendSchema, otpVerifySchema, forgotPasswordSchema, resetPasswordSchema, updateProfileSchema, verifyResetOtpSchema } from '../controllers/auth.controller.js';
+import { 
+  AuthController, 
+  registerSchema, 
+  loginSchema, 
+  otpSendSchema, 
+  otpVerifySchema, 
+  forgotPasswordSchema, 
+  resetPasswordSchema, 
+  updateProfileSchema, 
+  verifyResetOtpSchema, 
+  redeemPointsSchema,
+  requestContactUpdateSchema,
+  confirmContactUpdateSchema,
+  verifyPasswordSchema
+} from '../controllers/auth.controller.js';
 import { validate } from '../middlewares/validate.middleware.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
 import { sensitiveRateLimiter } from '../middlewares/rateLimit.middleware.js';
@@ -19,6 +33,13 @@ router.post('/forgot-password/verify', sensitiveRateLimiter, validate(verifyRese
 router.post('/reset-password', sensitiveRateLimiter, validate(resetPasswordSchema), AuthController.resetPassword);
 router.get('/profile', authenticate, AuthController.getProfile);
 router.put('/profile', authenticate, validate(updateProfileSchema), AuthController.updateProfile);
+router.post('/profile/verify-password', authenticate, validate(verifyPasswordSchema), AuthController.verifyProfilePassword);
+router.post('/profile/request-update', authenticate, validate(requestContactUpdateSchema), AuthController.requestContactUpdate);
+router.post('/profile/confirm-update', authenticate, validate(confirmContactUpdateSchema), AuthController.confirmContactUpdate);
 router.delete('/delete-account', authenticate, AuthController.deleteAccount);
+
+// Loyalty Points Redemption route
+router.post('/loyalty/redeem', authenticate, validate(redeemPointsSchema), AuthController.redeemPoints);
+router.get('/loyalty/coupons', authenticate, AuthController.listUserCoupons);
 
 export default router;

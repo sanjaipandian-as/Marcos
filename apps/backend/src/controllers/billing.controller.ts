@@ -7,6 +7,7 @@ import { computeStockStatus } from './product.controller.js';
 import { getIO } from '../socket/socket.handler.js';
 import crypto from 'crypto';
 import { createAuditLog } from '../utils/audit.js';
+import redis from '../config/redis.js';
 
 export const invoiceCreateSchema = z.object({
   body: z.object({
@@ -20,6 +21,13 @@ export const invoiceCreateSchema = z.object({
     discountAmount: z.coerce.number().nonnegative().default(0),
     paymentMethod: z.enum(['CASH', 'CARD', 'ONLINE']),
     isOfflineSales: z.boolean().default(true),
+    status: z.enum(['PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED']).optional(),
+    isQuickOrder: z.boolean().optional(),
+    quickOrderReason: z.string().optional(),
+    quickOrderExpectedDate: z.string().optional(),
+  }).refine(data => !data.isQuickOrder || (data.quickOrderReason && data.quickOrderReason.trim().length > 0), {
+    message: "Reason is required for quick orders",
+    path: ["quickOrderReason"]
   }),
 });
 
@@ -29,7 +37,7 @@ export class BillingController {
    * Creates an Order, adjusts inventory, and queues BullMQ background tasks.
    */
   static async createInvoice(req: Request, res: Response, next: NextFunction) {
-    const { userId, customerName, items, discountAmount, paymentMethod, isOfflineSales } = req.body;
+    const { userId, customerName, items, discountAmount, paymentMethod, isOfflineSales, status, isQuickOrder, quickOrderReason, quickOrderExpectedDate } = req.body;
 
     try {
       // 1. Process inventory adjust and Order insertion inside a database transaction
@@ -42,19 +50,36 @@ export class BillingController {
             throw new Error(`Product ${item.productId} not found`);
           }
 
-          if (product.inventoryQty < item.quantity) {
+          // Atomic conditional update to prevent concurrent double-booking race conditions
+          const updateResult = await tx.product.updateMany({
+            where: {
+              id: item.productId,
+              inventoryQty: { gte: item.quantity },
+            },
+            data: {
+              inventoryQty: { decrement: item.quantity },
+              salesCount: { increment: item.quantity },
+            },
+          });
+
+          if (updateResult.count === 0) {
             throw new Error(`Insufficient inventory for ${product.name}. Required: ${item.quantity}, Available: ${product.inventoryQty}`);
           }
 
-          // Adjust Inventory
-          const newQty = product.inventoryQty - item.quantity;
-          await tx.product.update({
+          // Fetch the updated inventory value to set stock status
+          const updatedProduct = await tx.product.findUnique({
             where: { id: item.productId },
-            data: {
-              inventoryQty: newQty,
-              stockStatus: computeStockStatus(newQty),
-            },
+            select: { inventoryQty: true },
           });
+
+          if (updatedProduct) {
+            await tx.product.update({
+              where: { id: item.productId },
+              data: {
+                stockStatus: computeStockStatus(updatedProduct.inventoryQty),
+              },
+            });
+          }
 
           subtotal += Number(item.price) * item.quantity;
         }
@@ -65,13 +90,13 @@ export class BillingController {
         const totalAmount = subtotal;
         const payableAmount = (subtotal - discountAmount) + taxAmount;
 
-        const invoiceNumber = `INV-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+        const invoiceNumber = `INV-${Date.now()}-${crypto.randomUUID().substring(0, 8).toUpperCase()}`;
 
         // Create Order
         const newOrder = await tx.order.create({
           data: {
             userId,
-            status: 'PAID', // mark as PAID since invoice is generated
+            status: status || 'PAID', // use provided status or default to PAID
             paymentStatus: 'COMPLETED',
             totalAmount,
             taxAmount,
@@ -81,6 +106,10 @@ export class BillingController {
             isOfflineSales,
             invoiceNumber,
             gatewayResponse: customerName ? { guestCustomerName: customerName } : undefined,
+            isQuickOrder: isQuickOrder || false,
+            quickOrderReason: isQuickOrder ? quickOrderReason : null,
+            quickOrderExpectedDate: isQuickOrder && quickOrderExpectedDate ? new Date(quickOrderExpectedDate) : null,
+            quickOrderStatus: isQuickOrder ? 'PENDING' : null,
           },
           include: {
             orderItems: true,
@@ -88,8 +117,9 @@ export class BillingController {
         });
 
         // Insert Order Items
+        const insertedItems = [];
         for (const item of items) {
-          await tx.orderItem.create({
+          const oi = await tx.orderItem.create({
             data: {
               orderId: newOrder.id,
               productId: item.productId,
@@ -97,7 +127,9 @@ export class BillingController {
               price: item.price,
             },
           });
+          insertedItems.push(oi);
         }
+        newOrder.orderItems = insertedItems;
 
         return newOrder;
       });
@@ -264,6 +296,11 @@ export class BillingController {
       });
 
       if (order) {
+        // Idempotency guard: skip if order is already PAID to prevent duplicate processing
+        if (order.paymentStatus === 'COMPLETED' || order.status === 'PAID') {
+          return res.status(200).json({ success: true, message: 'Webhook already processed (idempotent)' });
+        }
+
         const updatedOrder = await prisma.order.update({
           where: { id: orderId },
           data: {
@@ -274,6 +311,11 @@ export class BillingController {
             gatewayResponse: payloadJson,
           },
         });
+
+        // Invalidate admin cache
+        await redis.keys('cache:admin:*').then(keys => {
+          if (keys.length > 0) return redis.del(...keys);
+        }).catch(err => console.error('Failed to invalidate admin cache:', err));
 
         // 3. Queue jobs
         await JobsProducer.queueInvoicePdf(order.id);

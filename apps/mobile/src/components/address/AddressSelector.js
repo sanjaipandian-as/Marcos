@@ -20,8 +20,11 @@ import {
   Home,
   Phone,
   Briefcase,
-  Layers,
-  Compass,
+  Building,
+  Flag,
+  Map,
+  Globe,
+  Hash,
   CheckCircle2,
   User as UserIcon
 } from 'lucide-react-native';
@@ -41,6 +44,7 @@ export default function AddressSelector({
   const [isAddingNewAddress, setIsAddingNewAddress] = useState(false);
   const [newAddressName, setNewAddressName] = useState('');
   const [newAddressText, setNewAddressText] = useState('');
+  const [newAddressLandmark, setNewAddressLandmark] = useState('');
   const [newAddressCity, setNewAddressCity] = useState('');
   const [newAddressArea, setNewAddressArea] = useState('');
   const [newAddressPincode, setNewAddressPincode] = useState('');
@@ -135,6 +139,7 @@ export default function AddressSelector({
       id: Date.now().toString(),
       name: newAddressName.trim(),
       address: newAddressText.trim(),
+      landmark: newAddressLandmark.trim(),
       city: newAddressCity.trim(),
       area: newAddressArea.trim(),
       pincode: newAddressPincode.trim(),
@@ -159,6 +164,7 @@ export default function AddressSelector({
   const resetForm = () => {
     setNewAddressName('');
     setNewAddressText('');
+    setNewAddressLandmark('');
     setNewAddressCity('');
     setNewAddressArea('');
     setNewAddressPincode('');
@@ -198,7 +204,7 @@ export default function AddressSelector({
               }}
               style={styles.modalCloseBtn}
             >
-              <X size={20} color="#475569" />
+              <X size={20} color="#475569" strokeWidth={2} />
             </TouchableOpacity>
           </View>
 
@@ -207,40 +213,40 @@ export default function AddressSelector({
               <View style={styles.addAddressForm}>
                 <View style={styles.formSection}>
                   <View style={styles.formSectionHeader}>
-                    <UserIcon size={16} color="#006241" />
+                    <UserIcon size={16} color={theme.brand[500]} strokeWidth={2} />
                     <Text style={[styles.formSectionTitle, { fontFamily: fonts.bold }]}>Contact Details</Text>
                   </View>
                   
                   <View style={styles.inputWrapper}>
                     <Text style={[styles.formLabel, { fontFamily: fonts.medium }]}>Full Name</Text>
-                    <View style={[styles.inputContainer, styles.inputDisabled]}>
-                      <UserIcon size={18} color="#94a3b8" style={styles.inputIcon} />
+                    <View style={[styles.inputContainer, { backgroundColor: theme.brand[50], borderColor: theme.brand[100] }]}>
+                      <UserIcon size={18} color="#94a3b8" strokeWidth={2} style={styles.inputIcon} />
                       <TextInput
                         style={[styles.formInputNew, { fontFamily: fonts.regular }]}
                         value={newAddressName || 'John Doe'}
                         editable={false}
                       />
-                      <CheckCircle2 size={16} color="#4ade80" style={styles.inputStatusIcon} />
+                      <CheckCircle2 size={16} color="#4ade80" strokeWidth={2} style={styles.inputStatusIcon} />
                     </View>
                   </View>
 
                   <View style={styles.inputWrapper}>
                     <Text style={[styles.formLabel, { fontFamily: fonts.medium }]}>Primary Phone</Text>
-                    <View style={[styles.inputContainer, styles.inputDisabled]}>
-                      <Phone size={18} color="#94a3b8" style={styles.inputIcon} />
+                    <View style={[styles.inputContainer, { backgroundColor: theme.brand[50], borderColor: theme.brand[100] }]}>
+                      <Phone size={18} color="#94a3b8" strokeWidth={2} style={styles.inputIcon} />
                       <TextInput
                         style={[styles.formInputNew, { fontFamily: fonts.regular }]}
                         value={newAddressPhone || '+91 00000 00000'}
                         editable={false}
                       />
-                      <CheckCircle2 size={16} color="#4ade80" style={styles.inputStatusIcon} />
+                      <CheckCircle2 size={16} color="#4ade80" strokeWidth={2} style={styles.inputStatusIcon} />
                     </View>
                   </View>
 
                   <View style={styles.inputWrapper}>
                     <Text style={[styles.formLabel, { fontFamily: fonts.medium }]}>Alternative Phone (Optional)</Text>
                     <View style={styles.inputContainer}>
-                      <Phone size={18} color="#006241" style={styles.inputIcon} />
+                      <Phone size={18} color={theme.brand[500]} strokeWidth={2} style={styles.inputIcon} />
                       <TextInput
                         style={[styles.formInputNew, { fontFamily: fonts.regular }]}
                         placeholder="e.g. +91 98765 43210"
@@ -255,16 +261,16 @@ export default function AddressSelector({
 
                 <View style={styles.formSection}>
                   <View style={styles.formSectionHeader}>
-                    <MapPin size={16} color="#006241" />
+                    <MapPin size={16} color={theme.brand[500]} strokeWidth={2} />
                     <Text style={[styles.formSectionTitle, { fontFamily: fonts.bold }]}>Address Information</Text>
                   </View>
 
                   <View style={styles.inputWrapper}>
                     <Text style={[styles.formLabel, { fontFamily: fonts.medium }]}>House No / Street Name</Text>
                     <View style={[styles.inputContainer, { height: 80, alignItems: 'flex-start', paddingTop: 12 }]}>
-                      <Layers size={18} color="#006241" style={styles.inputIcon} />
+                      <Building size={18} color={theme.brand[500]} strokeWidth={2} style={styles.inputIcon} />
                       <TextInput
-                        style={[styles.formInputNew, { fontFamily: fonts.regular, height: '100%' }]}
+                        style={[styles.formInputNew, { fontFamily: fonts.regular, height: '100%', textAlignVertical: 'top', paddingTop: 0 }]}
                         placeholder="e.g. 123, Luxury Apartments, Park Street"
                         placeholderTextColor="#94a3b8"
                         value={newAddressText}
@@ -274,11 +280,25 @@ export default function AddressSelector({
                     </View>
                   </View>
 
+                  <View style={styles.inputWrapper}>
+                    <Text style={[styles.formLabel, { fontFamily: fonts.medium }]}>Landmark (Optional)</Text>
+                    <View style={styles.inputContainer}>
+                      <Flag size={18} color={theme.brand[500]} strokeWidth={2} style={styles.inputIcon} />
+                      <TextInput
+                        style={[styles.formInputNew, { fontFamily: fonts.regular }]}
+                        placeholder="e.g. Near City Mall"
+                        placeholderTextColor="#94a3b8"
+                        value={newAddressLandmark}
+                        onChangeText={setNewAddressLandmark}
+                      />
+                    </View>
+                  </View>
+
                   <View style={styles.formRow}>
                     <View style={[styles.inputWrapper, { flex: 1, marginRight: 8 }]}>
                       <Text style={[styles.formLabel, { fontFamily: fonts.medium }]}>Area</Text>
                       <View style={styles.inputContainer}>
-                        <Compass size={18} color="#006241" style={styles.inputIcon} />
+                        <Map size={18} color={theme.brand[500]} strokeWidth={2} style={styles.inputIcon} />
                         <TextInput
                           style={[styles.formInputNew, { fontFamily: fonts.regular }]}
                           placeholder="e.g. Beverly Hills"
@@ -291,7 +311,7 @@ export default function AddressSelector({
                     <View style={[styles.inputWrapper, { flex: 1, marginLeft: 8 }]}>
                       <Text style={[styles.formLabel, { fontFamily: fonts.medium }]}>City</Text>
                       <View style={styles.inputContainer}>
-                        <MapPin size={18} color="#006241" style={styles.inputIcon} />
+                        <Globe size={18} color={theme.brand[500]} strokeWidth={2} style={styles.inputIcon} />
                         <TextInput
                           style={[styles.formInputNew, { fontFamily: fonts.regular }]}
                           placeholder="e.g. Los Angeles"
@@ -306,7 +326,7 @@ export default function AddressSelector({
                   <View style={styles.inputWrapper}>
                     <Text style={[styles.formLabel, { fontFamily: fonts.medium }]}>Pincode</Text>
                     <View style={styles.inputContainer}>
-                      <MapPin size={18} color="#006241" style={styles.inputIcon} />
+                      <Hash size={18} color={theme.brand[500]} strokeWidth={2} style={styles.inputIcon} />
                       <TextInput
                         style={[styles.formInputNew, { fontFamily: fonts.regular }]}
                         placeholder="e.g. 90210"
@@ -324,26 +344,26 @@ export default function AddressSelector({
                   <Text style={[styles.formSectionTitle, { fontFamily: fonts.bold, marginBottom: 12 }]}>Save Address As</Text>
                   <View style={styles.typeSelectorRow}>
                     <TouchableOpacity 
-                      style={[styles.typeOption, newAddressType === 'home' && styles.typeOptionActive]}
+                      style={[styles.typeOption, newAddressType === 'home' && { backgroundColor: theme.brand[500], borderColor: theme.brand[500] }]}
                       onPress={() => setNewAddressType('home')}
                     >
-                      <Home size={18} color={newAddressType === 'home' ? '#ffffff' : '#64748b'} />
+                      <Home size={18} color={newAddressType === 'home' ? '#ffffff' : '#64748b'} strokeWidth={2} />
                       <Text style={[styles.typeText, { fontFamily: fonts.bold }, newAddressType === 'home' && styles.typeTextActive]}>Home</Text>
                     </TouchableOpacity>
                     
                     <TouchableOpacity 
-                      style={[styles.typeOption, newAddressType === 'work' && styles.typeOptionActive]}
+                      style={[styles.typeOption, newAddressType === 'work' && { backgroundColor: theme.brand[500], borderColor: theme.brand[500] }]}
                       onPress={() => setNewAddressType('work')}
                     >
-                      <Briefcase size={18} color={newAddressType === 'work' ? '#ffffff' : '#64748b'} />
+                      <Briefcase size={18} color={newAddressType === 'work' ? '#ffffff' : '#64748b'} strokeWidth={2} />
                       <Text style={[styles.typeText, { fontFamily: fonts.bold }, newAddressType === 'work' && styles.typeTextActive]}>Work</Text>
                     </TouchableOpacity>
                     
                     <TouchableOpacity 
-                      style={[styles.typeOption, newAddressType === 'other' && styles.typeOptionActive]}
+                      style={[styles.typeOption, newAddressType === 'other' && { backgroundColor: theme.brand[500], borderColor: theme.brand[500] }]}
                       onPress={() => setNewAddressType('other')}
                     >
-                      <MapPin size={18} color={newAddressType === 'other' ? '#ffffff' : '#64748b'} />
+                      <MapPin size={18} color={newAddressType === 'other' ? '#ffffff' : '#64748b'} strokeWidth={2} />
                       <Text style={[styles.typeText, { fontFamily: fonts.bold }, newAddressType === 'other' && styles.typeTextActive]}>Other</Text>
                     </TouchableOpacity>
                   </View>
@@ -357,7 +377,7 @@ export default function AddressSelector({
                     <Text style={[styles.formBtnCancelText, { fontFamily: fonts.semiBold }]}>Cancel</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.formBtn, styles.formBtnSave, shadows.premium]}
+                    style={[styles.formBtn, styles.formBtnSave, { backgroundColor: theme.brand[500] }, shadows.premium]}
                     onPress={handleAddNewAddress}
                   >
                     <Text style={[styles.formBtnSaveText, { fontFamily: fonts.bold }]}>Save Address</Text>
@@ -368,7 +388,7 @@ export default function AddressSelector({
           ) : (
             <ScrollView style={styles.addressListScroll} showsVerticalScrollIndicator={false}>
               <TouchableOpacity
-                style={[styles.modalAddNewBtn, { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }]}
+                style={[styles.modalAddNewBtn, { backgroundColor: theme.brand[50], borderColor: theme.brand[200] }]}
                 activeOpacity={0.7}
                 onPress={() => {
                   setNewAddressName(userProfile?.fullName || '');
@@ -377,10 +397,10 @@ export default function AddressSelector({
                 }}
               >
                 <View style={styles.addNewLeftRow}>
-                  <Plus size={18} color="#006241" style={{ marginRight: 8 }} />
-                  <Text style={[styles.addNewText, { fontFamily: fonts.bold, color: '#006241' }]}>Add New</Text>
+                  <Plus size={18} color={theme.brand[500]} strokeWidth={2.5} style={{ marginRight: 8 }} />
+                  <Text style={[styles.addNewText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>Add New</Text>
                 </View>
-                <ChevronRight size={18} color="#006241" />
+                <ChevronRight size={18} color={theme.brand[500]} strokeWidth={2.5} />
               </TouchableOpacity>
 
               <Text style={[styles.savedAddressesTitle, { fontFamily: fonts.bold }]}>
@@ -401,21 +421,21 @@ export default function AddressSelector({
                       key={item.id}
                       style={[
                         styles.addressCard,
-                        isSelected ? { borderColor: '#bbf7d0', backgroundColor: '#f0fdf4' } : null
+                        isSelected ? { borderColor: theme.brand[200], backgroundColor: theme.brand[50] } : null
                       ]}
                       activeOpacity={0.85}
                       onPress={() => handleSelectAddress(item.id)}
                     >
                       <View style={[
                         styles.addressCardIconBg,
-                        isSelected ? { backgroundColor: '#dcfce7' } : null
+                        isSelected ? { backgroundColor: theme.brand[100] } : null
                       ]}>
                         {item.type === 'home' ? (
-                          <Home size={18} color={isSelected ? '#006241' : '#64748b'} />
+                          <Home size={18} color={isSelected ? theme.brand[500] : '#64748b'} strokeWidth={2} />
                         ) : item.type === 'work' ? (
-                          <Briefcase size={18} color={isSelected ? '#006241' : '#64748b'} />
+                          <Briefcase size={18} color={isSelected ? theme.brand[500] : '#64748b'} strokeWidth={2} />
                         ) : (
-                          <MapPin size={18} color={isSelected ? '#006241' : '#64748b'} />
+                          <MapPin size={18} color={isSelected ? theme.brand[500] : '#64748b'} strokeWidth={2} />
                         )}
                       </View>
 
@@ -425,15 +445,15 @@ export default function AddressSelector({
                             {item.name}
                           </Text>
                           {isSelected && (
-                            <View style={[styles.selectedBadge, { backgroundColor: '#dcfce7', borderColor: '#86efac' }]}>
-                              <Text style={[styles.selectedBadgeText, { fontFamily: fonts.bold, color: '#006241' }]}>
+                            <View style={[styles.selectedBadge, { backgroundColor: theme.brand[100], borderColor: theme.brand[300] }]}>
+                              <Text style={[styles.selectedBadgeText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>
                                 Selected
                               </Text>
                             </View>
                           )}
                         </View>
                         <Text style={[styles.addressCardText, { fontFamily: fonts.regular }]}>
-                          {item.address}{item.area ? `, ${item.area}` : ''}{item.city ? `, ${item.city}` : ''}{item.pincode ? ` - ${item.pincode}` : ''}
+                          {item.address}{item.landmark ? `, Near ${item.landmark}` : ''}{item.area ? `, ${item.area}` : ''}{item.city ? `, ${item.city}` : ''}{item.pincode ? ` - ${item.pincode}` : ''}
                         </Text>
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
                           {item.phone ? (
@@ -459,7 +479,7 @@ export default function AddressSelector({
                         style={styles.addressCardActionsBtn}
                         onPress={() => handleDeleteAddress(item.id)}
                       >
-                        <MoreVertical size={18} color="#94a3b8" />
+                        <MoreVertical size={18} color="#94a3b8" strokeWidth={2} />
                       </TouchableOpacity>
                     </TouchableOpacity>
                   );
@@ -557,8 +577,8 @@ const styles = StyleSheet.create({
     height: 52,
   },
   inputDisabled: {
-    backgroundColor: '#f0fdf4',
-    borderColor: '#dcfce7',
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
   },
   inputIcon: {
     marginRight: 10,
@@ -567,7 +587,8 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     color: '#1e293b',
-    paddingVertical: 8,
+    paddingVertical: 0,
+    height: '100%',
   },
   inputStatusIcon: {
     marginLeft: 8,
@@ -593,8 +614,8 @@ const styles = StyleSheet.create({
     height: 48,
   },
   typeOptionActive: {
-    backgroundColor: '#006241',
-    borderColor: '#006241',
+    backgroundColor: '#e85c1c',
+    borderColor: '#e85c1c',
   },
   typeText: {
     fontSize: 13,
@@ -624,7 +645,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   formBtnSave: {
-    backgroundColor: '#006241',
+    backgroundColor: '#e85c1c',
   },
   formBtnSaveText: {
     color: '#ffffff',
@@ -637,9 +658,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#f0fdf4',
+    backgroundColor: '#fff7ed',
     borderWidth: 1,
-    borderColor: '#bbf7d0',
+    borderColor: '#fed7aa',
     borderRadius: 12,
     padding: 14,
     marginBottom: 20,
@@ -650,7 +671,7 @@ const styles = StyleSheet.create({
   },
   addNewText: {
     fontSize: 14,
-    color: '#006241',
+    color: '#e85c1c',
   },
   savedAddressesTitle: {
     fontSize: 13,
@@ -700,16 +721,16 @@ const styles = StyleSheet.create({
     color: '#1e293b',
   },
   selectedBadge: {
-    backgroundColor: '#eff6ff',
+    backgroundColor: '#ffedd5',
     borderWidth: 0.5,
-    borderColor: '#bfdbfe',
+    borderColor: '#fdba74',
     borderRadius: 4,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
   selectedBadgeText: {
     fontSize: 10,
-    color: '#0284c7',
+    color: '#e85c1c',
   },
   addressCardText: {
     fontSize: 12,

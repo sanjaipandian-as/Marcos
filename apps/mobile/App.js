@@ -3,10 +3,13 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { navigationRef } from './src/navigation/NavigationRef';
 
 import { ThemeProvider } from './src/styles/ThemeContext';
 import { AuthNavigator, AppNavigator } from './src/navigation/AppNavigator';
-import { setLogoutHandler } from './src/utils/api';
+import { setLogoutHandler, setTokenRefreshHandler } from './src/utils/api';
+import { connectSocket, disconnectSocket, reconnectSocket } from './src/utils/socket';
+import { ToastProvider } from './src/components/ToastContext';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -20,6 +23,7 @@ export default function App() {
         const profileStr = await AsyncStorage.getItem('userProfile');
         if (token && profileStr) {
           setUser(JSON.parse(profileStr));
+          connectSocket(token); // Restore socket session alongside user session
         }
       } catch (err) {
         console.error('Session restoration error:', err);
@@ -30,17 +34,25 @@ export default function App() {
 
     checkExistingSession();
     
-    // Wire up global API logout callback
+    // Wire up global API logout callback (fires when refresh token expires)
     setLogoutHandler(() => {
+      disconnectSocket();
       setUser(null);
+    });
+
+    setTokenRefreshHandler((newToken) => {
+      reconnectSocket(newToken);
     });
   }, []);
 
-  const handleLoginSuccess = (userData) => {
+  const handleLoginSuccess = async (userData) => {
+    const token = await AsyncStorage.getItem('accessToken');
+    if (token) connectSocket(token);
     setUser(userData);
   };
 
   const handleLogout = async () => {
+    disconnectSocket();
     try {
       await AsyncStorage.removeItem('accessToken');
       await AsyncStorage.removeItem('refreshToken');
@@ -58,14 +70,16 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <NavigationContainer>
-          {user ? (
-            <AppNavigator onLogout={handleLogout} />
-          ) : (
-            <AuthNavigator onLoginSuccess={handleLoginSuccess} />
-          )}
-          <StatusBar style="auto" />
-        </NavigationContainer>
+        <ToastProvider>
+          <NavigationContainer ref={navigationRef}>
+            {user ? (
+              <AppNavigator onLogout={handleLogout} />
+            ) : (
+              <AuthNavigator onLoginSuccess={handleLoginSuccess} />
+            )}
+            <StatusBar style="auto" />
+          </NavigationContainer>
+        </ToastProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import prisma from '../config/db.js';
 import { createAuditLog } from '../utils/audit.js';
+import redis from '../config/redis.js';
 
 export const categoryCreateSchema = z.object({
   body: z.object({
@@ -61,6 +62,8 @@ export class AdminCategoryController {
         },
       });
 
+      await redis.del('cache:categories');
+
       return res.status(201).json({
         success: true,
         message: 'Category created successfully',
@@ -101,6 +104,8 @@ export class AdminCategoryController {
           order,
         },
       });
+
+      await redis.del('cache:categories');
 
       return res.status(200).json({
         success: true,
@@ -146,6 +151,8 @@ export class AdminCategoryController {
         },
       });
 
+      await redis.del('cache:categories');
+
       return res.status(200).json({
         success: true,
         message: 'Category deleted successfully',
@@ -170,6 +177,8 @@ export class AdminCategoryController {
           })
         )
       );
+      await redis.del('cache:categories');
+
       return res.status(200).json({
         success: true,
         message: 'Categories reordered successfully',
@@ -184,9 +193,20 @@ export class AdminCategoryController {
    */
   static async listCategories(req: Request, res: Response, next: NextFunction) {
     try {
+      const cached = await redis.get('cache:categories');
+      if (cached) {
+        return res.status(200).json({
+          success: true,
+          data: JSON.parse(cached),
+        });
+      }
+
       const categories = await prisma.category.findMany({
         orderBy: { order: 'asc' },
       });
+
+      await redis.set('cache:categories', JSON.stringify(categories), 'EX', 86400);
+
       return res.status(200).json({
         success: true,
         data: categories,

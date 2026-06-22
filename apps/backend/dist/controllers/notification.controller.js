@@ -85,13 +85,29 @@ class NotificationController {
      */
     static async getHistory(req, res, next) {
         const user = req.user;
+        const { page = 1, limit = 20 } = req.query;
+        const skip = (Number(page) - 1) * Number(limit);
         try {
-            const history = await db_js_1.default.notificationRecipient.findMany({
-                where: { userId: user.id },
-                include: { notification: true },
-                orderBy: { notification: { createdAt: 'desc' } },
+            const [history, total] = await Promise.all([
+                db_js_1.default.notificationRecipient.findMany({
+                    where: { userId: user.id },
+                    include: { notification: true },
+                    orderBy: { notification: { createdAt: 'desc' } },
+                    skip,
+                    take: Number(limit),
+                }),
+                db_js_1.default.notificationRecipient.count({ where: { userId: user.id } }),
+            ]);
+            return res.status(200).json({
+                success: true,
+                data: history,
+                pagination: {
+                    page: Number(page),
+                    limit: Number(limit),
+                    total,
+                    pages: Math.ceil(total / Number(limit)),
+                },
             });
-            return res.status(200).json({ success: true, data: history });
         }
         catch (error) {
             next(error);

@@ -18,48 +18,58 @@ import { Role } from '@prisma/client';
 
 const router = Router();
 
-// Enforce Admin/SuperAdmin for all /admin routes
-router.use(authenticate, authorize(Role.ADMIN, Role.SUPERADMIN));
+// Enforce authenticate globally for all /admin routes
+router.use(authenticate);
 
-router.get('/dashboard', AdminController.getDashboard);
-router.post('/loyalty/adjust', validate(loyaltyAdjustSchema), AdminController.adjustPoints);
-router.get('/loyalty/transactions', AdminController.listPointTransactions);
-router.get('/reports', AdminController.getExtendedReports);
+// Read-only / utility routes allowed for STAFF as well
+router.get('/customers', authorize(Role.ADMIN, Role.SUPERADMIN, Role.STAFF), AdminCustomerController.listCustomers);
+router.get('/customers-intelligence', authorize(Role.ADMIN, Role.SUPERADMIN, Role.STAFF), AdminCustomerController.getCustomerIntelligence);
+router.get('/customers/:id', authorize(Role.ADMIN, Role.SUPERADMIN, Role.STAFF), AdminCustomerController.getCustomerDetails);
+router.get('/orders-intelligence', authorize(Role.ADMIN, Role.SUPERADMIN, Role.STAFF), AdminController.getOrderIntelligence);
+router.get('/revenue-intelligence', authorize(Role.ADMIN, Role.SUPERADMIN, Role.STAFF), AdminController.getRevenueIntelligence);
+router.get('/promotions-intelligence', authorize(Role.ADMIN, Role.SUPERADMIN, Role.STAFF), AdminController.getPromotionsIntelligence);
+router.get('/inventory-intelligence', authorize(Role.ADMIN, Role.SUPERADMIN, Role.STAFF), AdminController.getInventoryIntelligence);
+router.post('/upload', authorize(Role.ADMIN, Role.SUPERADMIN, Role.STAFF), upload.single('image'), validateUpload(['image/jpeg', 'image/png', 'image/gif', 'image/webp'], 5 * 1024 * 1024), AdminController.uploadImage);
+
+// Helper for other routes restricted to ADMIN & SUPERADMIN
+const restrictToAdmin = authorize(Role.ADMIN, Role.SUPERADMIN);
+
+router.get('/dashboard', restrictToAdmin, AdminController.getDashboard);
+router.post('/loyalty/adjust', restrictToAdmin, validate(loyaltyAdjustSchema), AdminController.adjustPoints);
+router.get('/loyalty/transactions', restrictToAdmin, AdminController.listPointTransactions);
+router.get('/reports', restrictToAdmin, AdminController.getExtendedReports);
 
 // Platform Settings & Audits
-router.get('/settings', AdminController.getSystemSettings);
-router.put('/settings', validate(systemSettingsUpdateSchema), AdminController.saveSystemSettings);
-router.get('/audits', AdminController.getAuditLogs);
+router.get('/settings', restrictToAdmin, AdminController.getSystemSettings);
+router.put('/settings', restrictToAdmin, validate(systemSettingsUpdateSchema), AdminController.saveSystemSettings);
+router.get('/audits', restrictToAdmin, AdminController.getAuditLogs);
 
 // Product Management CRUD
-router.post('/products', validate(productCreateSchema), AdminProductController.createProduct);
-router.put('/products/:id', validate(productUpdateSchema), AdminProductController.updateProduct);
-router.delete('/products/:id', AdminProductController.deleteProduct);
-router.put('/products/:id/trending', validate(trendingToggleSchema), AdminProductController.toggleTrending);
+router.post('/products', restrictToAdmin, validate(productCreateSchema), AdminProductController.createProduct);
+router.put('/products/:id', restrictToAdmin, validate(productUpdateSchema), AdminProductController.updateProduct);
+router.delete('/products/:id', restrictToAdmin, AdminProductController.deleteProduct);
+router.put('/products/:id/trending', restrictToAdmin, validate(trendingToggleSchema), AdminProductController.toggleTrending);
 
 // Category Management CRUD & Ordering
-router.post('/categories', validate(categoryCreateSchema), AdminCategoryController.createCategory);
-router.put('/categories/reorder', validate(categoriesReorderSchema), AdminCategoryController.reorderCategories);
-router.put('/categories/:id', validate(categoryUpdateSchema), AdminCategoryController.updateCategory);
-router.delete('/categories/:id', AdminCategoryController.deleteCategory);
+router.post('/categories', restrictToAdmin, validate(categoryCreateSchema), AdminCategoryController.createCategory);
+router.put('/categories/reorder', restrictToAdmin, validate(categoriesReorderSchema), AdminCategoryController.reorderCategories);
+router.put('/categories/:id', restrictToAdmin, validate(categoryUpdateSchema), AdminCategoryController.updateCategory);
+router.delete('/categories/:id', restrictToAdmin, AdminCategoryController.deleteCategory);
 
-// Customer Management Panel
-router.get('/customers', AdminCustomerController.listCustomers);
-router.get('/customers/:id', AdminCustomerController.getCustomerDetails);
-router.delete('/customers/:id', AdminCustomerController.deleteCustomer);
+// Customer deletion (restricted to Admin/SuperAdmin)
+router.delete('/customers/:id', restrictToAdmin, AdminCustomerController.deleteCustomer);
 
-// Staff management (Create staff & update name/role)
-router.get('/users', AdminController.listStaff);
-router.post('/users', validate(staffCreateSchema), AdminController.createStaff);
-router.put('/users/:id', validate(userUpdateSchema), AdminController.updateStaff);
-router.post('/upload', upload.single('image'), validateUpload(['image/jpeg', 'image/png', 'image/gif', 'image/webp'], 5 * 1024 * 1024), AdminController.uploadImage);
+// Staff management (Read-only staff list allowed for STAFF; CRUD restricted to ADMIN/SUPERADMIN)
+router.get('/users', authorize(Role.ADMIN, Role.SUPERADMIN, Role.STAFF), AdminController.listStaff);
+router.post('/users', restrictToAdmin, validate(staffCreateSchema), AdminController.createStaff);
+router.put('/users/:id', restrictToAdmin, validate(userUpdateSchema), AdminController.updateStaff);
 
 // Role management (Restricted to SUPERADMIN)
 router.put('/users/:id/role', authorize(Role.SUPERADMIN), validate(userRoleUpdateSchema), AdminController.updateUserRole);
 
 // Coupon management
-router.get('/coupons', AdminController.listCoupons);
-router.post('/coupons', validate(couponCreateSchema), AdminController.createCoupon);
-router.put('/coupons/:id/deactivate', AdminController.deactivateCoupon);
+router.get('/coupons', restrictToAdmin, AdminController.listCoupons);
+router.post('/coupons', restrictToAdmin, validate(couponCreateSchema), AdminController.createCoupon);
+router.put('/coupons/:id/deactivate', restrictToAdmin, AdminController.deactivateCoupon);
 
 export default router;

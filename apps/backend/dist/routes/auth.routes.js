@@ -18,5 +18,11 @@ router.post('/forgot-password/verify', rateLimit_middleware_js_1.sensitiveRateLi
 router.post('/reset-password', rateLimit_middleware_js_1.sensitiveRateLimiter, (0, validate_middleware_js_1.validate)(auth_controller_js_1.resetPasswordSchema), auth_controller_js_1.AuthController.resetPassword);
 router.get('/profile', auth_middleware_js_1.authenticate, auth_controller_js_1.AuthController.getProfile);
 router.put('/profile', auth_middleware_js_1.authenticate, (0, validate_middleware_js_1.validate)(auth_controller_js_1.updateProfileSchema), auth_controller_js_1.AuthController.updateProfile);
+router.post('/profile/verify-password', auth_middleware_js_1.authenticate, (0, validate_middleware_js_1.validate)(auth_controller_js_1.verifyPasswordSchema), auth_controller_js_1.AuthController.verifyProfilePassword);
+router.post('/profile/request-update', auth_middleware_js_1.authenticate, (0, validate_middleware_js_1.validate)(auth_controller_js_1.requestContactUpdateSchema), auth_controller_js_1.AuthController.requestContactUpdate);
+router.post('/profile/confirm-update', auth_middleware_js_1.authenticate, (0, validate_middleware_js_1.validate)(auth_controller_js_1.confirmContactUpdateSchema), auth_controller_js_1.AuthController.confirmContactUpdate);
 router.delete('/delete-account', auth_middleware_js_1.authenticate, auth_controller_js_1.AuthController.deleteAccount);
+// Loyalty Points Redemption route
+router.post('/loyalty/redeem', auth_middleware_js_1.authenticate, (0, validate_middleware_js_1.validate)(auth_controller_js_1.redeemPointsSchema), auth_controller_js_1.AuthController.redeemPoints);
+router.get('/loyalty/coupons', auth_middleware_js_1.authenticate, auth_controller_js_1.AuthController.listUserCoupons);
 exports.default = router;

@@ -17,6 +17,7 @@ import api from '../../utils/api';
 import {
   ChevronLeft,
   ShoppingBag,
+  Heart,
   Trash2,
   Minus,
   Plus,
@@ -36,15 +37,22 @@ export default function CartScreen({ navigation }) {
   const [couponLoading, setCouponLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [qtyUpdating, setQtyUpdating] = useState(null);
+  const [availableCoupons, setAvailableCoupons] = useState([]);
 
   const loadCart = async () => {
     try {
       if (cartItems.length === 0) {
         setLoading(true);
       }
-      const res = await api.get('/products/cart');
-      if (res.success) {
-        setCartItems(res.data || []);
+      const [cartRes, couponsRes] = await Promise.all([
+        api.get('/products/cart'),
+        api.get('/auth/loyalty/coupons').catch(() => null)
+      ]);
+      if (cartRes.success) {
+        setCartItems(cartRes.data || []);
+      }
+      if (couponsRes && couponsRes.success) {
+        setAvailableCoupons(couponsRes.data || []);
       }
     } catch (err) {
       console.error('Error fetching cart:', err);
@@ -58,7 +66,7 @@ export default function CartScreen({ navigation }) {
       loadCart();
     });
     return unsubscribe;
-  }, [navigation, cartItems]);
+  }, [navigation]);
 
   const handleUpdateQty = async (productId, currentQty, change) => {
     const newQty = currentQty + change;
@@ -83,27 +91,14 @@ export default function CartScreen({ navigation }) {
   };
 
   const handleRemoveItem = async (productId) => {
-    Alert.alert(
-      'Remove Item',
-      'Are you sure you want to remove this custom piece from your cart?',
-      [
-        { text: 'Keep It', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const res = await api.delete(`/products/cart/${productId}`);
-              if (res.success) {
-                setCartItems(prev => prev.filter(item => item.productId !== productId));
-              }
-            } catch (err) {
-              Alert.alert('Error', 'Failed to remove item.');
-            }
-          }
-        }
-      ]
-    );
+    try {
+      const res = await api.delete(`/products/cart/${productId}`);
+      if (res.success) {
+        setCartItems(prev => prev.filter(item => item.productId !== productId));
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Failed to remove item.');
+    }
   };
 
   const handleApplyCoupon = async () => {
@@ -123,38 +118,30 @@ export default function CartScreen({ navigation }) {
     }
   };
 
-  const handleCheckout = async () => {
-    if (cartItems.length === 0) return;
-    setCheckoutLoading(true);
+  const handleSelectCoupon = async (code) => {
+    setCouponCode(code);
+    setCouponLoading(true);
     try {
-      const checkoutItems = cartItems.map(item => ({
-        productId: item.productId,
-        quantity: item.quantity,
-        price: Number(item.product.price),
-      }));
-
-      const res = await api.post('/orders/checkout', {
-        items: checkoutItems,
-        discountAmount: discountVal,
-        paymentMethod: 'ONLINE',
-      });
-
-      if (res.success) {
-        setAppliedCoupon(null);
-        setCouponCode('');
-        Alert.alert(
-          'Checkout Complete',
-          `Order ${res.data.invoiceNumber} placed successfully!`,
-          [
-            { text: 'OK', onPress: () => navigation.navigate('HomeTab') }
-          ]
-        );
+      const res = await api.post('/products/cart/coupon', { code });
+      if (res.success && res.coupon) {
+        setAppliedCoupon(res.coupon);
+        Alert.alert('Coupon Applied', `Coupon '${res.coupon.code}' applied successfully.`);
       }
     } catch (err) {
-      Alert.alert('Checkout Failed', err.message || 'Transaction could not be completed.');
+      setAppliedCoupon(null);
+      Alert.alert('Invalid Coupon', err.message || 'Failed to apply coupon.');
     } finally {
-      setCheckoutLoading(false);
+      setCouponLoading(false);
     }
+  };
+
+  const handleCheckout = () => {
+    if (cartItems.length === 0) return;
+    navigation.navigate('Checkout', {
+      cartItems,
+      appliedCoupon,
+      discountAmount: discountVal
+    });
   };
 
   // Mathematical Calculations
@@ -208,8 +195,8 @@ export default function CartScreen({ navigation }) {
         <Text style={[styles.headerTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
           My Cart
         </Text>
-        <TouchableOpacity style={[styles.headerBtn, shadows.premium]}>
-          <ShoppingBag size={20} color="#1e1e1e" />
+        <TouchableOpacity style={[styles.headerBtn, shadows.premium]} onPress={() => navigation.navigate('Wishlist')} activeOpacity={0.7}>
+          <Heart size={20} color="#1e1e1e" />
         </TouchableOpacity>
       </View>
 
@@ -232,12 +219,13 @@ export default function CartScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-          
-          {/* Cart Items List */}
+        <>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+            
+            {/* Cart Items List */}
           <View style={styles.listContainer}>
             {cartItems.map((item) => (
-              <View key={item.id} style={[styles.itemCard, shadows.premium, { backgroundColor: theme.bg.card }]}>
+              <View key={item.id} style={[styles.itemCard, shadows.premium, { backgroundColor: theme.bg.card, borderColor: theme.border }]}>
                 <Image
                   source={{ uri: (item.product.images && item.product.images[0]) || 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=300&q=80' }}
                   style={styles.itemImage}
@@ -256,31 +244,33 @@ export default function CartScreen({ navigation }) {
                   </Text>
                   <View style={styles.priceRow}>
                     <Text style={[styles.itemPrice, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-                      ₹{Number(item.product.price).toLocaleString('en-IN')}
+                      ₹{Number(item.product.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                     </Text>
                     
                     {/* Quantity Selector */}
-                    <View style={styles.qtyContainer}>
+                    <View style={[styles.qtyContainer, { backgroundColor: theme.bg.main, borderColor: theme.border }]}>
                       <TouchableOpacity
-                        style={styles.qtyBtn}
+                        style={[styles.qtyBtn, { backgroundColor: theme.bg.card }, shadows.premium]}
                         onPress={() => handleUpdateQty(item.productId, item.quantity, -1)}
                         disabled={qtyUpdating === item.productId}
+                        activeOpacity={0.7}
                       >
-                        <Minus size={14} color="#1e1e1e" />
+                        <Minus size={16} color={theme.text.primary} />
                       </TouchableOpacity>
                       {qtyUpdating === item.productId ? (
-                        <ActivityIndicator size="small" color={theme.brand[500]} style={{ width: 16 }} />
+                        <ActivityIndicator size="small" color={theme.brand[500]} style={{ width: 20, marginHorizontal: 12 }} />
                       ) : (
                         <Text style={[styles.qtyText, { fontFamily: fonts.bold, color: theme.text.primary }]}>
                           {item.quantity}
                         </Text>
                       )}
                       <TouchableOpacity
-                        style={[styles.qtyBtn, { backgroundColor: theme.brand[500] }]}
+                        style={[styles.qtyBtn, { backgroundColor: theme.brand[500] }, shadows.premium]}
                         onPress={() => handleUpdateQty(item.productId, item.quantity, 1)}
                         disabled={qtyUpdating === item.productId}
+                        activeOpacity={0.7}
                       >
-                        <Plus size={14} color="#ffffff" />
+                        <Plus size={16} color="#ffffff" />
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -314,14 +304,41 @@ export default function CartScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
-          {/* Billing Calculations */}
-          <View style={[styles.billContainer, shadows.premium, { backgroundColor: theme.bg.card }]}>
+          {availableCoupons.length > 0 && !appliedCoupon && (
+            <View style={styles.availableCouponsWrapper}>
+              <Text style={[styles.availableCouponsTitle, { fontFamily: fonts.semiBold, color: theme.text.secondary }]}>
+                Your Redeemed Vouchers:
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.availableCouponsScroll}>
+                {availableCoupons.map(coupon => (
+                  <TouchableOpacity
+                    key={coupon.id}
+                    style={[styles.availableCouponPill, { borderColor: theme.brand[200], backgroundColor: theme.brand[50] }]}
+                    onPress={() => handleSelectCoupon(coupon.code)}
+                    activeOpacity={0.7}
+                  >
+                    <Gift size={12} color={theme.brand[500]} />
+                    <Text style={[styles.availableCouponText, { fontFamily: fonts.bold, color: theme.brand[700] }]}>
+                      {coupon.code} (₹{Number(coupon.discountFlat).toLocaleString('en-IN', { maximumFractionDigits: 0 })})
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          </ScrollView>
+
+          {/* Sticky Bottom Section */}
+          <View style={[styles.stickyBottomContainer, { backgroundColor: theme.bg.card, borderColor: theme.border }]}>
+            {/* Billing Calculations */}
+            <View style={[styles.billContainer, shadows.premium, { backgroundColor: theme.bg.main }]}>
             <View style={styles.billRow}>
               <Text style={[styles.billLabel, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
-                Sub total:
+                Est. Subtotal:
               </Text>
               <Text style={[styles.billValue, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-                ₹{subtotal.toLocaleString('en-IN')}
+                ₹{subtotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
               </Text>
             </View>
             {discountVal > 0 && (
@@ -330,17 +347,17 @@ export default function CartScreen({ navigation }) {
                   Discount:
                 </Text>
                 <Text style={[styles.billValue, { fontFamily: fonts.bold, color: theme.brand[500] }]}>
-                  - ₹{discountVal.toLocaleString('en-IN')}
+                  - ₹{discountVal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                 </Text>
               </View>
             )}
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
             <View style={styles.billRow}>
               <Text style={[styles.totalLabel, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-                total:
+                Est. Total:
               </Text>
               <Text style={[styles.totalValue, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-                ₹{grandTotal.toLocaleString('en-IN')}
+                ₹{grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
               </Text>
             </View>
           </View>
@@ -360,14 +377,14 @@ export default function CartScreen({ navigation }) {
                   <ChevronsRight size={18} color={theme.brand[500]} />
                 </View>
                 <Text style={[styles.checkoutText, { fontFamily: fonts.bold }]}>
-                  Checkout
+                  Proceed to Checkout
                 </Text>
                 <View style={{ width: 32 }} />
               </>
             )}
           </TouchableOpacity>
-
-        </ScrollView>
+          </View>
+        </>
       )}
     </View>
   );
@@ -376,6 +393,17 @@ export default function CartScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  stickyBottomContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    borderTopWidth: 1,
+    elevation: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
   },
   loaderContainer: {
     flex: 1,
@@ -422,24 +450,25 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     marginTop: 14,
-    gap: 14,
-    marginBottom: 20,
+    gap: 20,
+    marginBottom: 24,
   },
   itemCard: {
     flexDirection: 'row',
-    borderRadius: 20,
-    padding: 12,
+    borderRadius: 24,
+    padding: 16,
     overflow: 'hidden',
+    borderWidth: 1,
   },
   itemImage: {
-    width: 80,
-    height: 90,
-    borderRadius: 16,
+    width: 90,
+    height: 100,
+    borderRadius: 18,
     backgroundColor: '#eaeaea',
   },
   itemInfo: {
     flex: 1,
-    marginLeft: 14,
+    marginLeft: 16,
     justifyContent: 'space-between',
   },
   itemHeader: {
@@ -448,44 +477,48 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   itemName: {
-    fontSize: 14.5,
+    fontSize: 15,
     flex: 1,
     marginRight: 12,
   },
   deleteBtn: {
-    padding: 4,
+    padding: 6,
+    backgroundColor: '#fef2f2',
+    borderRadius: 10,
   },
   itemSize: {
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: 13,
+    marginTop: 4,
   },
   priceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 6,
+    marginTop: 8,
   },
   itemPrice: {
     fontSize: 15,
+    flex: 1,
+    marginRight: 8,
   },
   qtyContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f5f5f7',
-    borderRadius: 10,
-    padding: 2,
+    borderRadius: 14,
+    padding: 4,
+    borderWidth: 1,
   },
   qtyBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   qtyText: {
-    fontSize: 13,
-    marginHorizontal: 8,
-    minWidth: 16,
+    fontSize: 15,
+    marginHorizontal: 12,
+    minWidth: 20,
     textAlign: 'center',
   },
   promoContainer: {
@@ -518,7 +551,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 18,
     gap: 12,
-    marginBottom: 24,
+    marginBottom: 16,
   },
   billRow: {
     flexDirection: 'row',
@@ -548,7 +581,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
-    marginBottom: 20,
+    marginBottom: 0,
   },
   checkoutChevronCircle: {
     width: 40,
@@ -586,5 +619,29 @@ const styles = StyleSheet.create({
   exploreBtnText: {
     fontSize: 12,
     letterSpacing: 1,
+  },
+  availableCouponsWrapper: {
+    marginTop: 14,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  availableCouponsTitle: {
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  availableCouponsScroll: {
+    gap: 8,
+  },
+  availableCouponPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  availableCouponText: {
+    fontSize: 11,
   },
 });

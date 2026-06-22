@@ -48,10 +48,13 @@ class AuthService {
     static async rotateTokens(oldToken) {
         const dataStr = await redis_js_1.default.get(`reftoken:${oldToken}`);
         if (!dataStr) {
-            throw new Error('Invalid or expired refresh token');
+            // Token not found in Redis — it either expired naturally or Redis was restarted/flushed.
+            // This is NOT a security breach. Do NOT send a breach alert. Just ask user to login again.
+            throw new Error('Session expired. Please log in again.');
         }
         const data = JSON.parse(dataStr);
-        // Reuse detection (Breach!)
+        // Reuse detection (Breach!) — only when token EXISTS in Redis but is explicitly marked revoked.
+        // This means the same token was used TWICE (stolen token scenario).
         if (data.revoked) {
             await this.invalidateTokenFamily(data.familyId, data.userId);
             throw new Error('Security Alert: Refresh token reuse detected. Revoking token family.');

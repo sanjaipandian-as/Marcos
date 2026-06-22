@@ -10,6 +10,10 @@ router.get('/cart', auth_middleware_js_1.authenticate, product_controller_js_1.P
 router.post('/cart', auth_middleware_js_1.authenticate, (0, validate_middleware_js_1.validate)(product_controller_js_1.cartAddSchema), product_controller_js_1.ProductController.addToCart);
 router.delete('/cart/:productId', auth_middleware_js_1.authenticate, product_controller_js_1.ProductController.removeFromCart);
 router.post('/cart/coupon', auth_middleware_js_1.authenticate, (0, validate_middleware_js_1.validate)(product_controller_js_1.couponValidateSchema), product_controller_js_1.ProductController.validateCoupon);
+// Favorites
+router.get('/favorites', auth_middleware_js_1.authenticate, product_controller_js_1.ProductController.getFavorites);
+router.post('/favorites', auth_middleware_js_1.authenticate, (0, validate_middleware_js_1.validate)(product_controller_js_1.favoriteAddSchema), product_controller_js_1.ProductController.addToFavorites);
+router.delete('/favorites/:productId', auth_middleware_js_1.authenticate, product_controller_js_1.ProductController.removeFromFavorites);
 // Product catalog
 router.get('/', (0, validate_middleware_js_1.validate)(product_controller_js_1.productQuerySchema), product_controller_js_1.ProductController.getProducts);
 router.get('/:id', product_controller_js_1.ProductController.getProductById);

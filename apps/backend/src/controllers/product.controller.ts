@@ -2,12 +2,13 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import prisma from '../config/db.js';
 import { StockStatus } from '@prisma/client';
+import redis from '../config/redis.js';
 
 // Product query validation
 export const productQuerySchema = z.object({
   query: z.object({
     page: z.coerce.number().int().min(1).default(1),
-    limit: z.coerce.number().int().min(1).max(100).default(10),
+    limit: z.coerce.number().int().min(1).max(1000).default(10),
     category: z.string().optional(),
     search: z.string().optional(),
     sortBy: z.enum(['price', 'createdAt', 'name']).default('createdAt'),
@@ -50,8 +51,14 @@ export class ProductController {
   static async getProducts(req: Request, res: Response, next: NextFunction) {
     const { page, limit, category, search, sortBy, sortOrder } = req.query as any;
     const skip = (page - 1) * limit;
+    const cacheKey = `cache:products:${JSON.stringify(req.query)}`;
 
     try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return res.status(200).json(JSON.parse(cached));
+      }
+
       const where: any = {};
       
       if (category) {
@@ -78,16 +85,20 @@ export class ProductController {
         prisma.product.count({ where }),
       ]);
 
-      return res.status(200).json({
+      const responsePayload = {
         success: true,
         data: products,
         pagination: {
-          page,
-          limit,
+          page: Number(page),
+          limit: Number(limit),
           total,
-          pages: Math.ceil(total / limit),
+          pages: Math.ceil(total / Number(limit)),
         },
-      });
+      };
+
+      await redis.set(cacheKey, JSON.stringify(responsePayload), 'EX', 120);
+
+      return res.status(200).json(responsePayload);
     } catch (error) {
       next(error);
     }
@@ -107,6 +118,19 @@ export class ProductController {
 
       if (!product) {
         return res.status(404).json({ success: false, message: 'Product not found' });
+      }
+
+      // Log PRODUCT_VIEW event asynchronously to Redis list
+      const userId = req.user?.id || null;
+      try {
+        await redis.rpush('analytics:events', JSON.stringify({
+          eventType: 'PRODUCT_VIEW',
+          productId: id,
+          userId,
+          createdAt: new Date().toISOString()
+        }));
+      } catch (e) {
+        console.error('Failed to log product view event to Redis:', e);
       }
 
       return res.status(200).json({ success: true, data: product });
@@ -165,6 +189,18 @@ export class ProductController {
         create: { userId, productId, quantity },
       });
 
+      // Log ADD_TO_CART event asynchronously to Redis list
+      try {
+        await redis.rpush('analytics:events', JSON.stringify({
+          eventType: 'ADD_TO_CART',
+          productId,
+          userId,
+          createdAt: new Date().toISOString()
+        }));
+      } catch (e) {
+        console.error('Failed to log add to cart event to Redis:', e);
+      }
+
       return res.status(200).json({ success: true, data: cartItem });
     } catch (error) {
       next(error);
@@ -219,6 +255,20 @@ export class ProductController {
 
       if (coupon.usedCount >= coupon.maxUses) {
         return res.status(400).json({ success: false, message: 'Coupon utilization limit reached' });
+      }
+
+      // Check if this user has already used this coupon
+      const userId = req.user?.id;
+      if (userId) {
+        const userCouponExists = await prisma.userCoupon.findUnique({
+          where: {
+            userId_couponId: { userId, couponId: coupon.id },
+          },
+        });
+
+        if (userCouponExists) {
+          return res.status(400).json({ success: false, message: 'You have already used this coupon' });
+        }
       }
 
       // Return coupon calculations

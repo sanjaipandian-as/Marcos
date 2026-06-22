@@ -14,6 +14,8 @@ export default function LoyaltyManager() {
   const [customers, setCustomers] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   
   // Selected user
   const [selectedCustId, setSelectedCustId] = useState('');
@@ -77,6 +79,10 @@ export default function LoyaltyManager() {
     c.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
     c.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const totalPages = Math.ceil(filteredCustomers.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedCustomers = filteredCustomers.slice(startIndex, startIndex + itemsPerPage);
 
   return (
     <div className="space-y-6">
@@ -215,6 +221,70 @@ export default function LoyaltyManager() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Customer Balances List */}
+      <div className="bg-white border border-slate-200/60 rounded-3xl p-6 shadow-premium space-y-4">
+        <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+          <UserCheck className="w-4.5 h-4.5 text-blue-500" />
+          <span>Customer Point Balances</span>
+        </h3>
+        
+        <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2">
+          <Search className="w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search users by name or email..."
+            value={searchTerm}
+            onChange={e => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="bg-transparent text-xs outline-none w-full font-medium"
+          />
+        </div>
+
+        <div className="divide-y divide-slate-100 min-h-[100px]">
+          {paginatedCustomers.length === 0 ? (
+            <p className="text-xs text-center text-slate-400 py-8">No customers found</p>
+          ) : (
+            paginatedCustomers.map(c => (
+              <div key={c.id} className="py-3 flex justify-between items-center text-xs">
+                <div>
+                  <span className="font-bold text-slate-800">{c.fullName}</span>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{c.email}</p>
+                </div>
+                <div className="text-right">
+                  <span className="font-extrabold text-sm text-brand-600">
+                    {c.pointsBalance} pts
+                  </span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {totalPages > 1 && (
+          <div className="flex justify-between items-center pt-4 border-t border-slate-100">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="text-xs font-bold text-slate-500 hover:text-brand-600 disabled:opacity-50 disabled:hover:text-slate-500"
+            >
+              Previous
+            </button>
+            <span className="text-[10px] font-bold text-slate-400">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="text-xs font-bold text-slate-500 hover:text-brand-600 disabled:opacity-50 disabled:hover:text-slate-500"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

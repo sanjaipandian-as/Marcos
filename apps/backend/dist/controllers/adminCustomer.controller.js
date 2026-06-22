@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AdminCustomerController = void 0;
 const db_js_1 = __importDefault(require("../config/db.js"));
 const audit_js_1 = require("../utils/audit.js");
+const redis_js_1 = __importDefault(require("../config/redis.js"));
 class AdminCustomerController {
     /**
      * GET /admin/customers (Admin / Staff Only)
@@ -129,6 +130,236 @@ class AdminCustomerController {
                 },
             });
             return res.status(200).json({ success: true, message: 'Customer account deleted successfully' });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    /**
+     * GET /admin/customers-intelligence (Admin / SuperAdmin / Staff)
+     * Returns data for the Customer Intelligence dashboard
+     */
+    static async getCustomerIntelligence(req, res, next) {
+        const cacheKey = 'cache:admin:customer-intelligence';
+        try {
+            const cached = await redis_js_1.default.get(cacheKey);
+            if (cached)
+                return res.status(200).json(JSON.parse(cached));
+            const now = new Date();
+            const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const [allCustomers, userCategoryOrders] = await Promise.all([
+                db_js_1.default.user.findMany({
+                    where: { role: 'CUSTOMER' },
+                    select: {
+                        id: true,
+                        fullName: true,
+                        address: true,
+                        createdAt: true,
+                        orders: {
+                            where: { status: { not: 'CANCELLED' } },
+                            select: { payableAmount: true, createdAt: true },
+                            orderBy: { createdAt: 'asc' }
+                        }
+                    }
+                }),
+                db_js_1.default.orderItem.findMany({
+                    where: {
+                        order: {
+                            status: { not: 'CANCELLED' },
+                            user: { role: 'CUSTOMER' }
+                        }
+                    },
+                    select: {
+                        orderId: true,
+                        order: { select: { userId: true } },
+                        product: {
+                            select: {
+                                category: { select: { name: true } }
+                            }
+                        }
+                    }
+                })
+            ]);
+            let totalCustomersThisMonth = 0;
+            let totalCustomersLastMonth = 0;
+            let totalSpend = 0;
+            let repeatCustomers = 0;
+            let repeatCustomersLastMonth = 0;
+            let churnRiskCount = 0;
+            const customerStats = allCustomers.map(c => {
+                if (c.createdAt >= firstDayThisMonth)
+                    totalCustomersThisMonth++;
+                if (c.createdAt >= firstDayLastMonth && c.createdAt < firstDayThisMonth)
+                    totalCustomersLastMonth++;
+                const orders = c.orders;
+                const spend = orders.reduce((acc, o) => acc + Number(o.payableAmount), 0);
+                totalSpend += spend;
+                if (orders.length > 1) {
+                    repeatCustomers++;
+                    const ordersLastMonth = orders.filter(o => o.createdAt < firstDayThisMonth);
+                    if (ordersLastMonth.length > 1)
+                        repeatCustomersLastMonth++;
+                }
+                const lastOrder = orders[orders.length - 1];
+                let inactiveDays = -1;
+                if (lastOrder) {
+                    fancyTry: try {
+                        inactiveDays = Math.floor((now.getTime() - lastOrder.createdAt.getTime()) / (1000 * 60 * 60 * 24));
+                        if (inactiveDays >= 60)
+                            churnRiskCount++;
+                    }
+                    catch (err) { }
+                }
+                let city = 'Unknown';
+                if (c.address) {
+                    try {
+                        const parsed = JSON.parse(c.address);
+                        city = parsed?.city || 'Unknown';
+                    }
+                    catch (e) {
+                        // fallback
+                    }
+                }
+                return {
+                    id: c.id,
+                    fullName: c.fullName,
+                    initials: c.fullName.substring(0, 2).toUpperCase(),
+                    location: city,
+                    ordersCount: orders.length,
+                    totalSpend: spend,
+                    lastOrderDate: lastOrder?.createdAt,
+                    inactiveDays
+                };
+            });
+            const totalCustomers = allCustomers.length;
+            const customersLastMonthTotal = totalCustomers - totalCustomersThisMonth;
+            // Avg CLV
+            const avgCLV = totalCustomers > 0 ? Math.round(totalSpend / totalCustomers) : 0;
+            const sortedBySpend = [...customerStats].sort((a, b) => b.totalSpend - a.totalSpend);
+            const top10PercentCount = Math.max(1, Math.floor(totalCustomers * 0.1));
+            const top10PercentSpend = sortedBySpend.slice(0, top10PercentCount).reduce((acc, c) => acc + c.totalSpend, 0);
+            const top10PercentAvg = Math.round(top10PercentSpend / top10PercentCount);
+            // Repeat Rate
+            const repeatRate = totalCustomers > 0 ? Math.round((repeatCustomers / totalCustomers) * 100) : 0;
+            const repeatRateLastMonthCalc = customersLastMonthTotal > 0 ? Math.round((repeatCustomersLastMonth / customersLastMonthTotal) * 100) : 0;
+            // Top Customers by CLV
+            const top10Customers = sortedBySpend;
+            // Customer Segments
+            const buyers = customerStats.filter(c => c.ordersCount > 0);
+            const totalBuyers = buyers.length;
+            const oneTimeCount = buyers.filter(c => c.ordersCount === 1).length;
+            const repeatTotalCount = buyers.filter(c => c.ordersCount > 1).length;
+            let vipSegmentCount = 0;
+            let repeatCountSegment = 0;
+            if (totalBuyers > 0) {
+                vipSegmentCount = Math.max(1, Math.floor(totalBuyers * 0.1));
+                if (repeatTotalCount === 0) {
+                    vipSegmentCount = 0;
+                }
+                else if (vipSegmentCount > repeatTotalCount) {
+                    vipSegmentCount = repeatTotalCount;
+                }
+                repeatCountSegment = Math.max(0, repeatTotalCount - vipSegmentCount);
+            }
+            const segments = [
+                { name: 'One-time', value: totalBuyers > 0 ? Math.round((oneTimeCount / totalBuyers) * 100) : 0 },
+                { name: 'Repeat', value: totalBuyers > 0 ? Math.round((repeatCountSegment / totalBuyers) * 100) : 0 },
+                { name: 'VIP', value: totalBuyers > 0 ? Math.round((vipSegmentCount / totalBuyers) * 100) : 0 }
+            ];
+            if (totalBuyers > 0) {
+                const sum = segments.reduce((acc, s) => acc + s.value, 0);
+                if (sum !== 100 && sum > 0) {
+                    const maxIdx = segments.reduce((maxI, s, i, arr) => s.value > arr[maxI].value ? i : maxI, 0);
+                    segments[maxIdx].value += (100 - sum);
+                }
+            }
+            // New vs Returning 6 months
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const newVsReturning = [];
+            for (let i = 5; i >= 0; i--) {
+                const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                const nextMonth = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+                let newBuyers = 0;
+                let returningBuyers = 0;
+                allCustomers.forEach(c => {
+                    const firstOrder = c.orders[0];
+                    const hasOrderThisMonth = c.orders.some(o => o.createdAt >= d && o.createdAt < nextMonth);
+                    if (hasOrderThisMonth) {
+                        if (firstOrder && firstOrder.createdAt >= d && firstOrder.createdAt < nextMonth) {
+                            newBuyers++;
+                        }
+                        else {
+                            returningBuyers++;
+                        }
+                    }
+                });
+                newVsReturning.push({
+                    month: months[d.getMonth()],
+                    new: newBuyers,
+                    returning: returningBuyers
+                });
+            }
+            // Churn risk list
+            const churnRiskList = customerStats
+                .filter(c => c.inactiveDays >= 60)
+                .sort((a, b) => b.totalSpend - a.totalSpend)
+                .map(c => ({
+                ...c,
+                riskLevel: c.inactiveDays >= 90 ? '90+ days' : '60+ days'
+            }));
+            // Repeat purchase rate by category
+            const catOrders = new Map();
+            const userCatMap = new Map();
+            userCategoryOrders.forEach(oi => {
+                const userId = oi.order?.userId;
+                if (!userId)
+                    return;
+                const catName = oi.product?.category?.name || 'Uncategorized';
+                const orderId = oi.orderId;
+                if (!userCatMap.has(userId)) {
+                    userCatMap.set(userId, new Map());
+                }
+                const catMapForUser = userCatMap.get(userId);
+                if (!catMapForUser.has(catName)) {
+                    catMapForUser.set(catName, new Set());
+                }
+                catMapForUser.get(catName).add(orderId);
+            });
+            userCatMap.forEach((catMapForUser) => {
+                catMapForUser.forEach((ordersSet, catName) => {
+                    if (!catOrders.has(catName)) {
+                        catOrders.set(catName, { total: 0, repeat: 0 });
+                    }
+                    const catStats = catOrders.get(catName);
+                    catStats.total++;
+                    if (ordersSet.size > 1) {
+                        catStats.repeat++;
+                    }
+                });
+            });
+            const categoryRepeatRates = Array.from(catOrders.entries()).map(([name, stats]) => ({
+                category: name,
+                rate: stats.total > 0 ? Math.round((stats.repeat / stats.total) * 100) : 0
+            })).sort((a, b) => b.rate - a.rate).slice(0, 5);
+            const responsePayload = {
+                success: true,
+                data: {
+                    kpis: {
+                        totalCustomers: { value: totalCustomers, newThisMonth: totalCustomersThisMonth },
+                        avgCLV: { value: avgCLV, top10PercentAvg: top10PercentAvg },
+                        repeatRate: { value: repeatRate, diff: repeatRate - repeatRateLastMonthCalc },
+                        churnRisk: { value: churnRiskCount }
+                    },
+                    top10Customers,
+                    segments,
+                    newVsReturning,
+                    churnRiskCustomers: churnRiskList,
+                    categoryRepeatRates
+                }
+            };
+            await redis_js_1.default.set(cacheKey, JSON.stringify(responsePayload), 'EX', 300);
+            return res.status(200).json(responsePayload);
         }
         catch (error) {
             next(error);

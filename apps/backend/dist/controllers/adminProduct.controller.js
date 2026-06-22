@@ -4,9 +4,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AdminProductController = exports.trendingToggleSchema = exports.productUpdateSchema = exports.productCreateSchema = void 0;
-exports.computeStockStatus = computeStockStatus;
 const zod_1 = require("zod");
 const db_js_1 = __importDefault(require("../config/db.js"));
+const redis_js_1 = __importDefault(require("../config/redis.js"));
+const product_controller_js_1 = require("./product.controller.js");
 exports.productCreateSchema = zod_1.z.object({
     body: zod_1.z.object({
         name: zod_1.z.string().min(1),
@@ -16,6 +17,7 @@ exports.productCreateSchema = zod_1.z.object({
         images: zod_1.z.array(zod_1.z.string()).default([]),
         categoryId: zod_1.z.string().uuid(),
         inventoryQty: zod_1.z.coerce.number().int().nonnegative().default(0),
+        targetGender: zod_1.z.enum(['MEN', 'WOMEN', 'KIDS', 'UNISEX']).default('UNISEX'),
     }),
 });
 exports.productUpdateSchema = zod_1.z.object({
@@ -27,6 +29,7 @@ exports.productUpdateSchema = zod_1.z.object({
         images: zod_1.z.array(zod_1.z.string()).optional(),
         categoryId: zod_1.z.string().uuid().optional(),
         inventoryQty: zod_1.z.coerce.number().int().nonnegative().optional(),
+        targetGender: zod_1.z.enum(['MEN', 'WOMEN', 'KIDS', 'UNISEX']).optional(),
     }),
 });
 exports.trendingToggleSchema = zod_1.z.object({
@@ -35,26 +38,19 @@ exports.trendingToggleSchema = zod_1.z.object({
         trendingScheduledAt: zod_1.z.string().datetime().optional().nullable(),
     }),
 });
-function computeStockStatus(qty) {
-    if (qty <= 0)
-        return 'OUT_OF_STOCK';
-    if (qty <= 10)
-        return 'LOW_STOCK';
-    return 'IN_STOCK';
-}
 class AdminProductController {
     /**
      * POST /admin/products
      */
     static async createProduct(req, res, next) {
-        const { name, description, price, materialInfo, images, categoryId, inventoryQty } = req.body;
+        const { name, description, price, materialInfo, images, categoryId, inventoryQty, targetGender } = req.body;
         try {
             // Verify category exists
             const categoryExists = await db_js_1.default.category.findUnique({ where: { id: categoryId } });
             if (!categoryExists) {
                 return res.status(404).json({ success: false, message: 'Category not found' });
             }
-            const stockStatus = computeStockStatus(inventoryQty);
+            const stockStatus = (0, product_controller_js_1.computeStockStatus)(inventoryQty);
             const product = await db_js_1.default.product.create({
                 data: {
                     name,
@@ -65,6 +61,7 @@ class AdminProductController {
                     categoryId,
                     inventoryQty,
                     stockStatus,
+                    targetGender,
                 },
             });
             // Write AuditLog
@@ -82,6 +79,11 @@ class AdminProductController {
                     },
                 },
             }).catch(err => console.error('Failed to write audit log:', err));
+            // Invalidate products cache
+            await redis_js_1.default.keys('cache:products:*').then(keys => {
+                if (keys.length > 0)
+                    return redis_js_1.default.del(...keys);
+            }).catch(err => console.error('Failed to invalidate product cache:', err));
             return res.status(201).json({
                 success: true,
                 message: 'Product created successfully',
@@ -97,7 +99,7 @@ class AdminProductController {
      */
     static async updateProduct(req, res, next) {
         const { id } = req.params;
-        const { name, description, price, materialInfo, images, categoryId, inventoryQty } = req.body;
+        const { name, description, price, materialInfo, images, categoryId, inventoryQty, targetGender } = req.body;
         try {
             const existingProduct = await db_js_1.default.product.findUnique({ where: { id } });
             if (!existingProduct) {
@@ -111,10 +113,11 @@ class AdminProductController {
                 images,
                 categoryId,
                 inventoryQty,
+                targetGender,
             };
             // Recalculate stockStatus if inventoryQty is provided
             if (inventoryQty !== undefined) {
-                updateData.stockStatus = computeStockStatus(inventoryQty);
+                updateData.stockStatus = (0, product_controller_js_1.computeStockStatus)(inventoryQty);
             }
             const product = await db_js_1.default.product.update({
                 where: { id },
@@ -133,6 +136,11 @@ class AdminProductController {
                     },
                 },
             }).catch(err => console.error('Failed to write audit log:', err));
+            // Invalidate products cache
+            await redis_js_1.default.keys('cache:products:*').then(keys => {
+                if (keys.length > 0)
+                    return redis_js_1.default.del(...keys);
+            }).catch(err => console.error('Failed to invalidate product cache:', err));
             return res.status(200).json({
                 success: true,
                 message: 'Product updated successfully',
@@ -175,6 +183,11 @@ class AdminProductController {
                     },
                 },
             }).catch(err => console.error('Failed to write audit log:', err));
+            // Invalidate products cache
+            await redis_js_1.default.keys('cache:products:*').then(keys => {
+                if (keys.length > 0)
+                    return redis_js_1.default.del(...keys);
+            }).catch(err => console.error('Failed to invalidate product cache:', err));
             return res.status(200).json({
                 success: true,
                 message: 'Product deleted successfully',
@@ -214,6 +227,11 @@ class AdminProductController {
                     },
                 },
             }).catch(err => console.error('Failed to write audit log:', err));
+            // Invalidate products cache
+            await redis_js_1.default.keys('cache:products:*').then(keys => {
+                if (keys.length > 0)
+                    return redis_js_1.default.del(...keys);
+            }).catch(err => console.error('Failed to invalidate product cache:', err));
             return res.status(200).json({
                 success: true,
                 message: 'Product trending status updated successfully',
