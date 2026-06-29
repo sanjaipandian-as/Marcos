@@ -109,7 +109,7 @@ export default function TrendingProductsScreen({ navigation }) {
   const renderProductItem = ({ item }) => {
     const isFav = favorites.has(item.id);
     const inCart = cartItems.has(item.id);
-    const originalPrice = Number(item.price) * 1.5;
+    const originalPrice = item.price === "item.price" ? (item.originalPrice ? Number(item.originalPrice) : null) : (typeof product !== "undefined" && product.originalPrice ? Number(product.originalPrice) : (typeof item !== "undefined" && item.originalPrice ? Number(item.originalPrice) : null));
 
     return (
       <TouchableOpacity 
@@ -147,12 +147,15 @@ export default function TrendingProductsScreen({ navigation }) {
           
           <View style={styles.priceRow}>
             <View style={styles.priceContainer}>
+              <Text style={{ fontSize: 10, color: '#94a3b8', marginBottom: 2 }}>Starts from</Text>
               <Text style={[styles.prodPrice, { fontFamily: fonts.bold, color: theme.text.primary }]}>
                 ₹{Number(item.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
               </Text>
+              {originalPrice ? (
               <Text style={styles.originalPriceText}>
                 ₹{originalPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
               </Text>
+            ) : null}
             </View>
             
             <TouchableOpacity 

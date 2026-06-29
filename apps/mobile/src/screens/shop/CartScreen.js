@@ -243,9 +243,12 @@ export default function CartScreen({ navigation }) {
                     Size: L
                   </Text>
                   <View style={styles.priceRow}>
-                    <Text style={[styles.itemPrice, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                    <View>
+            <Text style={{ fontSize: 10, color: '#94a3b8', marginBottom: 2 }}>Starts from</Text>
+            <Text style={[styles.itemPrice, { fontFamily: fonts.bold, color: theme.text.primary }]}>
                       ₹{Number(item.product.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                     </Text>
+          </View>
                     
                     {/* Quantity Selector */}
                     <View style={[styles.qtyContainer, { backgroundColor: theme.bg.main, borderColor: theme.border }]}>

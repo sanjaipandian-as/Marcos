@@ -144,9 +144,12 @@ export default function DiscountsScreen({ navigation }) {
         </Text>
         
         <View style={styles.priceRow}>
-          <Text style={[styles.prodPrice, { fontFamily: fonts.bold, color: '#006241' }]}>
+          <View>
+            <Text style={{ fontSize: 10, color: '#94a3b8', marginBottom: 2 }}>Starts from</Text>
+            <Text style={[styles.prodPrice, { fontFamily: fonts.bold, color: '#006241' }]}>
             ₹{Number(item.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
           </Text>
+          </View>
           
           <View style={styles.cardRightActions}>
             <TouchableOpacity 

@@ -6,7 +6,9 @@ import { Role } from '@prisma/client';
 import { createAuditLog } from '../utils/audit.js';
 import { hashPassword } from '../utils/crypto.js';
 import { R2Service } from '../services/r2.service.js';
+import { CloudinaryService } from '../services/cloudinary.service.js';
 import redis from '../config/redis.js';
+import env from '../config/env.js';
 
 export const loyaltyAdjustSchema = z.object({
   body: z.object({
@@ -1047,8 +1049,14 @@ export class AdminController {
       }
 
       const file = req.file;
-      const fileKey = `uploads/${Date.now()}-${file.originalname}`;
-      const url = await R2Service.uploadFile(file.buffer, fileKey, file.mimetype);
+      let url: string;
+
+      if (env.NODE_ENV === 'development') {
+        url = await CloudinaryService.uploadFile(file.buffer, 'marcos', file.mimetype);
+      } else {
+        const fileKey = `uploads/${Date.now()}-${file.originalname}`;
+        url = await R2Service.uploadFile(file.buffer, fileKey, file.mimetype);
+      }
 
       return res.status(200).json({
         success: true,

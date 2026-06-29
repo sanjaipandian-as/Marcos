@@ -91,8 +91,65 @@ export default function CheckoutScreen({ route, navigation }) {
   const [timeSlots, setTimeSlots] = useState([]);
   const [systemSettings, setSystemSettings] = useState(null);
 
-  // Finished order details
   const [placedOrder, setPlacedOrder] = useState(null);
+
+  // Filter time slots dynamically
+  const getFilteredTimeSlots = () => {
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    const todayStr = `${y}-${m}-${d}`;
+
+    if (bookingDate !== todayStr) {
+      return timeSlots;
+    }
+
+    return timeSlots.filter(s => {
+      try {
+        const startPart = s.split(' - ')[0].trim(); // e.g. "10:00 AM" or "10:00"
+        const match = startPart.match(/^(\d+):(\d+)\s*(AM|PM)?$/i);
+        if (!match) return true;
+
+        let hour = parseInt(match[1], 10);
+        const minute = parseInt(match[2], 10);
+        const ampm = match[3];
+
+        if (ampm) {
+          const isPM = ampm.toUpperCase() === 'PM';
+          if (isPM && hour < 12) {
+            hour += 12;
+          } else if (!isPM && hour === 12) {
+            hour = 0;
+          }
+        }
+
+        const currentHour = today.getHours();
+        const currentMinute = today.getMinutes();
+
+        if (hour < currentHour) {
+          return false;
+        }
+        if (hour === currentHour && minute <= currentMinute) {
+          return false;
+        }
+        return true;
+      } catch (e) {
+        return true;
+      }
+    });
+  };
+
+  useEffect(() => {
+    const filtered = getFilteredTimeSlots();
+    if (filtered.length > 0) {
+      if (!filtered.includes(bookingSlot)) {
+        setBookingSlot(filtered[0]);
+      }
+    } else {
+      setBookingSlot('');
+    }
+  }, [bookingDate, timeSlots]);
 
   const formatBookingDate = (dateStr) => {
     if (!dateStr) return 'Select Date';
@@ -290,6 +347,11 @@ export default function CheckoutScreen({ route, navigation }) {
 
     if (!bookingDate) {
       Alert.alert('Validation Error', 'Please select a fitting date.');
+      return;
+    }
+
+    if (!bookingSlot) {
+      Alert.alert('Validation Error', 'Please select a valid time slot.');
       return;
     }
 
@@ -646,26 +708,32 @@ export default function CheckoutScreen({ route, navigation }) {
 
           {/* Time Slot Selection */}
           <View style={styles.slotsContainer}>
-            {timeSlots.map(s => (
-              <TouchableOpacity
-                key={s}
-                style={[
-                  styles.slotOption,
-                  { borderColor: theme.border, backgroundColor: theme.bg.card },
-                  bookingSlot === s && { backgroundColor: theme.brand[50], borderColor: theme.brand[200] }
-                ]}
-                onPress={() => setBookingSlot(s)}
-                activeOpacity={0.8}
-              >
-                <Text style={[
-                  styles.slotText,
-                  { fontFamily: fonts.bold, color: theme.text.secondary },
-                  bookingSlot === s && { color: theme.brand[500] }
-                ]}>
-                  {s}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            {getFilteredTimeSlots().length > 0 ? (
+              getFilteredTimeSlots().map(s => (
+                <TouchableOpacity
+                  key={s}
+                  style={[
+                    styles.slotOption,
+                    { borderColor: theme.border, backgroundColor: theme.bg.card },
+                    bookingSlot === s && { backgroundColor: theme.brand[50], borderColor: theme.brand[200] }
+                  ]}
+                  onPress={() => setBookingSlot(s)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[
+                    styles.slotText,
+                    { fontFamily: fonts.bold, color: theme.text.secondary },
+                    bookingSlot === s && { color: theme.brand[500] }
+                  ]}>
+                    {s}
+                  </Text>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <Text style={{ fontFamily: fonts.medium, color: '#ef4444', marginTop: 10, fontSize: 13, paddingHorizontal: 20 }}>
+                No time slots available for today. Please select another date.
+              </Text>
+            )}
           </View>
 
           {/* Quick Order */}

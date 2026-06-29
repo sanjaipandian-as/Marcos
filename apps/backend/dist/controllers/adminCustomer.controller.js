@@ -3,11 +3,163 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AdminCustomerController = void 0;
+exports.AdminCustomerController = exports.appCustomerUpdateSchema = exports.appCustomerCreateSchema = void 0;
+const zod_1 = require("zod");
 const db_js_1 = __importDefault(require("../config/db.js"));
 const audit_js_1 = require("../utils/audit.js");
 const redis_js_1 = __importDefault(require("../config/redis.js"));
+const crypto_js_1 = require("../utils/crypto.js");
+const crypto_1 = __importDefault(require("crypto"));
+exports.appCustomerCreateSchema = zod_1.z.object({
+    body: zod_1.z.object({
+        fullName: zod_1.z.string().min(1),
+        email: zod_1.z.string().email(),
+        phoneNumber: zod_1.z.string().min(10),
+        password: zod_1.z.string().min(6),
+        gender: zod_1.z.string().optional().nullable(),
+        address: zod_1.z.string().optional().nullable(),
+    }),
+});
+exports.appCustomerUpdateSchema = zod_1.z.object({
+    body: zod_1.z.object({
+        fullName: zod_1.z.string().min(1).optional(),
+        email: zod_1.z.string().email().optional(),
+        phoneNumber: zod_1.z.string().min(10).optional(),
+        password: zod_1.z.string().min(6).optional(),
+        gender: zod_1.z.string().optional().nullable(),
+        address: zod_1.z.string().optional().nullable(),
+    }),
+});
 class AdminCustomerController {
+    /**
+     * POST /admin/customers
+     * Admin creates an app customer account
+     */
+    static async createCustomer(req, res, next) {
+        const { fullName, email, phoneNumber, password, gender, address } = req.body;
+        try {
+            // Normalize phone
+            let normalizedPhone = phoneNumber.replace(/[\s\-()]/g, '');
+            if (/^\d{10}$/.test(normalizedPhone)) {
+                normalizedPhone = `+91${normalizedPhone}`;
+            }
+            // Check existence
+            const existing = await db_js_1.default.user.findFirst({
+                where: {
+                    OR: [
+                        { email },
+                        { phoneNumber: normalizedPhone },
+                    ],
+                },
+            });
+            if (existing) {
+                return res.status(409).json({ success: false, message: 'Email or Phone Number already registered' });
+            }
+            const passwordHash = await (0, crypto_js_1.hashPassword)(password);
+            const referralCode = `REF-${crypto_1.default.randomUUID().substring(0, 8).toUpperCase()}`;
+            const customer = await db_js_1.default.user.create({
+                data: {
+                    fullName,
+                    email,
+                    phoneNumber: normalizedPhone,
+                    passwordHash,
+                    referralCode,
+                    role: 'CUSTOMER',
+                    gender,
+                    address,
+                },
+            });
+            await (0, audit_js_1.createAuditLog)({
+                userId: req.user.id,
+                action: 'APP_CUSTOMER_CREATED',
+                ipAddress: req.ip,
+                details: {
+                    message: `App customer '${fullName}' (${email}) created by admin ${req.user.fullName}`,
+                    customerId: customer.id,
+                    email,
+                    phoneNumber: normalizedPhone,
+                },
+            });
+            return res.status(201).json({
+                success: true,
+                message: 'App customer created successfully',
+                data: {
+                    id: customer.id,
+                    fullName: customer.fullName,
+                    email: customer.email,
+                    phoneNumber: customer.phoneNumber,
+                    referralCode: customer.referralCode,
+                    createdAt: customer.createdAt,
+                },
+            });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    /**
+     * PUT /admin/customers/:id
+     * Admin updates a customer account
+     */
+    static async updateCustomer(req, res, next) {
+        const { id } = req.params;
+        const { fullName, email, phoneNumber, password, gender, address } = req.body;
+        try {
+            const existing = await db_js_1.default.user.findUnique({ where: { id } });
+            if (!existing) {
+                return res.status(404).json({ success: false, message: 'Customer not found' });
+            }
+            const updateData = {};
+            if (fullName)
+                updateData.fullName = fullName;
+            if (email)
+                updateData.email = email;
+            if (phoneNumber) {
+                let normalizedPhone = phoneNumber.replace(/[\s\-()]/g, '');
+                if (/^\d{10}$/.test(normalizedPhone)) {
+                    normalizedPhone = `+91${normalizedPhone}`;
+                }
+                updateData.phoneNumber = normalizedPhone;
+            }
+            if (password) {
+                updateData.passwordHash = await (0, crypto_js_1.hashPassword)(password);
+            }
+            if (gender !== undefined)
+                updateData.gender = gender;
+            if (address !== undefined)
+                updateData.address = address;
+            const customer = await db_js_1.default.user.update({
+                where: { id },
+                data: updateData,
+            });
+            await (0, audit_js_1.createAuditLog)({
+                userId: req.user.id,
+                action: 'APP_CUSTOMER_UPDATED',
+                ipAddress: req.ip,
+                details: {
+                    message: `App customer '${customer.fullName}' updated by admin ${req.user.fullName}`,
+                    customerId: id,
+                },
+            });
+            return res.status(200).json({
+                success: true,
+                message: 'Customer updated successfully',
+                data: {
+                    id: customer.id,
+                    fullName: customer.fullName,
+                    email: customer.email,
+                    phoneNumber: customer.phoneNumber,
+                    referralCode: customer.referralCode,
+                    gender: customer.gender,
+                    address: customer.address,
+                    createdAt: customer.createdAt,
+                },
+            });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
     /**
      * GET /admin/customers (Admin / Staff Only)
      * Lists all customers with pagination and search

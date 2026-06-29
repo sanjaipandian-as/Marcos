@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -12,7 +12,9 @@ import {
   TextInput,
   ImageBackground,
   Alert,
-  Modal
+  Modal,
+  Linking,
+  Animated
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SvgXml } from 'react-native-svg';
@@ -26,20 +28,33 @@ import {
   ShoppingCart,
   Heart,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  Play,
+  ExternalLink,
+  X
 } from 'lucide-react-native';
 import { CustomCartAddIcon, CustomCartAddedIcon } from '../../components/CartIcons';
+import { useVideoPlayer, VideoView } from 'expo-video';
+import BannerCarousel from '../../components/home/BannerCarousel';
+import CategoryList from '../../components/home/CategoryList';
+import ProductCard from '../../components/home/ProductCard';
+import ProductGridSection from '../../components/home/ProductGridSection';
+import PromoReelsSection from '../../components/home/PromoReelsSection';
+import SpecialOffersSection from '../../components/home/SpecialOffersSection';
+import TopSellingSection from '../../components/home/TopSellingSection';
 
 const { width } = Dimensions.get('window');
 
 const SUCCESS_SVG_XML = `<?xml version="1.0" encoding="utf-8"?><svg fill="none" viewBox="0 0 796 714" xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="cp-3459-3837"><rect height="3837" width="3459" y="0" x="0" /></clipPath><g id="comp_745"><g transform="matrix(1,0,0,1,1729.5,1918.5)" opacity="0.5" id="stroke1"><animate repeatCount="indefinite" begin="0s" calcMode="discrete" fill="freeze" dur="40.1s" values="visible; hidden" keyTimes="0; 1" attributeName="visibility" /><g id="Shape 1" transform="matrix(1,0,0,1,0,0)"><path stroke-linejoin="miter" stroke-linecap="round" stroke-width="92" stroke-opacity="1" stroke="#8bffac" fill="#ffffff" fill-opacity="1" d="M-1401.5,-1457.5L-1027.49,-1672.499" /></g></g><g transform="matrix(1,0,0,1,1818.5,2059.5)" opacity="0.5" visibility="hidden" id="stroke2"><animate repeatCount="indefinite" begin="0.16s" calcMode="discrete" fill="freeze" dur="40.1s" values="visible; hidden" keyTimes="0; 1" attributeName="visibility" /><g id="Shape 1" transform="matrix(1,0,0,1,0,0)"><path stroke-linejoin="miter" stroke-linecap="round" stroke-width="92" stroke-opacity="1" stroke="#8bffac" fill="#ffffff" fill-opacity="1" d="M-1401.5,-1457.5L-1027.49,-1672.499" /></g></g><g transform="matrix(1,0,0,1,2288.5,1790.5)" opacity="0.5" visibility="hidden" id="stroke4"><animate repeatCount="indefinite" begin="0.26s" calcMode="discrete" fill="freeze" dur="40.1s" values="visible; hidden" keyTimes="0; 1" attributeName="visibility" /><g id="Shape 1" transform="matrix(1,0,0,1,0,0)"><path stroke-linejoin="miter" stroke-linecap="round" stroke-width="92" stroke-opacity="1" stroke="#8bffac" fill="#ffffff" fill-opacity="1" d="M-1401.5,-1457.5L-1372.351,-1474.477" /></g></g><g transform="matrix(1,0,0,1,1950.5,2175.5)" opacity="0.5" visibility="hidden" id="stroke3"><animate repeatCount="indefinite" begin="0.36s" calcMode="discrete" fill="freeze" dur="40.1s" values="visible; hidden" keyTimes="0; 1" attributeName="visibility" /><g id="Shape 1" transform="matrix(1,0,0,1,0,0)"><path stroke-linejoin="miter" stroke-linecap="round" stroke-width="92" stroke-opacity="1" stroke="#8bffac" fill="#ffffff" fill-opacity="1" d="M-1401.5,-1457.5L-1117.454,-1623.493" /></g></g><g visibility="hidden" id="Bolas1"><animate repeatCount="indefinite" begin="0.44s" calcMode="discrete" fill="freeze" dur="40.1s" values="visible; hidden" keyTimes="0; 1" attributeName="visibility" /><g transform="translate(621.5,478.5)"><g transform="rotate(-11)"><animateTransform repeatCount="indefinite" type="rotate" attributeName="transform" dur="1.56s" begin="0.44s" calcMode="spline" values="-11; 0; 6" keyTimes="0; 0.308; 1" keySplines="0.333 0 0.833 0.921; 0.167 0.327 0.15 1" fill="freeze" /><g transform="scale(0,0)"><animateTransform repeatCount="indefinite" type="scale" attributeName="transform" dur="0.48s" begin="0.44s" calcMode="spline" values="0 0; 1 1" keyTimes="0; 1" keySplines="0.333 0 0.101 1" fill="freeze" /><g transform="translate(1108,1440)"><g id="Ellipse 3" transform="matrix(0.857,0,0,0.857,-819.535,-1371.645)"><ellipse ry="9.6775" rx="9.6775" cy="0" cx="0" stroke-linejoin="miter" stroke-linecap="butt" stroke-width="5" stroke-opacity="1" stroke="#8bffac" /></g><g id="Ellipse 1" transform="matrix(1.409,0,0,1.409,-1282.949,-1147.881)"><ellipse ry="9.6775" rx="9.6775" cy="0" cx="0" stroke-linejoin="miter" stroke-linecap="butt" stroke-width="5" stroke-opacity="1" stroke="#8bffac" /></g><g id="Ellipse 2" transform="matrix(1.409,0,0,1.409,-1151.238,-1723.625)"><ellipse ry="9.6775" rx="9.6775" cy="0" cx="0" stroke-linejoin="miter" stroke-linecap="butt" stroke-width="5" stroke-opacity="1" stroke="#8bffac" /></g></g></g></g></g></g><g visibility="hidden" id="Bolas2"><animate repeatCount="indefinite" begin="0.52s" calcMode="discrete" fill="freeze" dur="40.1s" values="visible; hidden" keyTimes="0; 1" attributeName="visibility" /><g transform="translate(617.5,490.5)"><g transform="scale(0,0)"><animateTransform repeatCount="indefinite" type="scale" attributeName="transform" dur="0.48s" begin="0.52s" calcMode="spline" values="0 0; 1 1" keyTimes="0; 1" keySplines="0.333 0 0.101 1" fill="freeze" /><g transform="translate(1112,1428)"><g id="Ellipse 2" transform="matrix(0.644,0,0,0.644,-1435.793,-1556.371)"><ellipse ry="9.6775" rx="9.6775" cy="0" cx="0" stroke-linejoin="miter" stroke-linecap="butt" stroke-width="8" stroke-opacity="1" stroke="#8bffac" /></g><g id="Ellipse 3" transform="matrix(0.644,0,0,0.644,-952.029,-1150.197)"><ellipse ry="9.6775" rx="9.6775" cy="0" cx="0" stroke-linejoin="miter" stroke-linecap="butt" stroke-width="8" stroke-opacity="1" stroke="#8bffac" /></g></g></g></g></g><g opacity="0.01" visibility="hidden" id="cruz1"><animate repeatCount="indefinite" begin="0.6s" calcMode="discrete" fill="freeze" dur="40.1s" values="visible; hidden" keyTimes="0; 1" attributeName="visibility" /><animate repeatCount="indefinite" attributeName="opacity" dur="0.4s" begin="0.6s" calcMode="spline" values="0.01; 1" keyTimes="0; 1" keySplines="0 0 1 1" fill="freeze" /><g transform="translate(614.125,462.5)"><animateTransform repeatCount="indefinite" type="translate" attributeName="transform" dur="0.4s" begin="0.6s" calcMode="spline" values="614.125 462.5; 852.125 164.5" keyTimes="0; 1" keySplines="0.333 0 0.103 1" fill="freeze" /><g transform="rotate(-28)"><animateTransform repeatCount="indefinite" type="rotate" attributeName="transform" dur="1.4s" begin="0.6s" calcMode="spline" values="-28; 18" keyTimes="0; 1" keySplines="0.333 0 0.667 1" fill="freeze" /><g transform="scale(1,1) translate(882.375,1726)"><g id="Shape 1" transform="matrix(0,-1,1,0,843.572,-2608.05)"><path stroke-linejoin="miter" stroke-linecap="butt" stroke-width="3" stroke-opacity="1" stroke="#8bffac" d="M-894.5,-1726L-869.5,-1726" /></g><g id="Shape 2"><path stroke-linejoin="miter" stroke-linecap="butt" stroke-width="3" stroke-opacity="1" stroke="#8bffac" d="M-894.5,-1726L-869.5,-1726" /></g></g></g></g></g><g opacity="0.01" visibility="hidden" id="cruz2"><animate repeatCount="indefinite" begin="0.64s" calcMode="discrete" fill="freeze" dur="40.1s" values="visible; hidden" keyTimes="0; 1" attributeName="visibility" /><animate repeatCount="indefinite" attributeName="opacity" dur="0.4s" begin="0.64s" calcMode="spline" values="0.01; 1" keyTimes="0; 1" keySplines="0 0 1 1" fill="freeze" /><g transform="translate(606.125,465.5)"><animateTransform repeatCount="indefinite" type="translate" attributeName="transform" dur="0.4s" begin="0.64s" calcMode="spline" values="606.125 465.5; 322.125 572.5" keyTimes="0; 1" keySplines="0.333 0 0 1" fill="freeze" /><g transform="rotate(-30)"><animateTransform repeatCount="indefinite" type="rotate" attributeName="transform" dur="1.36s" begin="0.64s" calcMode="spline" values="-30; 16" keyTimes="0; 1" keySplines="0.333 0 0.667 1" fill="freeze" /><g transform="scale(1,1) translate(882.375,1726)"><g id="Shape 1" transform="matrix(0,-1,1,0,843.572,-2608.05)"><path stroke-linejoin="miter" stroke-linecap="butt" stroke-width="3" stroke-opacity="1" stroke="#8bffac" d="M-894.5,-1726L-869.5,-1726" /></g><g id="Shape 2"><path stroke-linejoin="miter" stroke-linecap="butt" stroke-width="3" stroke-opacity="1" stroke="#8bffac" d="M-894.5,-1726L-869.5,-1726" /></g></g></g></g></g><g opacity="0.01" visibility="hidden" id="cruz3"><animate repeatCount="indefinite" begin="0.72s" calcMode="discrete" fill="freeze" dur="40.1s" values="visible; visible" keyTimes="0; 1" attributeName="visibility" /><animate repeatCount="indefinite" attributeName="opacity" dur="0.4s" begin="0.72s" calcMode="spline" values="0.01; 1" keyTimes="0; 1" keySplines="0 0 1 1" fill="freeze" /><g transform="translate(614.125,467.5)"><animateTransform repeatCount="indefinite" type="translate" attributeName="transform" dur="0.4s" begin="0.72s" calcMode="spline" values="614.125 467.5; 841.125 680.5" keyTimes="0; 1" keySplines="0.333 0 0 1" fill="freeze" /><g transform="rotate(-33)"><animateTransform repeatCount="indefinite" type="rotate" attributeName="transform" dur="1.28s" begin="0.72s" calcMode="spline" values="-33; 13" keyTimes="0; 1" keySplines="0.333 0 0.667 1" fill="freeze" /><g transform="scale(1,1) translate(882.375,1726)"><g id="Shape 1" transform="matrix(0,-1,1,0,843.572,-2608.05)"><path stroke-linejoin="miter" stroke-linecap="butt" stroke-width="3" stroke-opacity="1" stroke="#8bffac" d="M-894.5,-1726L-869.5,-1726" /></g><g id="Shape 2"><path stroke-linejoin="miter" stroke-linecap="butt" stroke-width="3" stroke-opacity="1" stroke="#8bffac" d="M-894.5,-1726L-869.5,-1726" /></g></g></g></g></g></g></defs><g transform="matrix(1,0,0,1,-216,-106)" id="BG"><use clip-path="url(#cp-3459-3837)" height="3837" width="3459" y="0" x="0" xlink:href="#comp_745" href="#comp_745" /></g><g visibility="hidden" id="Shape Layer 1"><animate repeatCount="indefinite" begin="0.32s" calcMode="discrete" fill="freeze" dur="2.2s" values="visible; visible" keyTimes="0; 1" attributeName="visibility" /><g transform="translate(398.111,357.031)"><g transform="scale(0.3,0.3)"><animateTransform repeatCount="indefinite" type="scale" attributeName="transform" dur="0.32s" begin="0.32s" calcMode="spline" values="0.3 0.3; 1.011 1.011" keyTimes="0; 1" keySplines="0.333 0 0 1" fill="freeze" /><g transform="translate(-9.719,-2.719)"><g id="Ellipse 1" transform="matrix(1,0,0,1,9.719,2.719)"><ellipse ry="177.719" rx="177.719" cy="0" cx="0" stroke-linejoin="miter" stroke-linecap="butt" stroke-width="0" stroke-opacity="1" stroke="#ffffff" fill="#8bffac" fill-opacity="1" /></g></g></g></g></g><g visibility="hidden" id="Shape Layer 2"><animate repeatCount="indefinite" begin="0.52s" calcMode="discrete" fill="freeze" dur="2.2s" values="visible; visible" keyTimes="0; 1" attributeName="visibility" /><g transform="translate(398,357.031)"><g transform="scale(0.3,0.3)"><animateTransform repeatCount="indefinite" type="scale" attributeName="transform" dur="0.32s" begin="0.52s" calcMode="spline" values="0.3 0.3; 0.916 0.916" keyTimes="0; 1" keySplines="0.333 0 0 1" fill="freeze" /><g transform="translate(-9.719,-2.719)"><g id="Ellipse 1" transform="matrix(1,0,0,1,9.719,2.719)"><ellipse ry="177.719" rx="177.719" cy="0" cx="0" stroke-linejoin="miter" stroke-linecap="butt" stroke-width="0" stroke-opacity="1" stroke="#ffffff" fill="#17c37e" fill-opacity="1" /></g></g></g></g></g><g transform="matrix(1,0,0,1,396.5,357)" visibility="hidden" id="Shape Layer 3"><animate repeatCount="indefinite" begin="0.72s" calcMode="discrete" fill="freeze" dur="2.2s" values="visible; visible" keyTimes="0; 1" attributeName="visibility" /><g id="Shape 1"><path stroke-linejoin="miter" stroke-linecap="butt" stroke-width="18" stroke-opacity="1" stroke="#ffffff" d="M-72,6L-28,49L75,-54" /></g></g></svg>`;
 
+
 export default function HomeScreen({ navigation }) {
   const { theme, fonts, shadows } = useTheme();
-  
+
   // Data States
   const [userProfile, setUserProfile] = useState(null);
   const [products, setProducts] = useState([]);
+  const [offers, setOffers] = useState([]);
   const [favorites, setFavorites] = useState(new Set());
   const [cartItems, setCartItems] = useState(new Set());
   const [categories, setCategories] = useState([]);
@@ -49,6 +64,9 @@ export default function HomeScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [showCategories, setShowCategories] = useState(false);
   const [showReferralPopup, setShowReferralPopup] = useState(false);
+  const [promos, setPromos] = useState([]);
+  
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const checkReferralPopup = async () => {
@@ -70,13 +88,15 @@ export default function HomeScreen({ navigation }) {
       if (products.length === 0) {
         setLoading(true);
       }
-      const [profileRes, productsRes, categoriesRes, favRes, cartRes, bannersRes] = await Promise.all([
+      const [profileRes, productsRes, categoriesRes, favRes, cartRes, bannersRes, offersRes, promosRes] = await Promise.all([
         api.get('/auth/profile').catch(() => ({ success: false })),
         api.get('/products?page=1&limit=20').catch(() => ({ success: false, data: [] })),
         api.get('/categories').catch(() => ({ success: false, data: [] })),
         api.get('/products/favorites').catch(() => ({ success: false, data: [] })),
         api.get('/products/cart').catch(() => ({ success: false, data: [] })),
-        api.get('/banners').catch(() => ({ success: false, data: [] }))
+        api.get('/banners').catch(() => ({ success: false, data: [] })),
+        api.get('/offers/active').catch(() => ({ success: false, data: [] })),
+        api.get('/promos/active').catch(() => ({ success: false, data: [] }))
       ]);
 
       if (profileRes.success) setUserProfile(profileRes.data);
@@ -90,6 +110,12 @@ export default function HomeScreen({ navigation }) {
       }
       if (bannersRes.success) {
         setBanners(bannersRes.data || []);
+      }
+      if (offersRes.success) {
+        setOffers(offersRes.data || []);
+      }
+      if (promosRes.success) {
+        setPromos(promosRes.data || []);
       }
     } catch (err) {
       console.error('Error loading home data:', err);
@@ -249,72 +275,20 @@ export default function HomeScreen({ navigation }) {
   }).slice(0, 5);
 
   const renderProductCard = (item, isHorizontal = false) => {
-    const isFav = favorites.has(item.id);
-    const inCart = cartItems.has(item.id);
-    const originalPrice = Number(item.price) * 1.5;
-
     return (
-      <TouchableOpacity
+      <ProductCard
         key={item.id}
-        style={[
-          styles.productCard, 
-          shadows.premium, 
-          { backgroundColor: theme.bg.card },
-          isHorizontal && { width: 160, marginBottom: 10 }
-        ]}
-        onPress={() => navigation.navigate('ProductDetails', { productId: item.id })}
-        activeOpacity={0.9}
-      >
-        <View style={styles.productImageWrapper}>
-          <Image
-            source={{ uri: (item.images && item.images[0]) || 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=300&q=80' }}
-            style={styles.productImage}
-          />
-          <TouchableOpacity
-            style={styles.favBtn}
-            onPress={() => toggleFavorite(item.id)}
-            activeOpacity={0.7}
-          >
-            <Heart
-              size={14}
-              color={isFav ? '#ef4444' : '#767676'}
-              fill={isFav ? '#ef4444' : 'transparent'}
-            />
-          </TouchableOpacity>
-        </View>
-        
-        <View style={styles.productInfo}>
-          <Text style={[styles.productName, { fontFamily: fonts.semiBold, color: theme.text.primary }]} numberOfLines={1}>
-            {item.name}
-          </Text>
-          <View style={styles.priceRow}>
-            <View style={styles.priceContainer}>
-              <Text style={[styles.productPrice, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-                ₹{Number(item.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-              </Text>
-              <Text style={styles.originalPriceText}>
-                ₹{originalPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={[
-                styles.cartBtn,
-                inCart
-                  ? { backgroundColor: theme.brand[500], borderWidth: 1, borderColor: theme.brand[500] }
-                  : { backgroundColor: '#ffffff', borderWidth: 1, borderColor: theme.brand[500] }
-              ]}
-              onPress={() => handleAddToCart(item.id)}
-              activeOpacity={0.7}
-            >
-              {inCart ? (
-                <CustomCartAddedIcon color="#ffffff" size={18} />
-              ) : (
-                <CustomCartAddIcon color={theme.brand[500]} size={18} />
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </TouchableOpacity>
+        item={item}
+        isHorizontal={isHorizontal}
+        isFav={favorites.has(item.id)}
+        inCart={cartItems.has(item.id)}
+        theme={theme}
+        fonts={fonts}
+        shadows={shadows}
+        navigation={navigation}
+        toggleFavorite={toggleFavorite}
+        handleAddToCart={handleAddToCart}
+      />
     );
   };
 
@@ -336,8 +310,8 @@ export default function HomeScreen({ navigation }) {
           <Text style={[styles.modalSub, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
             You have received <Text style={{ fontFamily: fonts.bold, color: theme.brand[500] }}>100 points</Text> for joining via referral code.
           </Text>
-          <TouchableOpacity 
-            style={[styles.modalCloseBtn, { backgroundColor: theme.brand[500] }]} 
+          <TouchableOpacity
+            style={[styles.modalCloseBtn, { backgroundColor: theme.brand[500] }]}
             onPress={() => setShowReferralPopup(false)}
             activeOpacity={0.8}
           >
@@ -350,41 +324,97 @@ export default function HomeScreen({ navigation }) {
     </Modal>
   );
 
+  const defaultHeaderOpacity = scrollY.interpolate({
+    inputRange: [0, 50],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+
+  const scrolledHeaderOpacity = scrollY.interpolate({
+    inputRange: [40, 80],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+
+  const defaultHeaderTranslateY = scrollY.interpolate({
+    inputRange: [0, 50, 51],
+    outputRange: [0, 0, -1000],
+    extrapolate: 'clamp',
+  });
+
+  const scrolledHeaderTranslateY = scrollY.interpolate({
+    inputRange: [0, 39, 40, 80],
+    outputRange: [-1000, -1000, 15, 0],
+    extrapolate: 'clamp',
+  });
+
   return (
     <View style={[styles.container, { backgroundColor: theme.bg.main }]}>
       {renderReferralPopup()}
-      
+
       {/* Sticky Header Row */}
       <View style={styles.headerRow}>
-        <View style={styles.profileContainer}>
-          <View style={[styles.avatar, shadows.premium]}>
-            <Image 
-              source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&q=80' }} 
-              style={styles.avatarImage} 
-            />
+        {/* Default Header */}
+        <Animated.View style={[styles.absoluteHeader, { opacity: defaultHeaderOpacity, transform: [{ translateY: defaultHeaderTranslateY }] }]}>
+          <View style={styles.profileContainer}>
+            <View style={[styles.avatar, shadows.premium]}>
+              <Image
+                source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&q=80' }}
+                style={styles.avatarImage}
+              />
+            </View>
+            <View style={styles.greetingContainer}>
+              <Text style={[styles.helloText, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
+                Hello {getFirstName()}
+              </Text>
+              <Text style={[styles.welcomeText, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                Good Morning!
+              </Text>
+            </View>
           </View>
-          <View style={styles.greetingContainer}>
-            <Text style={[styles.helloText, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
-              Hello {getFirstName()}
-            </Text>
-            <Text style={[styles.welcomeText, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-              Good Morning!
-            </Text>
+          <View style={styles.headerActions}>
+            <TouchableOpacity style={[styles.actionBtn, shadows.premium]} activeOpacity={0.7} onPress={() => navigation.navigate('NotificationHistory')}>
+              <Bell size={20} color="#1e1e1e" />
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionBtn, shadows.premium]} activeOpacity={0.7} onPress={() => navigation.navigate('Wishlist')}>
+              <Heart size={20} color="#1e1e1e" />
+            </TouchableOpacity>
           </View>
-        </View>
-        <View style={styles.headerActions}>
-          <TouchableOpacity style={[styles.actionBtn, shadows.premium]} activeOpacity={0.7} onPress={() => navigation.navigate('NotificationHistory')}>
-            <Bell size={20} color="#1e1e1e" />
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionBtn, shadows.premium]} activeOpacity={0.7} onPress={() => navigation.navigate('Wishlist')}>
-            <Heart size={20} color="#1e1e1e" />
-          </TouchableOpacity>
-        </View>
+        </Animated.View>
+
+        {/* Scrolled Header */}
+        <Animated.View style={[styles.absoluteHeader, { opacity: scrolledHeaderOpacity, transform: [{ translateY: scrolledHeaderTranslateY }] }]}>
+          <View style={{ flexDirection: 'row', width: '100%', alignItems: 'center', gap: 12 }}>
+            <View style={[styles.searchBarContainer, { backgroundColor: theme.bg.card, flex: 1 }, shadows.premium]}>
+              <Search size={18} color="#9e9e9e" style={styles.searchIcon} />
+              <TextInput
+                style={[styles.searchInput, { fontFamily: fonts.regular, color: theme.text.primary }]}
+                placeholder="Search.."
+                placeholderTextColor="#9e9e9e"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                onSubmitEditing={handleSearchSubmit}
+                returnKeyType="search"
+              />
+            </View>
+            <TouchableOpacity style={[styles.actionBtn, shadows.premium]} activeOpacity={0.7} onPress={() => navigation.navigate('Wishlist')}>
+              <Heart size={20} color="#1e1e1e" />
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        
-        {/* Search Input and Filter Row */}
+      <Animated.ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={styles.scrollContent}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
+        )}
+        scrollEventThrottle={16}
+      >
+
+        {/* Search Input Row */}
         <View style={styles.searchRow}>
           <View style={[styles.searchBarContainer, { backgroundColor: theme.bg.card }, shadows.premium]}>
             <Search size={18} color="#9e9e9e" style={styles.searchIcon} />
@@ -398,295 +428,102 @@ export default function HomeScreen({ navigation }) {
               returnKeyType="search"
             />
           </View>
-          <TouchableOpacity style={[styles.filterSettingsBtn, { backgroundColor: showCategories ? theme.brand[500] : theme.bg.card }, shadows.premium]} activeOpacity={0.7} onPress={() => setShowCategories(v => !v)}>
-            <SlidersHorizontal size={18} color={showCategories ? '#ffffff' : '#1e1e1e'} />
-          </TouchableOpacity>
         </View>
-
-        {/* Categories Section */}
-        {showCategories && (
-          <>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-                Categories
-              </Text>
-            </View>
-
-            {/* Categories Tabs Row */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoriesTabsRow}>
-              {['All', 'Men', 'Women'].map((tab) => {
-                const isActive = selectedTab === tab;
-                return (
-                  <TouchableOpacity
-                    key={tab}
-                    style={[
-                      styles.categoryTab,
-                      isActive ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.card },
-                      shadows.premium
-                    ]}
-                    activeOpacity={0.8}
-                    onPress={() => setSelectedTab(tab)}
-                  >
-                    <Text
-                      style={[
-                        styles.categoryTabText,
-                        { fontFamily: fonts.medium },
-                        isActive ? { color: '#ffffff' } : { color: theme.text.primary }
-                      ]}
-                    >
-                      {tab}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-              <TouchableOpacity
-                style={[
-                  styles.categoryTab,
-                  { backgroundColor: theme.bg.card },
-                  shadows.premium
-                ]}
-                activeOpacity={0.8}
-                onPress={() => navigation.navigate('Browse')}
-              >
-                <Text
-                  style={[
-                    styles.categoryTabText,
-                    { fontFamily: fonts.medium, color: theme.text.primary }
-                  ]}
-                >
-                  View All
-                </Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </>
-        )}
 
         {/* Main Promotional Banners Slider */}
-        {banners.length > 0 ? (
-          <ScrollView
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            style={styles.bannerSlider}
-            contentContainerStyle={styles.bannerSliderContent}
-          >
-            {banners.map((banner) => (
-              <TouchableOpacity 
-                key={banner.id}
-                style={[styles.bannerCard, { backgroundColor: theme.brand[500], width: width - 40 }]}
-                activeOpacity={0.9}
-                onPress={() => {
-                  if (banner.targetUrl && banner.targetUrl.includes('categories/')) {
-                    const slug = banner.targetUrl.split('/').pop();
-                    const cat = categories.find(c => c.slug === slug);
-                    if (cat) {
-                      navigation.navigate('Browse', { categoryId: cat.id });
-                    } else {
-                      navigation.navigate('Browse');
-                    }
-                  } else {
-                    navigation.navigate('Browse');
-                  }
-                }}
-              >
-                <View style={styles.bannerLeft}>
-                  <Text style={[styles.bannerTitleText, { fontFamily: fonts.bold }]} numberOfLines={3}>
-                    {banner.title}
-                  </Text>
-                  <TouchableOpacity 
-                    style={styles.bannerBtn} 
-                    onPress={() => navigation.navigate('Browse')}
-                  >
-                    <Text style={[styles.bannerBtnText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>
-                      Shop Now
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.bannerRight}>
-                  <Image 
-                    source={{ uri: banner.imageUrl || 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&q=80' }} 
-                    style={styles.bannerImage}
-                    resizeMode="cover"
-                  />
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        ) : (
-          <TouchableOpacity 
-            style={[styles.bannerCard, { backgroundColor: theme.brand[500] }]}
-            activeOpacity={0.9}
-            onPress={() => navigation.navigate('Browse')}
-          >
-            <View style={styles.bannerLeft}>
-              <Text style={[styles.bannerTitleText, { fontFamily: fonts.bold }]}>
-                Get Your{'\n'}Special Sale{'\n'}Up to 40%
-              </Text>
-              <TouchableOpacity style={styles.bannerBtn} onPress={() => navigation.navigate('Browse')}>
-                <Text style={[styles.bannerBtnText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>
-                  Shop Now
-                </Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.bannerRight}>
-              <Image 
-                source={{ uri: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&q=80' }} 
-                style={styles.bannerImage}
-                resizeMode="cover"
-              />
-            </View>
-          </TouchableOpacity>
+        <BannerCarousel
+          banners={banners}
+          categories={categories}
+          theme={theme}
+          fonts={fonts}
+          navigation={navigation}
+        />
+
+        {/* Categories Section */}
+        {categories.length > 0 && (
+          <CategoryList
+            categories={categories}
+            theme={theme}
+            fonts={fonts}
+            shadows={shadows}
+            navigation={navigation}
+          />
         )}
+
+        {/* Offers Section */}
+        <SpecialOffersSection
+          offers={offers}
+          products={products}
+          cartItems={cartItems}
+          theme={theme}
+          fonts={fonts}
+          navigation={navigation}
+          handleAddToCart={handleAddToCart}
+        />
 
         {/* Trending Products Section */}
-        {trendingProducts.length > 0 && (
-          <View style={{ marginBottom: 16 }}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-                Trending Now
-              </Text>
-              <TouchableOpacity 
-                onPress={() => navigation.navigate('TrendingProducts')}
-                style={[styles.seeAllBtn, { backgroundColor: theme.brand[50] }]}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.seeAllBtnText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>
-                  See All
-                </Text>
-                <ChevronRight size={12} color={theme.brand[500]} />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.gridContainer}>
-              {trendingProducts.map((item) => renderProductCard(item, false))}
-            </View>
-            <TouchableOpacity
-              style={[
-                {
-                  backgroundColor: theme.brand[500],
-                  marginHorizontal: 20,
-                  marginTop: 4,
-                  paddingVertical: 14,
-                  borderRadius: 16,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                },
-                shadows.premium
-              ]}
-              activeOpacity={0.8}
-              onPress={() => navigation.navigate('TrendingProducts')}
-            >
-              <Text style={{ color: '#ffffff', fontFamily: fonts.bold, fontSize: 14, marginRight: 6 }}>
-                View All Trending
-              </Text>
-              <ChevronRight size={18} color="#ffffff" />
-            </TouchableOpacity>
-          </View>
-        )}
+        <ProductGridSection
+          title="Trending Now"
+          products={trendingProducts}
+          type="grid"
+          onSeeAll={() => navigation.navigate('TrendingProducts')}
+          renderProductCard={renderProductCard}
+          theme={theme}
+          fonts={fonts}
+          shadows={shadows}
+          buttonTitle="View All Trending"
+        />
+
+        {/* Promo Reels Section */}
+        <PromoReelsSection
+          promos={promos}
+          cartItems={cartItems}
+          navigation={navigation}
+          theme={theme}
+          fonts={fonts}
+          handleAddToCart={handleAddToCart}
+        />
 
         {/* New Arrivals Section */}
-        {newArrivals.length > 0 && (
-          <View style={{ marginBottom: 16 }}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-                New Arrivals
-              </Text>
-              <TouchableOpacity 
-                onPress={() => navigation.navigate('NewArrivals')}
-                style={[styles.seeAllBtn, { backgroundColor: theme.brand[50] }]}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.seeAllBtnText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>
-                  See All
-                </Text>
-                <ChevronRight size={12} color={theme.brand[500]} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 16 }}>
-              {newArrivals.map((item) => renderProductCard(item, true))}
-              <TouchableOpacity
-                style={[
-                  styles.productCard, 
-                  shadows.premium, 
-                  { backgroundColor: theme.bg.card, width: 160, marginBottom: 10, alignItems: 'center', justifyContent: 'center' }
-                ]}
-                activeOpacity={0.8}
-                onPress={() => navigation.navigate('NewArrivals')}
-              >
-                <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: theme.brand[50], alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
-                  <ChevronRight size={24} color={theme.brand[500]} />
-                </View>
-                <Text style={{ fontFamily: fonts.bold, color: theme.text.primary, fontSize: 14 }}>
-                  View All
-                </Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        )}
+        <ProductGridSection
+          title="New Arrivals"
+          products={newArrivals}
+          type="horizontal"
+          onSeeAll={() => navigation.navigate('NewArrivals')}
+          renderProductCard={renderProductCard}
+          theme={theme}
+          fonts={fonts}
+          shadows={shadows}
+          buttonTitle="View All"
+        />
 
         {/* Top Selling Items Section */}
-        {bestSellers.length > 0 && (
-          <View style={{ marginBottom: 16 }}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-                Top Selling Items
-              </Text>
-              <TouchableOpacity 
-                onPress={() => navigation.navigate('BestSellers')}
-                style={[styles.seeAllBtn, { backgroundColor: theme.brand[50] }]}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.seeAllBtnText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>
-                  See All
-                </Text>
-                <ChevronRight size={12} color={theme.brand[500]} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 16 }}>
-              {bestSellers.map((item) => renderProductCard(item, true))}
-              <TouchableOpacity
-                style={[
-                  styles.productCard, 
-                  shadows.premium, 
-                  { backgroundColor: theme.bg.card, width: 160, marginBottom: 10, alignItems: 'center', justifyContent: 'center' }
-                ]}
-                activeOpacity={0.8}
-                onPress={() => navigation.navigate('BestSellers')}
-              >
-                <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: theme.brand[50], alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
-                  <ChevronRight size={24} color={theme.brand[500]} />
-                </View>
-                <Text style={{ fontFamily: fonts.bold, color: theme.text.primary, fontSize: 14 }}>
-                  View All
-                </Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        )}
+        <TopSellingSection
+          title="Top Selling Items"
+          products={bestSellers}
+          onSeeAll={() => navigation.navigate('BestSellers')}
+          theme={theme}
+          fonts={fonts}
+          shadows={shadows}
+          navigation={navigation}
+          cartItems={cartItems}
+          handleAddToCart={handleAddToCart}
+        />
 
         {/* Just For You Header */}
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-            Just For You
-          </Text>
-          <TouchableOpacity 
-            onPress={() => navigation.navigate('Browse')}
-            style={[styles.seeAllBtn, { backgroundColor: theme.brand[50] }]}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.seeAllBtnText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>
-              See All
-            </Text>
-            <ChevronRight size={12} color={theme.brand[500]} />
-          </TouchableOpacity>
-        </View>
+        <ProductGridSection
+          title="Just For You"
+          products={filteredProducts}
+          type="grid"
+          onSeeAll={() => navigation.navigate('Browse')}
+          renderProductCard={renderProductCard}
+          theme={theme}
+          fonts={fonts}
+          shadows={shadows}
+          buttonTitle="See All Products"
+        />
 
-        {/* Two-Column Products Grid */}
-        <View style={styles.gridContainer}>
-          {filteredProducts.map((item) => renderProductCard(item, false))}
-        </View>
-
-      </ScrollView>
+      </Animated.ScrollView>
     </View>
   );
 }
@@ -704,12 +541,20 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingBottom: 10,
+    height: Platform.OS === 'ios' ? 114 : 94, // Fixed height for absolute children
+    justifyContent: 'center',
+  },
+  absoluteHeader: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 60 : 40,
+    left: 20,
+    right: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   profileContainer: {
     flexDirection: 'row',
@@ -796,19 +641,118 @@ const styles = StyleSheet.create({
   seeAllText: {
     fontSize: 12,
   },
-  categoriesTabsRow: {
-    paddingLeft: 20,
-    paddingRight: 8,
-    gap: 10,
-    marginBottom: 20,
+  categoriesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 20,
+    justifyContent: 'space-between',
+    rowGap: 12,
   },
-  categoryTab: {
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 12,
+  categoryCard: {
+    width: (width - 64) / 3, // 40 for horizontal padding + 24 for gaps
+    height: 64,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  categoryTabText: {
-    fontSize: 13,
+  categoryCardTextContainer: {
+    flex: 1,
+  },
+  categoryCardText: {
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  categoryCardImageContainer: {
+    width: 32,
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  categoryCardImage: {
+    width: '100%',
+    height: '100%',
+  },
+  offerCard: {
+    flexDirection: 'row',
+    borderRadius: 24,
+    padding: 12,
+    alignItems: 'stretch',
+  },
+  offerImageContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 20,
+    backgroundColor: '#ebf4f9', // light blue
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  offerImage: {
+    width: '80%',
+    height: '80%',
+  },
+  offerDiscountBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  offerDiscountText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  offerInfoContainer: {
+    flex: 1,
+    paddingLeft: 16,
+    justifyContent: 'space-between',
+  },
+  offerTitle: {
+    fontSize: 16,
+    marginBottom: 4,
+  },
+  offerDesc: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  offerBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  offerOriginalPrice: {
+    fontSize: 10,
+    color: '#9ca3af',
+    textDecorationLine: 'line-through',
+    marginBottom: -2,
+  },
+  offerPrice: {
+    fontSize: 15,
+  },
+  offerCartBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  offerBuyBtn: {
+    backgroundColor: '#111827',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 18,
+  },
+  offerBuyBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
   },
   bannerCard: {
     marginHorizontal: 20,
@@ -1011,5 +955,257 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#ffffff',
     letterSpacing: 1,
+  },
+  promoReelWrapper: {
+    width: 280,
+    height: 510, // 480 (card) + 30 (hanging buttons)
+    position: 'relative',
+    marginBottom: 0,
+  },
+  promoReelCard: {
+    width: '100%',
+    height: 480,
+    borderRadius: 28,
+    overflow: 'hidden',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+  },
+  promoReelFloatingActions: {
+    position: 'absolute',
+    bottom: 0, // Now positioned at the very bottom of the wrapper, inside bounds
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+    zIndex: 20,
+  },
+  promoReelImage: {
+    width: '100%',
+    height: '100%',
+  },
+  promoReelOverlayGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.22)',
+  },
+  promoReelTopLeft: {
+    position: 'absolute',
+    top: 14,
+    left: 14,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+    zIndex: 10,
+  },
+  promoReelTopLeftText: {
+    fontSize: 9,
+    color: '#0f172a',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  promoReelTopRight: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    flexDirection: 'column',
+    gap: 8,
+    zIndex: 10,
+  },
+  promoReelMiniBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  promoPlayCenter: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 5,
+  },
+  promoPlayCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.45)',
+  },
+  promoReelBottomInfo: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 14,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    zIndex: 10,
+  },
+  promoReelSubBadge: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginBottom: 6,
+  },
+  promoReelSubBadgeText: {
+    fontSize: 9,
+    color: '#0f172a',
+  },
+  promoReelTitleText: {
+    color: '#ffffff',
+    fontSize: 16,
+    marginBottom: 4,
+  },
+  promoReelDescText: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 11,
+    lineHeight: 14,
+    marginBottom: 12,
+  },
+  promoReelActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+    marginTop: 4,
+  },
+  promoReelActionRoundBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  promoReelActionRoundBtnLarge: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  reelsVignetteTop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 120,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  reelsVignetteBottom: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 350,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  reelsTopLeftBadge: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 24,
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  reelsTopRightContainer: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+  },
+  reelsMiniCircleBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  reelsBottomContainer: {
+    position: 'absolute',
+    bottom: 40,
+    left: 20,
+    right: 20,
+    zIndex: 10,
+  },
+  reelsSubBadge: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    alignSelf: 'flex-start',
+    marginBottom: 10,
+  },
+  reelsActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 24,
+  },
+  reelsActionRoundBtn: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  reelsActionRoundBtnLarge: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 5,
   },
 });

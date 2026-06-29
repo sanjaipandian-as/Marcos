@@ -74,7 +74,7 @@ export class ProductController {
         ];
       }
 
-      const [products, total] = await Promise.all([
+      const [products, total, activeOffers] = await Promise.all([
         prisma.product.findMany({
           where,
           orderBy: { [sortBy]: sortOrder },
@@ -83,11 +83,28 @@ export class ProductController {
           include: { category: true },
         }),
         prisma.product.count({ where }),
+        prisma.offer.findMany({
+          where: { isActive: true },
+        }),
       ]);
+
+      const freeShippingProductIds = new Set<string>();
+      const freeShippingCategoryIds = new Set<string>();
+      activeOffers.forEach(offer => {
+        if (offer.isFreeShipping || offer.type === 'FREE_SHIPPING') {
+          offer.applicableProductIds.forEach(id => freeShippingProductIds.add(id));
+          offer.applicableCategoryIds.forEach(id => freeShippingCategoryIds.add(id));
+        }
+      });
+
+      const processedProducts = products.map(product => ({
+        ...product,
+        hasFreeShipping: freeShippingProductIds.has(product.id) || freeShippingCategoryIds.has(product.categoryId)
+      }));
 
       const responsePayload = {
         success: true,
-        data: products,
+        data: processedProducts,
         pagination: {
           page: Number(page),
           limit: Number(limit),
@@ -111,14 +128,34 @@ export class ProductController {
     const { id } = req.params;
 
     try {
-      const product = await prisma.product.findUnique({
-        where: { id },
-        include: { category: true },
-      });
+      const [product, activeOffers] = await Promise.all([
+        prisma.product.findUnique({
+          where: { id },
+          include: { category: true },
+        }),
+        prisma.offer.findMany({
+          where: { isActive: true },
+        })
+      ]);
 
       if (!product) {
         return res.status(404).json({ success: false, message: 'Product not found' });
       }
+
+      let hasFreeShipping = false;
+      for (const offer of activeOffers) {
+        if (offer.isFreeShipping || offer.type === 'FREE_SHIPPING') {
+          if (offer.applicableProductIds.includes(product.id) || offer.applicableCategoryIds.includes(product.categoryId)) {
+            hasFreeShipping = true;
+            break;
+          }
+        }
+      }
+
+      const processedProduct = {
+        ...product,
+        hasFreeShipping
+      };
 
       // Log PRODUCT_VIEW event asynchronously to Redis list
       const userId = req.user?.id || null;
@@ -133,7 +170,7 @@ export class ProductController {
         console.error('Failed to log product view event to Redis:', e);
       }
 
-      return res.status(200).json({ success: true, data: product });
+      return res.status(200).json({ success: true, data: processedProduct });
     } catch (error) {
       next(error);
     }

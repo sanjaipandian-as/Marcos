@@ -39,20 +39,43 @@ export default function ProductDetailsScreen({ route, navigation }) {
   const [selectedSize, setSelectedSize] = useState('L'); // S, M, L, XL
   const [adding, setAdding] = useState(false);
   const [activeThumbnailIndex, setActiveThumbnailIndex] = useState(0);
+  
+  const [similarCategoryProducts, setSimilarCategoryProducts] = useState([]);
+  const [similarSubCategoryProducts, setSimilarSubCategoryProducts] = useState([]);
+  const [categoryName, setCategoryName] = useState('');
 
   const loadProductDetails = async () => {
     try {
       if (!product || product.id !== productId) {
         setLoading(true);
       }
-      const [prodRes, cartRes, favRes] = await Promise.all([
+      const [prodRes, cartRes, favRes, allProductsRes, categoriesRes] = await Promise.all([
         api.get(`/products/${productId}`),
         api.get('/products/cart'),
-        api.get('/products/favorites')
+        api.get('/products/favorites'),
+        api.get('/products?page=1&limit=50').catch(() => ({ success: false, data: [] })),
+        api.get('/categories').catch(() => ({ success: false, data: [] }))
       ]);
 
       if (prodRes.success) {
-        setProduct(prodRes.data);
+        const prod = prodRes.data;
+        setProduct(prod);
+
+        if (categoriesRes.success) {
+          const cat = categoriesRes.data.find(c => c.id === prod.categoryId);
+          if (cat) setCategoryName(cat.name);
+        }
+
+        if (allProductsRes.success) {
+          const allProds = allProductsRes.data || [];
+          const others = allProds.filter(p => p.id !== prod.id);
+          const bySubCat = prod.subCategoryId 
+            ? others.filter(p => p.subCategoryId === prod.subCategoryId).slice(0, 10)
+            : [];
+          const byCat = others.filter(p => p.categoryId === prod.categoryId && p.subCategoryId !== prod.subCategoryId).slice(0, 10);
+          setSimilarCategoryProducts(byCat);
+          setSimilarSubCategoryProducts(bySubCat);
+        }
       } else {
         Alert.alert('Error', 'Product not found.');
         navigation.goBack();
@@ -167,10 +190,31 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
   if (!product) return null;
 
-  const productImage = (product.images && product.images[0]) || 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=600&q=80';
-  
-  // Fake thumbnails for visualization of multiple angles
-  const thumbnails = [productImage, productImage, productImage, productImage];
+  const thumbnails = (product.images && product.images.length > 0) 
+    ? product.images 
+    : ['https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=600&q=80'];
+
+  const renderSimilarProduct = (item) => (
+    <TouchableOpacity
+      key={item.id}
+      style={[styles.similarCard, { backgroundColor: theme.bg.card }, shadows.premium]}
+      onPress={() => navigation.push('ProductDetails', { productId: item.id })}
+      activeOpacity={0.8}
+    >
+      <Image 
+        source={{ uri: (item.images && item.images[0]) || 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=300&q=80' }} 
+        style={styles.similarImage} 
+      />
+      <View style={styles.similarInfo}>
+        <Text style={[styles.similarName, { fontFamily: fonts.semiBold, color: theme.text.primary }]} numberOfLines={1}>
+          {item.name}
+        </Text>
+        <Text style={[styles.similarPrice, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+          ₹{Number(item.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg.main }]}>
@@ -190,6 +234,15 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
+        {/* Product Banner Image */}
+        {product.bannerImage ? (
+          <Image 
+            source={{ uri: product.bannerImage }} 
+            style={[styles.bannerImage, shadows.premium]} 
+            resizeMode="cover"
+          />
+        ) : null}
+
         {/* Large Product Image Card */}
         <View style={[styles.imageCard, shadows.premium]}>
           <Image 
@@ -200,8 +253,10 @@ export default function ProductDetailsScreen({ route, navigation }) {
           <TouchableOpacity style={styles.heartBtn} activeOpacity={0.7} onPress={toggleFavorite}>
             <Heart size={20} color={isFav ? '#ef4444' : '#767676'} fill={isFav ? '#ef4444' : 'transparent'} />
           </TouchableOpacity>
-          
-          {/* Thumbnails Row */}
+        </View>
+        
+        {/* Thumbnails Row (Moved under main image) */}
+        {thumbnails.length > 1 && (
           <View style={styles.thumbnailsRow}>
             {thumbnails.map((thumb, index) => {
               const isActive = index === activeThumbnailIndex;
@@ -217,7 +272,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
               );
             })}
           </View>
-        </View>
+        )}
 
         {/* Product Meta Section */}
         <View style={styles.infoSection}>
@@ -229,13 +284,18 @@ export default function ProductDetailsScreen({ route, navigation }) {
               <Text style={[styles.categoryText, { fontFamily: fonts.medium, color: theme.text.muted }]}>
                 {product.materialInfo || 'Bespoke Premium Fabric'}
               </Text>
+              {product.hasFreeShipping && (
+                <View style={[styles.freeShippingBadge, { marginTop: 8 }]}>
+                  <Text style={styles.freeShippingText}>Free Shipping</Text>
+                </View>
+              )}
             </View>
             <View style={{ alignItems: 'flex-end' }}>
+              <Text style={{ fontSize: 10, color: theme.text.muted, fontFamily: fonts.medium, marginBottom: 2 }}>
+                Starts from
+              </Text>
               <Text style={[styles.productPrice, { fontFamily: fonts.bold, color: theme.text.primary }]}>
                 ₹{Number(product.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-              </Text>
-              <Text style={{ fontSize: 10, color: theme.text.muted, fontFamily: fonts.medium, marginTop: 2 }}>
-                Starting Price
               </Text>
             </View>
           </View>
@@ -316,6 +376,40 @@ export default function ProductDetailsScreen({ route, navigation }) {
             </Text>
           </View>
         </View>
+
+        {/* Similar Products by SubCategory */}
+        {similarSubCategoryProducts.length > 0 && (
+          <View style={styles.similarSection}>
+            <View style={styles.similarHeader}>
+              <Text style={[styles.similarTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                Similar Styles
+              </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('ProductsCatalog', { categoryId: product.categoryId, subCategoryId: product.subCategoryId })}>
+                <Text style={[styles.seeAllText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>See All</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.similarScroll}>
+              {similarSubCategoryProducts.map(renderSimilarProduct)}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Similar Products by Category */}
+        {similarCategoryProducts.length > 0 && (
+          <View style={styles.similarSection}>
+            <View style={styles.similarHeader}>
+              <Text style={[styles.similarTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                More in {categoryName || 'this Category'}
+              </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('ProductsCatalog', { categoryId: product.categoryId })}>
+                <Text style={[styles.seeAllText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>See All</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.similarScroll}>
+              {similarCategoryProducts.map(renderSimilarProduct)}
+            </ScrollView>
+          </View>
+        )}
       </ScrollView>
 
       {/* Bottom Actions Row */}
@@ -396,46 +490,52 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     backgroundColor: '#ffffff',
     overflow: 'hidden',
-    marginTop: 10,
     height: 380,
     position: 'relative',
-    paddingBottom: 60, // Space for thumbnails inside the card
+    // Removed paddingBottom to keep it clean for the main image
+  },
+  bannerImage: {
+    width: '100%',
+    height: 100, // Reduced height for better proportion
+    borderRadius: 20,
+    marginBottom: 16,
+    marginTop: 4,
   },
   mainImage: {
     width: '100%',
-    height: 310,
+    height: '100%',
   },
   heartBtn: {
     position: 'absolute',
     top: 16,
     right: 16,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
   },
   thumbnailsRow: {
-    position: 'absolute',
-    bottom: 12,
-    left: 0,
-    right: 0,
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 12,
+    marginTop: 16,
+    marginBottom: 4,
   },
   thumbnailWrapper: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
+    width: 52,
+    height: 52,
+    borderRadius: 12,
     overflow: 'hidden',
     backgroundColor: '#eaeaea',
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
   thumbnailImage: {
     width: '100%',
@@ -464,6 +564,18 @@ const styles = StyleSheet.create({
   },
   productPrice: {
     fontSize: 22,
+  },
+  freeShippingBadge: {
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  freeShippingText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: 'bold',
   },
   selectorsRow: {
     flexDirection: 'row',
@@ -558,5 +670,45 @@ const styles = StyleSheet.create({
   },
   btnTextFilled: {
     fontSize: 15,
+  },
+  similarSection: {
+    marginTop: 32,
+    marginBottom: 8,
+  },
+  similarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  similarTitle: {
+    fontSize: 18,
+  },
+  seeAllText: {
+    fontSize: 13,
+  },
+  similarScroll: {
+    gap: 16,
+    paddingRight: 20, // Add padding at end of scroll
+  },
+  similarCard: {
+    width: 140,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  similarImage: {
+    width: '100%',
+    height: 140,
+    backgroundColor: '#eaeaea',
+  },
+  similarInfo: {
+    padding: 10,
+    gap: 4,
+  },
+  similarName: {
+    fontSize: 13,
+  },
+  similarPrice: {
+    fontSize: 14,
   },
 });

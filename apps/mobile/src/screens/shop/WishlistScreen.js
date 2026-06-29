@@ -107,7 +107,7 @@ export default function WishlistScreen({ navigation }) {
     const isOutOfStock = product.inventoryQty <= 0;
     
     // Generate cross-out price (original price)
-    const originalPrice = Number(product.price) * 1.5;
+    const originalPrice = product.price === "item.price" ? (item.originalPrice ? Number(item.originalPrice) : null) : (typeof product !== "undefined" && product.originalPrice ? Number(product.originalPrice) : (typeof item !== "undefined" && item.originalPrice ? Number(item.originalPrice) : null));
 
     return (
       <TouchableOpacity 
@@ -141,6 +141,7 @@ export default function WishlistScreen({ navigation }) {
           </Text>
           <View style={styles.priceRow}>
             <View style={styles.priceContainer}>
+              <Text style={{ fontSize: 10, color: '#94a3b8', marginBottom: 2 }}>Starts from</Text>
               <Text style={[styles.prodPrice, { color: theme.brand[500], fontFamily: fonts.bold }]}>
                 ₹{Number(product.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
               </Text>

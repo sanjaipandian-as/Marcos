@@ -14,6 +14,7 @@ import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
 
 // Core Screens
 import HomeScreen from '../screens/core/HomeScreen';
+import ReelsScreen from '../screens/core/ReelsScreen';
 import MoreScreen from '../screens/core/MoreScreen';
 
 // Shop Screens
@@ -29,6 +30,7 @@ import FestivalOffersScreen from '../screens/shop/FestivalOffersScreen';
 import DiscountsScreen from '../screens/shop/DiscountsScreen';
 import WishlistScreen from '../screens/shop/WishlistScreen';
 import CheckoutScreen from '../screens/shop/CheckoutScreen';
+import StoreLocatorScreen from '../screens/shop/StoreLocatorScreen';
 
 // Services Screens
 import AppointmentBookingScreen from '../screens/services/AppointmentBookingScreen';
@@ -53,7 +55,8 @@ import {
   User as UserIcon,
   Calendar,
   ShoppingBag,
-  Heart
+  Heart,
+  MapPin
 } from 'lucide-react-native';
 
 const Stack = createStackNavigator();
@@ -173,6 +176,12 @@ function TabNavigator({ onLogout }) {
                 <CustomCartIcon color={color} size={size} />
               </View>
             );
+          } else if (route.name === 'Stores') {
+            return (
+              <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                <MapPin color={color} size={size} />
+              </View>
+            );
           }
 
           return null;
@@ -196,6 +205,12 @@ function TabNavigator({ onLogout }) {
         name="Cart"
         component={CartScreen}
         options={{ tabBarLabel: 'Cart' }}
+      />
+
+      <Tab.Screen
+        name="Stores"
+        component={StoreLocatorScreen}
+        options={{ tabBarLabel: 'Stores' }}
       />
 
       <Tab.Screen
@@ -225,6 +240,7 @@ export function AppNavigator({ onLogout }) {
 
       {/* Nested secondary pages */}
       <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />
+      <Stack.Screen name="Reels" component={ReelsScreen} />
       <Stack.Screen name="More" component={MoreScreen} />
       <Stack.Screen name="Cart" component={CartScreen} />
       <Stack.Screen name="Checkout" component={CheckoutScreen} />

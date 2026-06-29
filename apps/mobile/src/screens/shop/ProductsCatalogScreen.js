@@ -47,6 +47,8 @@ export default function ProductsCatalogScreen({ navigation, route }) {
   const [loading, setLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const [activeThumb, setActiveThumb] = useState('right');
+  const [subCategories, setSubCategories] = useState([]);
+  const [selectedSubCategory, setSelectedSubCategory] = useState(null);
 
   // Slider Dragging Logic — use refs so PanResponder closures always read fresh values
   const [sliderWidth, setSliderWidth] = useState(1);
@@ -122,10 +124,19 @@ export default function ProductsCatalogScreen({ navigation, route }) {
     }),
   []);
 
-  // Sync search query parameter from HomeScreen if passed
+  // Sync search query or category parameter from HomeScreen if passed
   useEffect(() => {
     if (route?.params?.searchQuery) {
       setSearchQuery(route.params.searchQuery);
+    }
+    if (route?.params?.categoryId) {
+      setSelectedCategory(route.params.categoryId);
+    } else if (!route?.params?.categoryId && !route?.params?.searchQuery) {
+      setSelectedCategory('All');
+    }
+
+    if (route?.params?.subCategoryId) {
+      setSelectedSubCategory(route.params.subCategoryId);
     }
   }, [route?.params]);
 
@@ -197,6 +208,27 @@ export default function ProductsCatalogScreen({ navigation, route }) {
     }
   }, [selectedCategory, products]);
 
+  // Fetch Subcategories when Category changes
+  useEffect(() => {
+    if (selectedCategory !== 'All') {
+      const fetchSubCategories = async () => {
+        try {
+          const res = await api.get(`/categories/${selectedCategory}/subcategories`);
+          if (res.success) {
+            setSubCategories(res.data || []);
+          } else {
+            setSubCategories([]);
+          }
+        } catch (err) {
+          setSubCategories([]);
+        }
+      };
+      fetchSubCategories();
+    } else {
+      setSubCategories([]);
+    }
+  }, [selectedCategory]);
+
   const toggleFavorite = async (productId) => {
     try {
       const isFav = favorites.has(productId);
@@ -249,6 +281,11 @@ export default function ProductsCatalogScreen({ navigation, route }) {
     // Filter by Category
     if (selectedCategory !== 'All') {
       result = result.filter(product => product.categoryId === selectedCategory);
+    }
+
+    // Filter by SubCategory
+    if (selectedSubCategory) {
+      result = result.filter(product => product.subCategoryId === selectedSubCategory);
     }
 
     // Filter by Price Range
@@ -374,6 +411,7 @@ export default function ProductsCatalogScreen({ navigation, route }) {
           <TouchableOpacity 
             onPress={() => { 
               setSelectedCategory('All'); 
+              setSelectedSubCategory(null);
               setMinPrice(absoluteMin.toString()); 
               setMaxPrice(absoluteMax.toString()); 
             }}
@@ -387,12 +425,57 @@ export default function ProductsCatalogScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
 
+        {/* Subcategories Horizontal Scroll */}
+        {selectedCategory !== 'All' && subCategories.length > 0 && (
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 16, gap: 10 }}
+          >
+            <TouchableOpacity
+              style={[
+                styles.subCategoryPill,
+                !selectedSubCategory ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.card }
+              ]}
+              onPress={() => setSelectedSubCategory(null)}
+              activeOpacity={0.8}
+            >
+              <Text style={[
+                styles.subCategoryText,
+                { fontFamily: fonts.medium },
+                !selectedSubCategory ? { color: '#ffffff' } : { color: theme.text.primary }
+              ]}>
+                All
+              </Text>
+            </TouchableOpacity>
+            {subCategories.map(sub => (
+              <TouchableOpacity
+                key={sub.id}
+                style={[
+                  styles.subCategoryPill,
+                  selectedSubCategory === sub.id ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.card }
+                ]}
+                onPress={() => setSelectedSubCategory(sub.id)}
+                activeOpacity={0.8}
+              >
+                <Text style={[
+                  styles.subCategoryText,
+                  { fontFamily: fonts.medium },
+                  selectedSubCategory === sub.id ? { color: '#ffffff' } : { color: theme.text.primary }
+                ]}>
+                  {sub.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+
         {/* Two-Column Products Grid */}
         <View style={styles.gridContainer}>
           {filteredProducts.map((item) => {
             const isFav = favorites.has(item.id);
             const inCart = cartItems.has(item.id);
-            const originalPrice = Number(item.price) * 1.5;
+            const originalPrice = item.price === "item.price" ? (item.originalPrice ? Number(item.originalPrice) : null) : (typeof product !== "undefined" && product.originalPrice ? Number(product.originalPrice) : (typeof item !== "undefined" && item.originalPrice ? Number(item.originalPrice) : null));
 
             return (
               <TouchableOpacity
@@ -425,12 +508,15 @@ export default function ProductsCatalogScreen({ navigation, route }) {
                   </Text>
                   <View style={styles.priceRow}>
                     <View style={styles.priceContainer}>
-                      <Text style={[styles.productPrice, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                      <Text style={{ fontSize: 10, color: '#94a3b8', marginBottom: 2 }}>Starts from</Text>
+            <Text style={[styles.productPrice, { fontFamily: fonts.bold, color: theme.text.primary }]}>
                         ₹{Number(item.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                       </Text>
-                      <Text style={styles.originalPriceText}>
+                      {originalPrice ? (
+              <Text style={styles.originalPriceText}>
                         ₹{originalPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                       </Text>
+            ) : null}
                     </View>
                     <TouchableOpacity
                       style={[
@@ -499,7 +585,7 @@ export default function ProductsCatalogScreen({ navigation, route }) {
                         selectedCategory === 'All' ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.card }
                       ]}
                       activeOpacity={0.8}
-                      onPress={() => setSelectedCategory('All')}
+                      onPress={() => { setSelectedCategory('All'); setSelectedSubCategory(null); }}
                     >
                       <Text
                         style={[
@@ -521,7 +607,7 @@ export default function ProductsCatalogScreen({ navigation, route }) {
                             isActive ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.card }
                           ]}
                           activeOpacity={0.8}
-                          onPress={() => setSelectedCategory(cat.id)}
+                          onPress={() => { setSelectedCategory(cat.id); setSelectedSubCategory(null); }}
                         >
                           <Text
                             style={[
@@ -536,6 +622,59 @@ export default function ProductsCatalogScreen({ navigation, route }) {
                       );
                     })}
                   </View>
+                  
+                  {/* Subcategories in Filter Modal */}
+                  {selectedCategory !== 'All' && subCategories.length > 0 && (
+                    <View style={{ marginTop: 24 }}>
+                      <Text style={[styles.filterLabel, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                        Subcategory
+                      </Text>
+                      <View style={styles.filterTabsGrid}>
+                        <TouchableOpacity
+                          style={[
+                            styles.filterTabPill,
+                            !selectedSubCategory ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.card }
+                          ]}
+                          activeOpacity={0.8}
+                          onPress={() => setSelectedSubCategory(null)}
+                        >
+                          <Text
+                            style={[
+                              styles.filterTabText,
+                              { fontFamily: fonts.medium },
+                              !selectedSubCategory ? { color: '#ffffff' } : { color: theme.text.primary }
+                            ]}
+                          >
+                            All
+                          </Text>
+                        </TouchableOpacity>
+                        {subCategories.map((sub) => {
+                          const isActive = selectedSubCategory === sub.id;
+                          return (
+                            <TouchableOpacity
+                              key={sub.id}
+                              style={[
+                                styles.filterTabPill,
+                                isActive ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.card }
+                              ]}
+                              activeOpacity={0.8}
+                              onPress={() => setSelectedSubCategory(sub.id)}
+                            >
+                              <Text
+                                style={[
+                                  styles.filterTabText,
+                                  { fontFamily: fonts.medium },
+                                  isActive ? { color: '#ffffff' } : { color: theme.text.primary }
+                                ]}
+                              >
+                                {sub.name}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  )}
                 </View>
               ) : (
                 <View style={styles.priceFilterContainer}>
@@ -686,6 +825,18 @@ const styles = StyleSheet.create({
   },
   seeAllText: {
     fontSize: 12,
+  },
+  subCategoryPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  subCategoryText: {
+    fontSize: 13,
   },
   modalOverlay: {
     flex: 1,

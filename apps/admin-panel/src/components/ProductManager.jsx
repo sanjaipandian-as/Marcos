@@ -9,7 +9,8 @@ import {
   AlertTriangle,
   FileImage,
   Check,
-  X
+  X,
+  Image
 } from 'lucide-react';
 import api from '../utils/api';
 
@@ -31,29 +32,51 @@ export default function ProductManager() {
     price: '',
     materialInfo: '',
     categoryId: '',
+    subCategoryId: '',
     inventoryQty: '',
     targetGender: 'UNISEX',
     isTrending: false,
     trendingScheduledAt: '',
-    images: ['']
+    images: [''],
+    bannerImage: ''
   });
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [isBannerUploading, setIsBannerUploading] = useState(false);
 
-  const handleImageUpload = async (e) => {
+  const handleImageUpload = async (e, index = 0) => {
     const file = e.target.files[0];
     if (!file) return;
-    setIsUploading(true);
+    setIsUploading(index);
     setError('');
     try {
       const url = await api.uploadImage(file);
-      setFormData(prev => ({ ...prev, images: [url] }));
+      setFormData(prev => {
+        const newImages = [...prev.images];
+        newImages[index] = url;
+        return { ...prev, images: newImages };
+      });
     } catch (err) {
       setError('Image upload failed.');
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const handleBannerUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setIsBannerUploading(true);
+    setError('');
+    try {
+      const url = await api.uploadImage(file);
+      setFormData(prev => ({ ...prev, bannerImage: url }));
+    } catch (err) {
+      setError('Banner upload failed.');
+    } finally {
+      setIsBannerUploading(false);
     }
   };
 
@@ -111,11 +134,13 @@ export default function ProductManager() {
       price: '',
       materialInfo: '',
       categoryId: categories[0]?.id || '',
+      subCategoryId: '',
       inventoryQty: '10',
       targetGender: 'UNISEX',
       isTrending: false,
       trendingScheduledAt: '',
-      images: ['https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=500']
+      images: ['https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=500'],
+      bannerImage: ''
     });
     setError('');
     setIsModalOpen(true);
@@ -129,11 +154,13 @@ export default function ProductManager() {
       price: String(product.price),
       materialInfo: product.materialInfo || '',
       categoryId: product.categoryId,
+      subCategoryId: product.subCategoryId || '',
       inventoryQty: String(product.inventoryQty),
       targetGender: product.targetGender || 'UNISEX',
       isTrending: product.isTrending,
       trendingScheduledAt: product.trendingScheduledAt ? product.trendingScheduledAt.slice(0, 16) : '',
-      images: product.images
+      images: product.images,
+      bannerImage: product.bannerImage || ''
     });
     setError('');
     setIsModalOpen(true);
@@ -155,11 +182,13 @@ export default function ProductManager() {
       price: Number(formData.price),
       materialInfo: formData.materialInfo,
       categoryId: formData.categoryId,
+      subCategoryId: formData.subCategoryId || null,
       inventoryQty: Number(formData.inventoryQty),
       targetGender: formData.targetGender,
       isTrending: formData.isTrending,
       trendingScheduledAt: formData.isTrending && formData.trendingScheduledAt ? new Date(formData.trendingScheduledAt).toISOString() : undefined,
-      images: formData.images
+      images: formData.images.filter(img => img.trim() !== ''),
+      bannerImage: formData.bannerImage || null
     };
 
     try {
@@ -444,7 +473,7 @@ export default function ProductManager() {
                   <label className="text-[10px] font-bold text-slate-400 uppercase block">Category *</label>
                   <select
                     value={formData.categoryId}
-                    onChange={e => setFormData({ ...formData, categoryId: e.target.value })}
+                    onChange={e => setFormData({ ...formData, categoryId: e.target.value, subCategoryId: '' })}
                     className="w-full text-xs border border-slate-200 rounded-xl py-2 px-3 bg-white focus:outline-none focus:border-brand-500 font-semibold"
                   >
                     {categories.map(c => (
@@ -453,6 +482,21 @@ export default function ProductManager() {
                   </select>
                 </div>
                 <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase block">Sub-Category</label>
+                  <select
+                    value={formData.subCategoryId}
+                    onChange={e => setFormData({ ...formData, subCategoryId: e.target.value })}
+                    className="w-full text-xs border border-slate-200 rounded-xl py-2 px-3 bg-white focus:outline-none focus:border-brand-500 font-semibold"
+                  >
+                    <option value="">None</option>
+                    {(categories.find(c => c.id === formData.categoryId)?.subCategories || []).map(sc => (
+                      <option key={sc.id} value={sc.id}>{sc.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                   <label className="text-[10px] font-bold text-slate-400 uppercase block">Target Gender *</label>
                   <select
                     value={formData.targetGender}
@@ -465,7 +509,6 @@ export default function ProductManager() {
                     <option value="KIDS">Kids</option>
                   </select>
                 </div>
-              </div>
 
               <div className="grid grid-cols-1 gap-4">
                 <div className="space-y-1">
@@ -491,28 +534,67 @@ export default function ProductManager() {
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase block">Product Image *</label>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase block">Product Images (Up to 4) *</label>
+                {[0, 1, 2, 3].map(index => (
+                  <div key={index} className="flex gap-3 items-center">
+                    <input
+                      type="text"
+                      value={formData.images[index] || ''}
+                      onChange={e => {
+                        const newImages = [...formData.images];
+                        newImages[index] = e.target.value;
+                        setFormData({ ...formData, images: newImages });
+                      }}
+                      placeholder={`https://example.com/image${index + 1}.jpg`}
+                      className="flex-1 text-xs border border-slate-200 rounded-xl py-2.5 px-3 focus:outline-none focus:border-brand-500"
+                      required={index === 0}
+                    />
+                    <label className="cursor-pointer shrink-0 py-2 px-3.5 border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600 text-xs font-bold transition-all flex items-center gap-1 select-none">
+                      <span>{isUploading === index ? 'Uploading...' : 'Upload File'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleImageUpload(e, index)}
+                        className="hidden"
+                        disabled={isUploading !== false}
+                      />
+                    </label>
+                  </div>
+                ))}
+              </div>
+
+              {/* Product Banner Section */}
+              <div className="p-4 bg-indigo-50/50 border border-indigo-100 rounded-2xl space-y-3">
+                <div className="flex items-center gap-1.5">
+                  <Image className="w-4 h-4 text-indigo-500" />
+                  <span className="text-xs font-bold text-slate-700">Product Banner</span>
+                </div>
+                <p className="text-[9px] text-slate-400">A hero/cover banner image shown on product pages. This is separate from product gallery images.</p>
                 <div className="flex gap-3 items-center">
                   <input
                     type="text"
-                    value={formData.images[0]}
-                    onChange={e => setFormData({ ...formData, images: [e.target.value] })}
-                    placeholder="https://example.com/image.jpg"
+                    value={formData.bannerImage}
+                    onChange={e => setFormData({ ...formData, bannerImage: e.target.value })}
+                    placeholder="https://example.com/banner.jpg"
                     className="flex-1 text-xs border border-slate-200 rounded-xl py-2.5 px-3 focus:outline-none focus:border-brand-500"
-                    required
                   />
                   <label className="cursor-pointer shrink-0 py-2 px-3.5 border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600 text-xs font-bold transition-all flex items-center gap-1 select-none">
-                    <span>{isUploading ? 'Uploading...' : 'Upload File'}</span>
+                    <span>{isBannerUploading ? 'Uploading...' : 'Upload Banner'}</span>
                     <input
                       type="file"
                       accept="image/*"
-                      onChange={handleImageUpload}
+                      onChange={handleBannerUpload}
                       className="hidden"
-                      disabled={isUploading}
+                      disabled={isBannerUploading}
                     />
                   </label>
                 </div>
+                {formData.bannerImage && (
+                  <div className="mt-2 rounded-xl overflow-hidden border border-indigo-100 max-h-28">
+                    <img src={formData.bannerImage} alt="Banner preview" className="w-full h-full object-cover" />
+                  </div>
+                )}
               </div>
 
               <div className="p-4 bg-orange-50/50 border border-orange-100 rounded-2xl space-y-3">
