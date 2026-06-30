@@ -28,11 +28,8 @@ import { useCachedVideoUrl } from '../../utils/useCachedVideoUrl';
 
 // Individual Full Screen Reel Item
 function FullScreenReelItem({ promo, isActive, inCart, onAddToCart, onShopPress, theme, fonts, insets }) {
-  const cachedUrl = useCachedVideoUrl(promo.videoUrl);
-
-  const player = useVideoPlayer(cachedUrl || promo.videoUrl, (p) => {
+  const player = useVideoPlayer(promo.videoUrl, (p) => {
     p.loop = true;
-    // Autoplay logic is handled in the effect below
   });
 
   // Play/Pause based on whether this item is currently focused on screen

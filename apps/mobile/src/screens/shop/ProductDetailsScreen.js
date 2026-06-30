@@ -21,7 +21,9 @@ import {
   Minus,
   ShoppingCart,
   ShoppingBag,
-  PlusCircle
+  PlusCircle,
+  Sparkles,
+  Truck
 } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
@@ -43,18 +45,20 @@ export default function ProductDetailsScreen({ route, navigation }) {
   const [similarCategoryProducts, setSimilarCategoryProducts] = useState([]);
   const [similarSubCategoryProducts, setSimilarSubCategoryProducts] = useState([]);
   const [categoryName, setCategoryName] = useState('');
+  const [activeOffers, setActiveOffers] = useState([]);
 
   const loadProductDetails = async () => {
     try {
       if (!product || product.id !== productId) {
         setLoading(true);
       }
-      const [prodRes, cartRes, favRes, allProductsRes, categoriesRes] = await Promise.all([
+      const [prodRes, cartRes, favRes, allProductsRes, categoriesRes, offersRes] = await Promise.all([
         api.get(`/products/${productId}`),
         api.get('/products/cart'),
         api.get('/products/favorites'),
-        api.get('/products?page=1&limit=50').catch(() => ({ success: false, data: [] })),
-        api.get('/categories').catch(() => ({ success: false, data: [] }))
+        api.get('/products?page=1&limit=200').catch(() => ({ success: false, data: [] })),
+        api.get('/categories').catch(() => ({ success: false, data: [] })),
+        api.get('/offers/active').catch(() => ({ success: false, data: [] }))
       ]);
 
       if (prodRes.success) {
@@ -75,6 +79,17 @@ export default function ProductDetailsScreen({ route, navigation }) {
           const byCat = others.filter(p => p.categoryId === prod.categoryId && p.subCategoryId !== prod.subCategoryId).slice(0, 10);
           setSimilarCategoryProducts(byCat);
           setSimilarSubCategoryProducts(bySubCat);
+        }
+
+        if (offersRes.success && offersRes.data) {
+          const applicable = offersRes.data.filter(offer => {
+            const isStorewide = (!offer.applicableProductIds || offer.applicableProductIds.length === 0) &&
+                                (!offer.applicableCategoryIds || offer.applicableCategoryIds.length === 0);
+            const isProductMatch = offer.applicableProductIds?.includes(prod.id);
+            const isCategoryMatch = offer.applicableCategoryIds?.includes(prod.categoryId);
+            return isStorewide || isProductMatch || isCategoryMatch;
+          });
+          setActiveOffers(applicable);
         }
       } else {
         Alert.alert('Error', 'Product not found.');
@@ -192,19 +207,31 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
   const thumbnails = (product.images && product.images.length > 0) 
     ? product.images 
-    : ['https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=600&q=80'];
+    : [];
 
-  const renderSimilarProduct = (item) => (
+  // Check if any active offer grants free delivery for this product
+  const hasFreeDelivery = product.hasFreeShipping || activeOffers.some(
+    offer => offer.isFreeShipping || offer.type === 'FREE_SHIPPING'
+  );
+
+  // Horizontal card renderer (for category products)
+  const renderHorizontalProduct = (item) => (
     <TouchableOpacity
       key={item.id}
       style={[styles.similarCard, { backgroundColor: theme.bg.card }, shadows.premium]}
       onPress={() => navigation.push('ProductDetails', { productId: item.id })}
       activeOpacity={0.8}
     >
-      <Image 
-        source={{ uri: (item.images && item.images[0]) || 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=300&q=80' }} 
-        style={styles.similarImage} 
-      />
+      {item.images && item.images[0] ? (
+        <Image 
+          source={{ uri: item.images[0] }} 
+          style={styles.similarImage} 
+        />
+      ) : (
+        <View style={[styles.similarImage, { backgroundColor: theme.border, alignItems: 'center', justifyContent: 'center' }]}>
+          <ShoppingBag size={28} color={theme.text.muted} />
+        </View>
+      )}
       <View style={styles.similarInfo}>
         <Text style={[styles.similarName, { fontFamily: fonts.semiBold, color: theme.text.primary }]} numberOfLines={1}>
           {item.name}
@@ -212,6 +239,41 @@ export default function ProductDetailsScreen({ route, navigation }) {
         <Text style={[styles.similarPrice, { fontFamily: fonts.bold, color: theme.text.primary }]}>
           ₹{Number(item.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
         </Text>
+      </View>
+    </TouchableOpacity>
+  );
+
+  // Vertical grid card renderer (for subcategory products)
+  const renderGridProduct = (item) => (
+    <TouchableOpacity
+      key={item.id}
+      style={[styles.gridCard, { backgroundColor: theme.bg.card }, shadows.premium]}
+      onPress={() => navigation.push('ProductDetails', { productId: item.id })}
+      activeOpacity={0.8}
+    >
+      {item.images && item.images[0] ? (
+        <Image 
+          source={{ uri: item.images[0] }} 
+          style={styles.gridImage} 
+        />
+      ) : (
+        <View style={[styles.gridImage, { backgroundColor: theme.border, alignItems: 'center', justifyContent: 'center' }]}>
+          <ShoppingBag size={28} color={theme.text.muted} />
+        </View>
+      )}
+      <View style={styles.gridInfo}>
+        <Text style={[styles.gridName, { fontFamily: fonts.semiBold, color: theme.text.primary }]} numberOfLines={2}>
+          {item.name}
+        </Text>
+        <Text style={[styles.gridPrice, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+          ₹{Number(item.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+        </Text>
+        {item.hasFreeShipping && (
+          <View style={styles.gridFreeShipBadge}>
+            <Truck size={10} color="#16a34a" />
+            <Text style={styles.gridFreeShipText}>Free Delivery</Text>
+          </View>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -234,7 +296,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
-        {/* Product Banner Image */}
+        {/* Product Banner Image (above product images) */}
         {product.bannerImage ? (
           <Image 
             source={{ uri: product.bannerImage }} 
@@ -284,9 +346,10 @@ export default function ProductDetailsScreen({ route, navigation }) {
               <Text style={[styles.categoryText, { fontFamily: fonts.medium, color: theme.text.muted }]}>
                 {product.materialInfo || 'Bespoke Premium Fabric'}
               </Text>
-              {product.hasFreeShipping && (
-                <View style={[styles.freeShippingBadge, { marginTop: 8 }]}>
-                  <Text style={styles.freeShippingText}>Free Shipping</Text>
+              {hasFreeDelivery && (
+                <View style={[styles.freeDeliveryRow, { marginTop: 8 }]}>
+                  <Truck size={14} color="#16a34a" style={{ marginRight: 5 }} />
+                  <Text style={styles.freeDeliveryText}>Free Delivery</Text>
                 </View>
               )}
             </View>
@@ -299,6 +362,47 @@ export default function ProductDetailsScreen({ route, navigation }) {
               </Text>
             </View>
           </View>
+
+          {/* Active Offers Section */}
+          {activeOffers && activeOffers.length > 0 && (
+            <View style={styles.offersContainer}>
+              <View style={styles.offersHeader}>
+                <Sparkles size={14} color={theme.brand[500]} style={{ marginRight: 6 }} />
+                <Text style={[styles.offersHeading, { fontFamily: fonts.bold, color: theme.brand[500] }]}>
+                  Special Promos & Offers
+                </Text>
+              </View>
+              {activeOffers.map(offer => {
+                const isFreeShip = offer.isFreeShipping || offer.type === 'FREE_SHIPPING';
+                let offerTag = '';
+                if (offer.type === 'PERCENTAGE') {
+                  offerTag = `${offer.discountValue}% OFF`;
+                } else if (offer.type === 'FLAT') {
+                  offerTag = `₹${offer.discountValue} OFF`;
+                } else if (isFreeShip) {
+                  offerTag = 'FREE SHIP';
+                }
+
+                return (
+                  <View key={offer.id} style={[styles.offerRow, { borderColor: theme.border, backgroundColor: theme.bg.input }]}>
+                    <View style={[styles.offerBadge, { backgroundColor: theme.brand[500] }]}>
+                      <Text style={[styles.offerBadgeText, { fontFamily: fonts.bold }]}>{offerTag}</Text>
+                    </View>
+                    <View style={styles.offerTextCol}>
+                      <Text style={[styles.offerRowTitle, { fontFamily: fonts.bold, color: theme.text.primary }]} numberOfLines={1}>
+                        {offer.title}
+                      </Text>
+                      {offer.description ? (
+                        <Text style={[styles.offerRowDesc, { fontFamily: fonts.medium, color: theme.text.secondary }]} numberOfLines={1}>
+                          {offer.description}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
 
           {/* Size Selector and Quantity Adjuster Row */}
           <View style={styles.selectorsRow}>
@@ -377,8 +481,8 @@ export default function ProductDetailsScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* Similar Products by SubCategory */}
-        {similarSubCategoryProducts.length > 0 && (
+        {/* Similar Products - SubCategory first (vertical 2-per-row grid), then Category (horizontal scroll) */}
+        {product.subCategoryId && similarSubCategoryProducts.length > 0 && (
           <View style={styles.similarSection}>
             <View style={styles.similarHeader}>
               <Text style={[styles.similarTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
@@ -388,13 +492,12 @@ export default function ProductDetailsScreen({ route, navigation }) {
                 <Text style={[styles.seeAllText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>See All</Text>
               </TouchableOpacity>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.similarScroll}>
-              {similarSubCategoryProducts.map(renderSimilarProduct)}
-            </ScrollView>
+            <View style={styles.gridContainer}>
+              {similarSubCategoryProducts.map(renderGridProduct)}
+            </View>
           </View>
         )}
 
-        {/* Similar Products by Category */}
         {similarCategoryProducts.length > 0 && (
           <View style={styles.similarSection}>
             <View style={styles.similarHeader}>
@@ -406,7 +509,21 @@ export default function ProductDetailsScreen({ route, navigation }) {
               </TouchableOpacity>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.similarScroll}>
-              {similarCategoryProducts.map(renderSimilarProduct)}
+              {similarCategoryProducts.map(renderHorizontalProduct)}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* If no subcategory, but subcategory products exist (fallback) */}
+        {!product.subCategoryId && similarSubCategoryProducts.length > 0 && (
+          <View style={styles.similarSection}>
+            <View style={styles.similarHeader}>
+              <Text style={[styles.similarTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                You May Also Like
+              </Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.similarScroll}>
+              {similarSubCategoryProducts.map(renderHorizontalProduct)}
             </ScrollView>
           </View>
         )}
@@ -565,16 +682,20 @@ const styles = StyleSheet.create({
   productPrice: {
     fontSize: 22,
   },
-  freeShippingBadge: {
-    backgroundColor: '#ef4444',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+  freeDeliveryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0fdf4',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
     alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
   },
-  freeShippingText: {
-    color: '#ffffff',
-    fontSize: 11,
+  freeDeliveryText: {
+    color: '#16a34a',
+    fontSize: 12,
     fontWeight: 'bold',
   },
   selectorsRow: {
@@ -692,13 +813,13 @@ const styles = StyleSheet.create({
     paddingRight: 20, // Add padding at end of scroll
   },
   similarCard: {
-    width: 140,
+    width: 150,
     borderRadius: 16,
     overflow: 'hidden',
   },
   similarImage: {
     width: '100%',
-    height: 140,
+    height: 150,
     backgroundColor: '#eaeaea',
   },
   similarInfo: {
@@ -711,4 +832,86 @@ const styles = StyleSheet.create({
   similarPrice: {
     fontSize: 14,
   },
+  gridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  gridCard: {
+    width: (width - 52) / 2,
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  gridImage: {
+    width: '100%',
+    height: (width - 52) / 2,
+    backgroundColor: '#eaeaea',
+  },
+  gridInfo: {
+    padding: 10,
+    gap: 3,
+  },
+  gridName: {
+    fontSize: 13,
+  },
+  gridPrice: {
+    fontSize: 14,
+  },
+  gridFreeShipBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginTop: 2,
+  },
+  gridFreeShipText: {
+    color: '#16a34a',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  offersContainer: {
+    marginTop: 8,
+    gap: 8,
+  },
+  offersHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  offersHeading: {
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  offerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  offerBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginRight: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  offerBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+  },
+  offerTextCol: {
+    flex: 1,
+  },
+  offerRowTitle: {
+    fontSize: 12.5,
+  },
+  offerRowDesc: {
+    fontSize: 10,
+    marginTop: 1,
+  },
+
 });

@@ -47,14 +47,15 @@ export default function SpecialOffersSection({ offers, products, cartItems, them
               let discountText = '';
               let finalPrice = originalPrice;
 
+              const hasFreeShip = offer.isFreeShipping || offer.type === 'FREE_SHIPPING';
               if (offer.type === 'PERCENTAGE') {
-                discountText = `${offer.discountValue}% OFF`;
+                discountText = `${offer.discountValue}% OFF${hasFreeShip ? ' + Free Delivery' : ''}`;
                 finalPrice = originalPrice - (originalPrice * (offer.discountValue / 100));
               } else if (offer.type === 'FLAT') {
-                discountText = `₹${offer.discountValue} OFF`;
+                discountText = `₹${offer.discountValue} OFF${hasFreeShip ? ' + Free Delivery' : ''}`;
                 finalPrice = Math.max(0, originalPrice - offer.discountValue);
-              } else if (offer.type === 'FREE_SHIPPING' || offer.isFreeShipping) {
-                discountText = `Free Shipping`;
+              } else if (hasFreeShip) {
+                discountText = `Free Delivery`;
               }
 
               const inCart = displayProduct && cartItems.has(displayProduct.id);

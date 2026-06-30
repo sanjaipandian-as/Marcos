@@ -4,6 +4,7 @@ import {
   Text,
   View,
   ScrollView,
+  RefreshControl,
   Image,
   TouchableOpacity,
   TextInput,
@@ -21,7 +22,8 @@ import {
   Trash2,
   Minus,
   Plus,
-  ChevronsRight
+  ChevronsRight,
+  Gift
 } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
@@ -220,7 +222,13 @@ export default function CartScreen({ navigation }) {
         </View>
       ) : (
         <>
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          <ScrollView 
+            showsVerticalScrollIndicator={false} 
+            contentContainerStyle={styles.scrollContent}
+            refreshControl={
+              <RefreshControl refreshing={loading} onRefresh={loadCart} colors={[theme.brand[500]]} />
+            }
+          >
             
             {/* Cart Items List */}
           <View style={styles.listContainer}>

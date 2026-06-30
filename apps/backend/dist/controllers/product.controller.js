@@ -12,7 +12,7 @@ const redis_js_1 = __importDefault(require("../config/redis.js"));
 exports.productQuerySchema = zod_1.z.object({
     query: zod_1.z.object({
         page: zod_1.z.coerce.number().int().min(1).default(1),
-        limit: zod_1.z.coerce.number().int().min(1).max(1000).default(10),
+        limit: zod_1.z.coerce.number().int().min(1).max(1000).default(200),
         category: zod_1.z.string().optional(),
         search: zod_1.z.string().optional(),
         sortBy: zod_1.z.enum(['price', 'createdAt', 'name']).default('createdAt'),
@@ -70,7 +70,7 @@ class ProductController {
                     { description: { contains: search, mode: 'insensitive' } },
                 ];
             }
-            const [products, total] = await Promise.all([
+            const [products, total, activeOffers] = await Promise.all([
                 db_js_1.default.product.findMany({
                     where,
                     orderBy: { [sortBy]: sortOrder },
@@ -79,10 +79,31 @@ class ProductController {
                     include: { category: true },
                 }),
                 db_js_1.default.product.count({ where }),
+                db_js_1.default.offer.findMany({
+                    where: { isActive: true },
+                }),
             ]);
+            const freeShippingProductIds = new Set();
+            const freeShippingCategoryIds = new Set();
+            let storewideFreeShipping = false;
+            activeOffers.forEach(offer => {
+                if (offer.isFreeShipping || offer.type === 'FREE_SHIPPING') {
+                    if (offer.applicableProductIds.length === 0 && offer.applicableCategoryIds.length === 0) {
+                        storewideFreeShipping = true;
+                    }
+                    else {
+                        offer.applicableProductIds.forEach(id => freeShippingProductIds.add(id));
+                        offer.applicableCategoryIds.forEach(id => freeShippingCategoryIds.add(id));
+                    }
+                }
+            });
+            const processedProducts = products.map(product => ({
+                ...product,
+                hasFreeShipping: storewideFreeShipping || freeShippingProductIds.has(product.id) || freeShippingCategoryIds.has(product.categoryId)
+            }));
             const responsePayload = {
                 success: true,
-                data: products,
+                data: processedProducts,
                 pagination: {
                     page: Number(page),
                     limit: Number(limit),
@@ -103,13 +124,33 @@ class ProductController {
     static async getProductById(req, res, next) {
         const { id } = req.params;
         try {
-            const product = await db_js_1.default.product.findUnique({
-                where: { id },
-                include: { category: true },
-            });
+            const [product, activeOffers] = await Promise.all([
+                db_js_1.default.product.findUnique({
+                    where: { id },
+                    include: { category: true },
+                }),
+                db_js_1.default.offer.findMany({
+                    where: { isActive: true },
+                })
+            ]);
             if (!product) {
                 return res.status(404).json({ success: false, message: 'Product not found' });
             }
+            let hasFreeShipping = false;
+            for (const offer of activeOffers) {
+                if (offer.isFreeShipping || offer.type === 'FREE_SHIPPING') {
+                    if ((offer.applicableProductIds.length === 0 && offer.applicableCategoryIds.length === 0) ||
+                        offer.applicableProductIds.includes(product.id) ||
+                        offer.applicableCategoryIds.includes(product.categoryId)) {
+                        hasFreeShipping = true;
+                        break;
+                    }
+                }
+            }
+            const processedProduct = {
+                ...product,
+                hasFreeShipping
+            };
             // Log PRODUCT_VIEW event asynchronously to Redis list
             const userId = req.user?.id || null;
             try {
@@ -123,7 +164,7 @@ class ProductController {
             catch (e) {
                 console.error('Failed to log product view event to Redis:', e);
             }
-            return res.status(200).json({ success: true, data: product });
+            return res.status(200).json({ success: true, data: processedProduct });
         }
         catch (error) {
             next(error);
@@ -137,11 +178,37 @@ class ProductController {
         if (!userId)
             return res.status(401).json({ success: false, message: 'Unauthorized' });
         try {
-            const items = await db_js_1.default.cartItem.findMany({
-                where: { userId },
-                include: { product: true },
+            const [items, activeOffers] = await Promise.all([
+                db_js_1.default.cartItem.findMany({
+                    where: { userId },
+                    include: { product: true },
+                }),
+                db_js_1.default.offer.findMany({
+                    where: { isActive: true },
+                })
+            ]);
+            const freeShippingProductIds = new Set();
+            const freeShippingCategoryIds = new Set();
+            let storewideFreeShipping = false;
+            activeOffers.forEach(offer => {
+                if (offer.isFreeShipping || offer.type === 'FREE_SHIPPING') {
+                    if (offer.applicableProductIds.length === 0 && offer.applicableCategoryIds.length === 0) {
+                        storewideFreeShipping = true;
+                    }
+                    else {
+                        offer.applicableProductIds.forEach(id => freeShippingProductIds.add(id));
+                        offer.applicableCategoryIds.forEach(id => freeShippingCategoryIds.add(id));
+                    }
+                }
             });
-            return res.status(200).json({ success: true, data: items });
+            const processedItems = items.map(item => ({
+                ...item,
+                product: {
+                    ...item.product,
+                    hasFreeShipping: storewideFreeShipping || freeShippingProductIds.has(item.product.id) || freeShippingCategoryIds.has(item.product.categoryId)
+                }
+            }));
+            return res.status(200).json({ success: true, data: processedItems });
         }
         catch (error) {
             next(error);

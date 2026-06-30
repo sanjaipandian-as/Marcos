@@ -7,9 +7,7 @@ import SectionHeader from './SectionHeader';
 import { useCachedVideoUrl } from '../../utils/useCachedVideoUrl';
 
 function PromoReelItemCard({ promo, onVideoPress, onShopPress, onAddToCart, inCart, theme, fonts }) {
-  const cachedUrl = useCachedVideoUrl(promo.videoUrl);
-  
-  const player = useVideoPlayer(cachedUrl || promo.videoUrl, (p) => {
+  const player = useVideoPlayer(promo.videoUrl, (p) => {
     p.loop = true;
     p.muted = true;
     p.play();

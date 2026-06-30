@@ -1748,11 +1748,11 @@ class APIClient {
     }
   }
 
-  async updateQuickOrderStatus(id, quickOrderStatus, quickOrderProposedDate) {
+  async updateQuickOrderStatus(id, quickOrderStatus, quickOrderProposedDate, adminProposalNote) {
     try {
       const res = await this.request(`/orders/admin/${id}/quick-status`, {
         method: 'PUT',
-        body: JSON.stringify({ quickOrderStatus, quickOrderProposedDate }),
+        body: JSON.stringify({ quickOrderStatus, quickOrderProposedDate, adminProposalNote }),
       });
       return res.data;
     } catch (e) {

@@ -287,6 +287,8 @@ model Order {
   quickOrderStatus       QuickOrderStatus?
   quickOrderExpectedDate DateTime?
   quickOrderProposedDate DateTime?
+  adminProposalNote      String?           @db.Text
+  userRejectionNote      String?           @db.Text
   invoice                Invoice?
   user                   User?             @relation(fields: [userId], references: [id])
   orderItems             OrderItem[]
@@ -472,6 +474,8 @@ enum QuickOrderStatus {
   APPROVED
   REJECTED
   DATE_CHANGE_PROPOSED
+  USER_REJECTED_PROPOSAL
+  ADMIN_FINAL_APPROVAL_PENDING
 }
 
 enum OrderStatus {

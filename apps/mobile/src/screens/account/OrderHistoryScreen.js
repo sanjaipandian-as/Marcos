@@ -44,6 +44,7 @@ const TABS = [
   { key: 'ACTIVE',    label: 'Active' },
   { key: 'COMPLETED', label: 'Delivered' },
   { key: 'CANCELLED', label: 'Cancelled' },
+  { key: 'QUICK',     label: 'Quick Orders' },
 ];
 
 export default function OrderHistoryScreen({ navigation }) {
@@ -88,9 +89,16 @@ export default function OrderHistoryScreen({ navigation }) {
 
   const filteredOrders = useMemo(() => {
     let list = orders;
-    if (activeTab === 'ACTIVE')    list = orders.filter(o => ['PENDING', 'PAID', 'PROCESSING', 'SHIPPED'].includes(o.status));
-    if (activeTab === 'COMPLETED') list = orders.filter(o => o.status === 'DELIVERED');
-    if (activeTab === 'CANCELLED') list = orders.filter(o => o.status === 'CANCELLED');
+    
+    if (activeTab === 'QUICK') {
+      list = orders.filter(o => o.isQuickOrder);
+    } else if (activeTab !== 'ALL') {
+      list = orders.filter(o => !o.isQuickOrder);
+      if (activeTab === 'ACTIVE')    list = list.filter(o => ['PENDING', 'PAID', 'PROCESSING', 'SHIPPED'].includes(o.status));
+      if (activeTab === 'COMPLETED') list = list.filter(o => o.status === 'DELIVERED');
+      if (activeTab === 'CANCELLED') list = list.filter(o => o.status === 'CANCELLED');
+    }
+
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter(o =>
@@ -109,7 +117,49 @@ export default function OrderHistoryScreen({ navigation }) {
     Linking.openURL(url).catch(() => Alert.alert('Error', 'Could not open invoice.'));
   };
 
-  const getStatusConfig = status => {
+  const handleReorder = async (order) => {
+    if (!order.orderItems || order.orderItems.length === 0) {
+      Alert.alert('Error', 'No items found in this order to reorder.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      for (const item of order.orderItems) {
+        await api.post('/products/cart', {
+          productId: item.productId,
+          quantity: item.quantity || 1,
+        });
+      }
+      
+      Alert.alert(
+        'Added to Cart',
+        'All items from this order have been added to your cart.',
+        [
+          {
+            text: 'Go to Cart',
+            onPress: () => navigation.navigate('Cart'),
+          },
+          {
+            text: 'OK',
+            style: 'cancel',
+          },
+        ]
+      );
+    } catch (err) {
+      Alert.alert('Reorder Failed', err.message || 'Could not add items to cart.');
+    } finally {
+      setLoading(false);
+      loadOrders();
+    }
+  };
+
+
+  const getStatusConfig = itemOrStatus => {
+    const status = (typeof itemOrStatus === 'object' && itemOrStatus?.isQuickOrder && itemOrStatus?.quickOrderStatus === 'REJECTED')
+      ? 'CANCELLED'
+      : (typeof itemOrStatus === 'object' ? itemOrStatus.status : itemOrStatus);
+
     switch (status) {
       case 'DELIVERED':        return { color: '#16a34a', bg: '#f0fdf4', label: 'Delivered',                Icon: CheckCircle2 };
       case 'OUT_FOR_DELIVERY': return { color: '#059669', bg: '#ecfdf5', label: 'Product Out for Delivery', Icon: Truck };
@@ -129,7 +179,8 @@ export default function OrderHistoryScreen({ navigation }) {
       result.setDate(result.getDate() + days);
       return result.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
     };
-    switch (item.status) {
+    const status = (item.isQuickOrder && item.quickOrderStatus === 'REJECTED') ? 'CANCELLED' : item.status;
+    switch (status) {
       case 'DELIVERED':        return `Delivered on ${addDays(orderDate, 8)}`;
       case 'OUT_FOR_DELIVERY': return `Delivery executive is delivering your items today.`;
       case 'SHIPPED':          return `Stitching completed. Preparing for delivery.`;
@@ -180,7 +231,7 @@ export default function OrderHistoryScreen({ navigation }) {
 
   /* ─── Order card ───────────────────────────────────────── */
   const renderOrderItem = ({ item }) => {
-    const cfg = getStatusConfig(item.status);
+    const cfg = getStatusConfig(item);
     const { Icon } = cfg;
     const mainItem = item.orderItems?.[0];
     const extra = (item.orderItems?.length || 0) - 1;
@@ -279,7 +330,7 @@ export default function OrderHistoryScreen({ navigation }) {
             <Text style={[styles.footerBtnText, { fontFamily: fonts.semiBold, color: theme.text.primary }]}>Invoice</Text>
           </TouchableOpacity>
           <View style={[styles.footerSep, { backgroundColor: theme.border }]} />
-          <TouchableOpacity style={styles.footerBtn} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.footerBtn} onPress={() => handleReorder(item)} activeOpacity={0.7}>
             <RotateCcw size={15} color={theme.text.primary} />
             <Text style={[styles.footerBtnText, { fontFamily: fonts.semiBold, color: theme.text.primary }]}>Reorder</Text>
           </TouchableOpacity>

@@ -344,6 +344,7 @@ export default function OrderManager({ initialTab = 'bookings' }) {
   const [pendingStatusChange, setPendingStatusChange] = useState(null); // { orderId, invoiceNumber, from, to }
   const [proposeDateOrderId, setProposeDateOrderId] = useState(null);
   const [proposedDateVal, setProposedDateVal] = useState('');
+  const [adminProposalNoteVal, setAdminProposalNoteVal] = useState('');
 
   const [packingSlip, setPackingSlip] = useState(null);
   const [isSlipOpen, setIsSlipOpen] = useState(false);
@@ -714,8 +715,8 @@ export default function OrderManager({ initialTab = 'bookings' }) {
           <div style="flex: 1; padding: 10px 12px; display: flex; flex-direction: column; justify-content: center; font-size: 9px; line-height: 1.4; color: #333;">
             <div style="margin-bottom: 3px;"><strong>Order ID:</strong> <span style="font-family: monospace; font-size: 9.5px; font-weight: 700;">${order.id.substring(0, 12).toUpperCase()}</span></div>
             <div style="margin-bottom: 3px;"><strong>Date:</strong> ${new Date(order.createdAt).toLocaleDateString('en-IN', {day: '2-digit', month: 'short', year: 'numeric'})}</div>
-            <div style="margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;"><strong>Item:</strong> ${order.items?.[0]?.productName || 'Apparel Item'}</div>
-            <div><strong>Qty:</strong> ${order.items?.reduce((sum, item) => sum + item.quantity, 0) || 1} item(s)</div>
+            <div style="margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;"><strong>Item:</strong> ${order.orderItems?.[0]?.product?.name || 'Apparel Item'}</div>
+            <div><strong>Qty:</strong> ${order.orderItems?.reduce((sum, item) => sum + item.quantity, 0) || 1} item(s)</div>
           </div>
         </div>
 
@@ -764,7 +765,7 @@ export default function OrderManager({ initialTab = 'bookings' }) {
       return;
     }
 
-    const itemsHTML = (order.items || []).map((item, idx) => `
+    const itemsHTML = (order.orderItems || []).map((item, idx) => `
       <tr>
         <td style="padding: 10px; border-bottom: 1px solid #eee;">${idx + 1}</td>
         <td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: bold;">${item.productName}</td>
@@ -1189,8 +1190,8 @@ export default function OrderManager({ initialTab = 'bookings' }) {
         if (printFields.orderItems) {
           orderInfo += `<div style="margin-top: 6px;"><strong>Ordered Apparel:</strong></div>`;
           orderInfo += `<ul style="margin: 3px 0; padding-left: 15px; font-weight: bold;">`;
-          item.order.items?.forEach(p => {
-            orderInfo += `<li>${p.productName} (x${p.quantity})</li>`;
+          item.order.orderItems?.forEach(p => {
+            orderInfo += `<li>${p.product?.name} (x${p.quantity})</li>`;
           });
           orderInfo += `</ul>`;
         }
@@ -1386,23 +1387,29 @@ export default function OrderManager({ initialTab = 'bookings' }) {
     }
   };
 
-  const handleProposeQuickOrderDate = async (id, proposedDate) => {
+  const handleProposeQuickOrderDate = async (id, proposedDate, adminNote) => {
     if (!proposedDate) {
       alert('Please select a date.');
       return;
     }
+    if (!adminNote) {
+      alert('Please provide an explanation for proposing this date.');
+      return;
+    }
     try {
-      await api.updateQuickOrderStatus(id, 'DATE_CHANGE_PROPOSED', proposedDate);
+      await api.updateQuickOrderStatus(id, 'DATE_CHANGE_PROPOSED', proposedDate, adminNote);
       loadOrders();
       if (selectedOrder && selectedOrder.id === id) {
         setSelectedOrder(prev => ({ 
           ...prev, 
           quickOrderStatus: 'DATE_CHANGE_PROPOSED',
-          quickOrderProposedDate: proposedDate
+          quickOrderProposedDate: proposedDate,
+          adminProposalNote: adminNote
         }));
       }
       setProposeDateOrderId(null);
       setProposedDateVal('');
+      setAdminProposalNoteVal('');
       alert(`Date change proposed successfully to ${new Date(proposedDate).toLocaleDateString('en-IN')}`);
     } catch (err) {
       alert(err.message || 'Failed to propose date change.');
@@ -1623,7 +1630,7 @@ export default function OrderManager({ initialTab = 'bookings' }) {
           type: 'MEASUREMENT',
           date: booking.date,
           timeSlot: booking.timeSlot,
-          productType: selectedOrder.items?.[0]?.productName || 'Luxury Custom Outfit',
+          productType: selectedOrder.items?.[0]?.product?.name || 'Luxury Custom Outfit',
           notes: selectedOrder.invoiceNumber,
           userId: selectedOrder.userId || selectedOrder.user?.id || undefined,
         };
@@ -1682,7 +1689,7 @@ export default function OrderManager({ initialTab = 'bookings' }) {
           type: 'MEASUREMENT',
           date: formattedDate,
           timeSlot: rescheduleTimeSlot,
-          productType: selectedOrder.items?.[0]?.productName || 'Luxury Custom Outfit',
+          productType: selectedOrder.items?.[0]?.product?.name || 'Luxury Custom Outfit',
           notes: selectedOrder.invoiceNumber,
           userId: selectedOrder.userId || selectedOrder.user?.id || undefined,
         };
@@ -2500,25 +2507,51 @@ export default function OrderManager({ initialTab = 'bookings' }) {
                         <td className="py-4 px-6 text-slate-600 font-medium whitespace-nowrap">
                           {order.quickOrderExpectedDate ? new Date(order.quickOrderExpectedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
                         </td>
-                        <td className="py-4 px-6 text-slate-600 font-medium max-w-xs truncate" title={order.quickOrderReason}>{order.quickOrderReason}</td>
+                        <td className="py-4 px-6">
+                          <div className="text-slate-600 font-medium max-w-xs truncate" title={order.quickOrderReason}>
+                            {order.quickOrderReason}
+                          </div>
+                          {order.quickOrderStatus === 'USER_REJECTED_PROPOSAL' && order.userRejectionNote && (
+                            <div className="mt-1.5 p-1.5 bg-red-50 border border-red-100 rounded text-[10px] text-red-700 font-medium leading-snug" title={order.userRejectionNote}>
+                              <span className="font-extrabold text-red-800 uppercase tracking-wide text-[9px] block mb-0.5">Rejected Reason:</span>
+                              {order.userRejectionNote}
+                            </div>
+                          )}
+                        </td>
                         <td className="py-4 px-6">
                           <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold border ${
                             order.quickOrderStatus === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 
                             order.quickOrderStatus === 'REJECTED' ? 'bg-red-50 text-red-700 border-red-200' : 
                             order.quickOrderStatus === 'DATE_CHANGE_PROPOSED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                            order.quickOrderStatus === 'USER_REJECTED_PROPOSAL' ? 'bg-red-50 text-red-700 border-red-200' :
+                            order.quickOrderStatus === 'ADMIN_FINAL_APPROVAL_PENDING' ? 'bg-purple-50 text-purple-700 border-purple-200' :
                             'bg-amber-50 text-amber-700 border-amber-200'
                           }`}>
-                            {order.quickOrderStatus === 'DATE_CHANGE_PROPOSED' ? 'DATE PROPOSED' : (order.quickOrderStatus || 'PENDING')}
+                            {order.quickOrderStatus === 'DATE_CHANGE_PROPOSED' ? 'DATE PROPOSED' : 
+                             order.quickOrderStatus === 'USER_REJECTED_PROPOSAL' ? 'USER REJECTED' :
+                             order.quickOrderStatus === 'ADMIN_FINAL_APPROVAL_PENDING' ? 'FINAL APPROVAL PENDING' :
+                             (order.quickOrderStatus || 'PENDING')}
                           </span>
                           {order.quickOrderStatus === 'DATE_CHANGE_PROPOSED' && order.quickOrderProposedDate && (
                             <div className="text-[10px] text-blue-600 font-extrabold mt-1">
                               Proposed: {new Date(order.quickOrderProposedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
                             </div>
                           )}
+                          {order.quickOrderStatus === 'DATE_CHANGE_PROPOSED' && order.adminProposalNote && (
+                            <div className="mt-1 p-1.5 bg-blue-50 border border-blue-100 rounded text-[10px] text-blue-700 font-medium leading-snug" title={order.adminProposalNote}>
+                              <span className="font-extrabold text-blue-800 uppercase tracking-wide text-[9px] block mb-0.5">Admin Note:</span>
+                              {order.adminProposalNote}
+                            </div>
+                          )}
+                          {order.quickOrderStatus === 'ADMIN_FINAL_APPROVAL_PENDING' && order.quickOrderExpectedDate && (
+                            <div className="text-[10px] text-purple-600 font-extrabold mt-1">
+                              Accepted Date: {new Date(order.quickOrderExpectedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                            </div>
+                          )}
                         </td>
                         <td className="py-4 px-6 text-center">
                           <div className="flex gap-2 justify-center">
-                            {(!order.quickOrderStatus || order.quickOrderStatus === 'PENDING' || order.quickOrderStatus === 'DATE_CHANGE_PROPOSED') && (
+                            {order.isQuickOrder && (!order.quickOrderStatus || ['PENDING', 'DATE_CHANGE_PROPOSED', 'USER_REJECTED_PROPOSAL', 'ADMIN_FINAL_APPROVAL_PENDING'].includes(order.quickOrderStatus)) && (
                               <>
                                 <button
                                   onClick={() => handleUpdateQuickStatus(order.id, 'APPROVED')}
@@ -2874,8 +2907,8 @@ export default function OrderManager({ initialTab = 'bookings' }) {
                                     <div>
                                       <strong>Ordered Items List:</strong>
                                       <ul className="list-disc list-inside mt-0.5 font-bold text-slate-800">
-                                        {item.order.items?.map((p, i) => (
-                                          <li key={i}>{p.productName} (Qty: {p.quantity})</li>
+                                        {item.order.orderItems?.map((p, i) => (
+                                          <li key={i}>{p.product?.name} (Qty: {p.quantity})</li>
                                         ))}
                                       </ul>
                                     </div>
@@ -3245,9 +3278,14 @@ export default function OrderManager({ initialTab = 'bookings' }) {
                           selectedOrder.quickOrderStatus === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                           selectedOrder.quickOrderStatus === 'REJECTED' ? 'bg-red-50 text-red-700 border-red-200' :
                           selectedOrder.quickOrderStatus === 'DATE_CHANGE_PROPOSED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          selectedOrder.quickOrderStatus === 'USER_REJECTED_PROPOSAL' ? 'bg-red-50 text-red-700 border-red-200' :
+                          selectedOrder.quickOrderStatus === 'ADMIN_FINAL_APPROVAL_PENDING' ? 'bg-purple-50 text-purple-700 border-purple-200' :
                           'bg-amber-50 text-amber-700 border-amber-200'
                         }`}>
-                          {selectedOrder.quickOrderStatus === 'DATE_CHANGE_PROPOSED' ? 'DATE PROPOSED' : (selectedOrder.quickOrderStatus || 'PENDING')}
+                          {selectedOrder.quickOrderStatus === 'DATE_CHANGE_PROPOSED' ? 'DATE PROPOSED' : 
+                           selectedOrder.quickOrderStatus === 'USER_REJECTED_PROPOSAL' ? 'USER REJECTED' :
+                           selectedOrder.quickOrderStatus === 'ADMIN_FINAL_APPROVAL_PENDING' ? 'FINAL APPROVAL PENDING' :
+                           (selectedOrder.quickOrderStatus || 'PENDING')}
                         </span>
                       </div>
                       
@@ -3259,11 +3297,26 @@ export default function OrderManager({ initialTab = 'bookings' }) {
                           </span>
                         </div>
                         {selectedOrder.quickOrderStatus === 'DATE_CHANGE_PROPOSED' && selectedOrder.quickOrderProposedDate && (
-                          <div className="flex justify-between bg-blue-50/50 p-2.5 rounded-xl border border-blue-100">
-                            <span className="text-blue-600 font-bold uppercase text-[10px]">Proposed Date</span>
-                            <span className="font-extrabold text-blue-700">
-                              {new Date(selectedOrder.quickOrderProposedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                            </span>
+                          <div className="flex flex-col gap-1 bg-blue-50/50 p-2.5 rounded-xl border border-blue-100">
+                            <div className="flex justify-between">
+                              <span className="text-blue-600 font-bold uppercase text-[10px]">Proposed Date</span>
+                              <span className="font-extrabold text-blue-700">
+                                {new Date(selectedOrder.quickOrderProposedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              </span>
+                            </div>
+                            {selectedOrder.adminProposalNote && (
+                              <div className="mt-1 pt-1 border-t border-blue-100/50">
+                                <span className="text-blue-600 font-bold uppercase text-[10px] block mb-0.5">Your Note:</span>
+                                <span className="text-xs text-blue-700">{selectedOrder.adminProposalNote}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {selectedOrder.quickOrderStatus === 'USER_REJECTED_PROPOSAL' && selectedOrder.userRejectionNote && (
+                          <div className="flex flex-col gap-1 bg-red-50/50 p-2.5 rounded-xl border border-red-100">
+                            <span className="text-red-600 font-bold uppercase text-[10px] block mb-0.5">User's Rejection Reason:</span>
+                            <span className="text-xs text-red-700">{selectedOrder.userRejectionNote}</span>
                           </div>
                         )}
                         <div className="flex flex-col gap-1">
@@ -3273,7 +3326,7 @@ export default function OrderManager({ initialTab = 'bookings' }) {
                           </span>
                         </div>
                         
-                        {(!selectedOrder.quickOrderStatus || selectedOrder.quickOrderStatus === 'PENDING' || selectedOrder.quickOrderStatus === 'DATE_CHANGE_PROPOSED') && (
+                        {selectedOrder.isQuickOrder && (!selectedOrder.quickOrderStatus || ['PENDING', 'DATE_CHANGE_PROPOSED', 'USER_REJECTED_PROPOSAL', 'ADMIN_FINAL_APPROVAL_PENDING'].includes(selectedOrder.quickOrderStatus)) && (
                           <div className="flex gap-2 pt-2">
                             <button
                               type="button"
@@ -3294,6 +3347,7 @@ export default function OrderManager({ initialTab = 'bookings' }) {
                               onClick={() => {
                                 setProposeDateOrderId(selectedOrder.id);
                                 setProposedDateVal(selectedOrder.quickOrderProposedDate ? selectedOrder.quickOrderProposedDate.substring(0, 10) : '');
+                                setAdminProposalNoteVal('');
                               }}
                               className="flex-1 py-2 bg-blue-500 hover:bg-blue-600 text-white font-extrabold text-xs rounded-xl shadow-premium transition-all"
                             >
@@ -3660,38 +3714,44 @@ export default function OrderManager({ initialTab = 'bookings' }) {
 
       {/* ── Propose Quick Order Date Change Modal ── */}
       {proposeDateOrderId && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-sm shadow-2xl p-6 space-y-5 animate-fadeIn">
-            <div className="space-y-1">
-              <h3 className="font-black text-slate-800 text-base tracking-tight">Propose Delivery Date</h3>
-              <p className="text-xs text-slate-500 font-medium">
-                Suggest a new delivery date to the customer.
-              </p>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setProposeDateOrderId(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="font-bold text-gray-900">Propose New Date</h3>
+              <button onClick={() => setProposeDateOrderId(null)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <X size={20} />
+              </button>
             </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">New Proposed Date</label>
-              <input
+            <div className="p-6">
+              <p className="text-sm text-gray-600 mb-4">Select a new date and provide an explanation to the user.</p>
+              <input 
                 type="date"
+                className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-black focus:border-transparent outline-none transition-all mb-4"
                 value={proposedDateVal}
                 onChange={e => setProposedDateVal(e.target.value)}
-                className="w-full text-xs font-semibold border border-slate-200 rounded-xl py-2.5 px-3 focus:outline-none focus:border-brand-500"
               />
+              <textarea
+                className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-black focus:border-transparent outline-none transition-all resize-none"
+                placeholder="Explain why you are proposing this date..."
+                rows="3"
+                value={adminProposalNoteVal}
+                onChange={e => setAdminProposalNoteVal(e.target.value)}
+              ></textarea>
             </div>
-
-            <div className="flex gap-3 pt-1">
-              <button
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
+              <button 
+                className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-100 rounded-xl transition-colors"
                 onClick={() => {
                   setProposeDateOrderId(null);
                   setProposedDateVal('');
+                  setAdminProposalNoteVal('');
                 }}
-                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition-colors"
               >
                 Cancel
               </button>
-              <button
-                onClick={() => handleProposeQuickOrderDate(proposeDateOrderId, proposedDateVal)}
-                className="flex-1 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs transition-colors"
+              <button 
+                className="px-4 py-2 bg-black text-white font-medium rounded-xl hover:bg-gray-800 transition-colors shadow-lg shadow-black/10"
+                onClick={() => handleProposeQuickOrderDate(proposeDateOrderId, proposedDateVal, adminProposalNoteVal)}
               >
                 Send Proposal
               </button>
@@ -3947,8 +4007,8 @@ export default function OrderManager({ initialTab = 'bookings' }) {
                         <div>
                           <strong>Ordered Apparel:</strong>
                           <ul className="list-disc list-inside mt-0.5 font-bold">
-                            {item.order.items?.map((p, i) => (
-                              <li key={i}>{p.productName} (x{p.quantity})</li>
+                            {item.order.orderItems?.map((p, i) => (
+                              <li key={i}>{p.product?.name} (x{p.quantity})</li>
                             ))}
                           </ul>
                         </div>

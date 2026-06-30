@@ -101,7 +101,7 @@ class OrderController {
                         orderItems: {
                             include: {
                                 product: {
-                                    select: { name: true, price: true }
+                                    select: { name: true, price: true, images: true }
                                 }
                             }
                         },
@@ -243,7 +243,7 @@ class OrderController {
                         orderItems: {
                             include: {
                                 product: {
-                                    select: { name: true }
+                                    select: { name: true, images: true }
                                 }
                             }
                         },
@@ -824,12 +824,12 @@ class OrderController {
      */
     static async adminUpdateQuickOrderStatus(req, res, next) {
         const { id } = req.params;
-        const { quickOrderStatus, quickOrderProposedDate } = req.body;
+        const { quickOrderStatus, quickOrderProposedDate, adminProposalNote } = req.body;
         if (!['APPROVED', 'REJECTED', 'DATE_CHANGE_PROPOSED'].includes(quickOrderStatus)) {
             return res.status(400).json({ success: false, message: 'Invalid quick order status' });
         }
-        if (quickOrderStatus === 'DATE_CHANGE_PROPOSED' && !quickOrderProposedDate) {
-            return res.status(400).json({ success: false, message: 'Proposed date is required' });
+        if (quickOrderStatus === 'DATE_CHANGE_PROPOSED' && (!quickOrderProposedDate || !adminProposalNote)) {
+            return res.status(400).json({ success: false, message: 'Proposed date and admin note are required' });
         }
         try {
             const existing = await db_js_1.default.order.findUnique({ where: { id } });
@@ -840,30 +840,99 @@ class OrderController {
                 return res.status(400).json({ success: false, message: 'Order is not a quick order' });
             }
             let updateData = { quickOrderStatus };
-            // If rejected, remove quick order status to move to normal orders
+            let runCancellation = false;
+            // If rejected, mark main order status as CANCELLED and free slots
             if (quickOrderStatus === 'REJECTED') {
                 updateData = {
-                    isQuickOrder: false,
                     quickOrderStatus: 'REJECTED',
+                    status: 'CANCELLED',
                     quickOrderProposedDate: null,
+                    adminProposalNote: null,
+                    userRejectionNote: null,
                 };
+                runCancellation = true;
             }
             else if (quickOrderStatus === 'DATE_CHANGE_PROPOSED') {
                 updateData = {
                     quickOrderStatus: 'DATE_CHANGE_PROPOSED',
                     quickOrderProposedDate: new Date(quickOrderProposedDate),
+                    adminProposalNote: adminProposalNote,
+                    userRejectionNote: null, // Clear any previous user rejection note when admin counters
                 };
             }
             else if (quickOrderStatus === 'APPROVED') {
                 updateData = {
                     quickOrderStatus: 'APPROVED',
                     quickOrderProposedDate: null,
+                    adminProposalNote: null,
+                    userRejectionNote: null,
                 };
             }
-            const order = await db_js_1.default.order.update({
-                where: { id },
-                data: updateData,
-            });
+            let order;
+            if (runCancellation) {
+                // Load order with items to restore inventory
+                const fullOrder = await db_js_1.default.order.findUnique({
+                    where: { id },
+                    include: {
+                        orderItems: true,
+                    },
+                });
+                if (!fullOrder) {
+                    return res.status(404).json({ success: false, message: 'Order not found' });
+                }
+                order = await db_js_1.default.$transaction(async (tx) => {
+                    // 1. Update order status and quickOrderStatus to REJECTED/CANCELLED
+                    const updated = await tx.order.update({
+                        where: { id },
+                        data: updateData,
+                    });
+                    // 2. Restore inventory for each item in the order
+                    for (const item of fullOrder.orderItems) {
+                        const updatedProd = await tx.product.update({
+                            where: { id: item.productId },
+                            data: {
+                                inventoryQty: { increment: item.quantity },
+                                salesCount: { decrement: item.quantity },
+                            },
+                        });
+                        await tx.product.update({
+                            where: { id: item.productId },
+                            data: {
+                                stockStatus: (0, product_controller_js_1.computeStockStatus)(updatedProd.inventoryQty),
+                            },
+                        });
+                    }
+                    // 3. Cancel associated studio fitting appointment (frees the slot)
+                    await tx.appointment.updateMany({
+                        where: {
+                            notes: {
+                                contains: fullOrder.invoiceNumber,
+                            },
+                        },
+                        data: {
+                            status: 'CANCELLED',
+                        },
+                    });
+                    // 4. Cancel associated home visit fitting (frees the slot)
+                    await tx.storeVisit.updateMany({
+                        where: {
+                            requirements: {
+                                contains: fullOrder.invoiceNumber,
+                            },
+                        },
+                        data: {
+                            status: 'CANCELLED',
+                        },
+                    });
+                    return updated;
+                });
+            }
+            else {
+                order = await db_js_1.default.order.update({
+                    where: { id },
+                    data: updateData,
+                });
+            }
             await (0, audit_js_1.createAuditLog)({
                 userId: req.user.id,
                 action: 'QUICK_ORDER_STATUS_CHANGED',
@@ -873,6 +942,7 @@ class OrderController {
                     orderId: id,
                     quickOrderStatus,
                     quickOrderProposedDate: quickOrderStatus === 'DATE_CHANGE_PROPOSED' ? quickOrderProposedDate : undefined,
+                    adminProposalNote: quickOrderStatus === 'DATE_CHANGE_PROPOSED' ? adminProposalNote : undefined,
                     triggeredBy: req.user.fullName,
                 },
             });
@@ -932,9 +1002,12 @@ class OrderController {
      */
     static async customerRespondToQuickOrderProposedDate(req, res, next) {
         const { id } = req.params;
-        const { action } = req.body; // 'ACCEPT' | 'REJECT'
+        const { action, userRejectionNote } = req.body; // 'ACCEPT' | 'REJECT'
         if (!['ACCEPT', 'REJECT'].includes(action)) {
             return res.status(400).json({ success: false, message: 'Invalid action. Must be ACCEPT or REJECT' });
+        }
+        if (action === 'REJECT' && !userRejectionNote) {
+            return res.status(400).json({ success: false, message: 'Reason for rejection is required' });
         }
         try {
             const existing = await db_js_1.default.order.findUnique({ where: { id } });
@@ -954,16 +1027,16 @@ class OrderController {
                     return res.status(400).json({ success: false, message: 'No proposed date found on the order' });
                 }
                 updateData = {
-                    quickOrderStatus: 'APPROVED',
+                    quickOrderStatus: 'ADMIN_FINAL_APPROVAL_PENDING',
                     quickOrderExpectedDate: existing.quickOrderProposedDate,
                     quickOrderProposedDate: null,
+                    adminProposalNote: null,
                 };
             }
             else if (action === 'REJECT') {
                 updateData = {
-                    isQuickOrder: false,
-                    quickOrderStatus: 'REJECTED',
-                    quickOrderProposedDate: null,
+                    quickOrderStatus: 'USER_REJECTED_PROPOSAL',
+                    userRejectionNote: userRejectionNote,
                 };
             }
             const order = await db_js_1.default.order.update({
@@ -985,8 +1058,8 @@ class OrderController {
             if (order.userId) {
                 const title = action === 'ACCEPT' ? 'Delivery Proposal Accepted' : 'Delivery Proposal Rejected';
                 const body = action === 'ACCEPT'
-                    ? `You have accepted the new proposed delivery date for order ${order.invoiceNumber}. Your order is now approved.`
-                    : `You have rejected the proposed delivery date for order ${order.invoiceNumber}. The quick order has been cancelled.`;
+                    ? `You have accepted the new proposed delivery date for order ${order.invoiceNumber}. Awaiting final Admin confirmation.`
+                    : `You have rejected the proposed delivery date for order ${order.invoiceNumber}. The admin will review your feedback.`;
                 await jobs_producer_js_1.default.queueNotification({
                     userId: order.userId,
                     channels: ['PUSH'],
@@ -994,7 +1067,7 @@ class OrderController {
                         push: { title, body },
                     },
                 }).catch(err => console.error('Failed to queue customer response notification:', err));
-                // Also emit real-time event to socket
+                // Emit real-time event to the customer's personal socket room
                 const io = (0, socket_handler_js_1.getIO)();
                 if (io) {
                     io.to(`user:${order.userId}`).emit('order:status_changed', {
@@ -1002,6 +1075,15 @@ class OrderController {
                         invoiceNumber: order.invoiceNumber,
                         newStatus: order.status,
                         quickOrderStatus: order.quickOrderStatus,
+                        updatedAt: new Date(),
+                    });
+                    // Emit real-time event to admin room so admin panel refreshes
+                    io.to('admins').emit('order:quick_order_response', {
+                        orderId: order.id,
+                        invoiceNumber: order.invoiceNumber,
+                        quickOrderStatus: order.quickOrderStatus,
+                        action,
+                        userRejectionNote: action === 'REJECT' ? userRejectionNote : undefined,
                         updatedAt: new Date(),
                     });
                 }

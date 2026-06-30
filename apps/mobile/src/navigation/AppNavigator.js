@@ -56,7 +56,6 @@ import {
   Calendar,
   ShoppingBag,
   Heart,
-  MapPin
 } from 'lucide-react-native';
 
 const Stack = createStackNavigator();
@@ -105,6 +104,12 @@ const CustomBookIcon = ({ color, size }) => (
 const CustomShoppingIcon = ({ color, size }) => (
   <Svg width={size} height={size} viewBox="14 7.5 88 91">
     <Path fill={color} d="m86 12.8c-1.1-1.1-2.7-1.9-5-2.1h-45.1c-1.6 0.1-3.1 0.7-4.4 1.9l-4.1 4.1h61.4l-4.2-2.4 3.6 2.4-2.2-3.9zm10.5 41.1-2-19.9-0.6-5.8c-0.3-2.9-2.9-5.7-6.6-5.7l-58.7 0.1c-3.5 0.2-6.3 2.8-6.4 6.1l-0.6 6.5-2.2 23.8-2.2 25.6c-0.3 5.3 3.2 10.1 9.1 10.7h63.7c5.5-0.4 8.9-4.5 8.8-9.6l-0.8-8.1-1.5-16.1v-7.6zm-14.6-11.2c0 12.3-9.3 23.1-23.9 23.1-13.2 0-23.9-9.9-23.9-23.5v-4.4c0-2.2 1.7-4.1 4-4.1 2.3-0.1 4.4 1.8 4.4 4.1v4.4c0.2 7.5 5.7 15.5 15.2 15.6 8.8 0 15.6-6.3 15.7-15.2v-4.8c0-2.3 2-4.2 4.1-4.1 2.3-0.1 4.4 1.8 4.4 4.1v4.8z" />
+  </Svg>
+);
+
+const CustomStoreIcon = ({ color, size }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24">
+    <Path fill={color} d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
   </Svg>
 );
 
@@ -179,7 +184,7 @@ function TabNavigator({ onLogout }) {
           } else if (route.name === 'Stores') {
             return (
               <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                <MapPin color={color} size={size} />
+                <CustomStoreIcon color={color} size={size} />
               </View>
             );
           }

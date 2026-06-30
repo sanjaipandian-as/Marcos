@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 
 export function useCachedVideoUrl(url) {
   const [cachedUrl, setCachedUrl] = useState(null);

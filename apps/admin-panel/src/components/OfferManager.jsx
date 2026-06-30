@@ -324,9 +324,16 @@ export default function OfferManager() {
                       </div>
                       <div className="pt-0.5">
                         <h3 className="font-extrabold text-slate-800 text-base">{offer.title}</h3>
-                        <span className={`inline-block mt-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full ${status.color}`}>
-                          {status.label}
-                        </span>
+                        <div className="flex flex-wrap gap-1.5 items-center mt-1">
+                          <span className={`inline-block text-[10px] font-bold px-2.5 py-0.5 rounded-full ${status.color}`}>
+                            {status.label}
+                          </span>
+                          {(offer.isFreeShipping || offer.type === 'FREE_SHIPPING') && (
+                            <span className="inline-block text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">
+                              Free Shipping
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <button
