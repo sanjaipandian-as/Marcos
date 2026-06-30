@@ -21,5 +21,6 @@ router.get('/admin/:id/packing-slip', authorize(Role.ADMIN, Role.SUPERADMIN, Rol
 // Dynamic /:id routes — MUST be after all static paths
 router.get('/:id', OrderController.getOrderById);
 router.post('/:id/cancel', OrderController.cancelOrder);
+router.post('/:id/quick-respond', OrderController.customerRespondToQuickOrderProposedDate);
 
 export default router;

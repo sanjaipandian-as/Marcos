@@ -18,13 +18,16 @@ import {
   Flame,
   Globe,
   Database,
+  MapPin,
   Layers,
   IndianRupee,
   Clock,
   Package,
   Box,
   LineChart,
-  Briefcase
+  Briefcase,
+  Printer,
+  PlayCircle
 } from 'lucide-react';
 import api from '../utils/api';
 
@@ -144,10 +147,12 @@ export default function Sidebar({
             { id: 'orders-bookings', label: 'Product Bookings', icon: ShoppingBag },
             { id: 'orders-fittings', label: 'Studio Fittings', icon: Calendar },
             { id: 'orders-visits', label: 'Home Visits', icon: Briefcase },
-            { id: 'orders-quick', label: 'Quick Orders', icon: Clock }
+            { id: 'orders-quick', label: 'Quick Orders', icon: Clock },
+            { id: 'orders-print', label: 'Print Schedule', icon: Printer }
           ]
         },
         { id: 'coupons', label: 'Coupon Builder', icon: Ticket },
+        { id: 'offers', label: 'Offers & Shipping', icon: Tags },
         { id: 'banners', label: 'Promo Banners', icon: Image },
       ]
     },
@@ -162,6 +167,8 @@ export default function Sidebar({
       title: 'CORE OPERATIONS',
       items: [
         { id: 'customers', label: 'Customers & Sizing', icon: Users },
+        { id: 'app-customers', label: 'App Customers', icon: UsersRound },
+        { id: 'stores', label: 'Store Locations', icon: MapPin },
         { id: 'support', label: 'Support Tickets', icon: LifeBuoy },
       ]
     },
@@ -170,6 +177,7 @@ export default function Sidebar({
       items: [
         { id: 'loyalty', label: 'Loyalty & Points', icon: Award },
         { id: 'notifications', label: 'Broadcast Alerts', icon: Megaphone },
+        { id: 'promos', label: 'Promo Reels', icon: PlayCircle },
       ]
     },
     {
@@ -194,7 +202,7 @@ export default function Sidebar({
   const isTabAllowed = (tabId) => {
     if (userRole === 'SUPERADMIN' || userRole === 'ADMIN') return true;
     if (userRole === 'STAFF') {
-      const allowedTabs = ['orders', 'orders-bookings', 'orders-fittings', 'orders-visits', 'orders-quick', 'products', 'categories', 'customers', 'support'];
+      const allowedTabs = ['orders', 'orders-bookings', 'orders-fittings', 'orders-visits', 'orders-quick', 'orders-print', 'products', 'categories', 'customers', 'app-customers', 'stores', 'support'];
       return allowedTabs.includes(tabId);
     }
     return false;

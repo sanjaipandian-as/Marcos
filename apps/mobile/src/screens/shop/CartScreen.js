@@ -4,6 +4,7 @@ import {
   Text,
   View,
   ScrollView,
+  RefreshControl,
   Image,
   TouchableOpacity,
   TextInput,
@@ -21,7 +22,8 @@ import {
   Trash2,
   Minus,
   Plus,
-  ChevronsRight
+  ChevronsRight,
+  Gift
 } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
@@ -220,7 +222,13 @@ export default function CartScreen({ navigation }) {
         </View>
       ) : (
         <>
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          <ScrollView 
+            showsVerticalScrollIndicator={false} 
+            contentContainerStyle={styles.scrollContent}
+            refreshControl={
+              <RefreshControl refreshing={loading} onRefresh={loadCart} colors={[theme.brand[500]]} />
+            }
+          >
             
             {/* Cart Items List */}
           <View style={styles.listContainer}>
@@ -243,9 +251,12 @@ export default function CartScreen({ navigation }) {
                     Size: L
                   </Text>
                   <View style={styles.priceRow}>
-                    <Text style={[styles.itemPrice, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                    <View>
+            <Text style={{ fontSize: 10, color: '#94a3b8', marginBottom: 2 }}>Starts from</Text>
+            <Text style={[styles.itemPrice, { fontFamily: fonts.bold, color: theme.text.primary }]}>
                       ₹{Number(item.product.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                     </Text>
+          </View>
                     
                     {/* Quantity Selector */}
                     <View style={[styles.qtyContainer, { backgroundColor: theme.bg.main, borderColor: theme.border }]}>

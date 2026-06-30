@@ -1,9 +1,172 @@
 import { Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import prisma from '../config/db.js';
 import { createAuditLog } from '../utils/audit.js';
 import redis from '../config/redis.js';
+import { hashPassword } from '../utils/crypto.js';
+import crypto from 'crypto';
+
+export const appCustomerCreateSchema = z.object({
+  body: z.object({
+    fullName: z.string().min(1),
+    email: z.string().email(),
+    phoneNumber: z.string().min(10),
+    password: z.string().min(6),
+    gender: z.string().optional().nullable(),
+    address: z.string().optional().nullable(),
+  }),
+});
+
+export const appCustomerUpdateSchema = z.object({
+  body: z.object({
+    fullName: z.string().min(1).optional(),
+    email: z.string().email().optional(),
+    phoneNumber: z.string().min(10).optional(),
+    password: z.string().min(6).optional(),
+    gender: z.string().optional().nullable(),
+    address: z.string().optional().nullable(),
+  }),
+});
 
 export class AdminCustomerController {
+
+  /**
+   * POST /admin/customers
+   * Admin creates an app customer account
+   */
+  static async createCustomer(req: Request, res: Response, next: NextFunction) {
+    const { fullName, email, phoneNumber, password, gender, address } = req.body;
+
+    try {
+      // Normalize phone
+      let normalizedPhone = phoneNumber.replace(/[\s\-()]/g, '');
+      if (/^\d{10}$/.test(normalizedPhone)) {
+        normalizedPhone = `+91${normalizedPhone}`;
+      }
+
+      // Check existence
+      const existing = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { email },
+            { phoneNumber: normalizedPhone },
+          ],
+        },
+      });
+
+      if (existing) {
+        return res.status(409).json({ success: false, message: 'Email or Phone Number already registered' });
+      }
+
+      const passwordHash = await hashPassword(password);
+      const referralCode = `REF-${crypto.randomUUID().substring(0, 8).toUpperCase()}`;
+
+      const customer = await prisma.user.create({
+        data: {
+          fullName,
+          email,
+          phoneNumber: normalizedPhone,
+          passwordHash,
+          referralCode,
+          role: 'CUSTOMER',
+          gender,
+          address,
+        },
+      });
+
+      await createAuditLog({
+        userId: req.user!.id,
+        action: 'APP_CUSTOMER_CREATED',
+        ipAddress: req.ip,
+        details: {
+          message: `App customer '${fullName}' (${email}) created by admin ${req.user!.fullName}`,
+          customerId: customer.id,
+          email,
+          phoneNumber: normalizedPhone,
+        },
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: 'App customer created successfully',
+        data: {
+          id: customer.id,
+          fullName: customer.fullName,
+          email: customer.email,
+          phoneNumber: customer.phoneNumber,
+          referralCode: customer.referralCode,
+          createdAt: customer.createdAt,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PUT /admin/customers/:id
+   * Admin updates a customer account
+   */
+  static async updateCustomer(req: Request, res: Response, next: NextFunction) {
+    const { id } = req.params;
+    const { fullName, email, phoneNumber, password, gender, address } = req.body;
+
+    try {
+      const existing = await prisma.user.findUnique({ where: { id } });
+      if (!existing) {
+        return res.status(404).json({ success: false, message: 'Customer not found' });
+      }
+
+      const updateData: any = {};
+      if (fullName) updateData.fullName = fullName;
+      if (email) updateData.email = email;
+      if (phoneNumber) {
+        let normalizedPhone = phoneNumber.replace(/[\s\-()]/g, '');
+        if (/^\d{10}$/.test(normalizedPhone)) {
+          normalizedPhone = `+91${normalizedPhone}`;
+        }
+        updateData.phoneNumber = normalizedPhone;
+      }
+      if (password) {
+        updateData.passwordHash = await hashPassword(password);
+      }
+      if (gender !== undefined) updateData.gender = gender;
+      if (address !== undefined) updateData.address = address;
+
+      const customer = await prisma.user.update({
+        where: { id },
+        data: updateData,
+      });
+
+      await createAuditLog({
+        userId: req.user!.id,
+        action: 'APP_CUSTOMER_UPDATED',
+        ipAddress: req.ip,
+        details: {
+          message: `App customer '${customer.fullName}' updated by admin ${req.user!.fullName}`,
+          customerId: id,
+        },
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'Customer updated successfully',
+        data: {
+          id: customer.id,
+          fullName: customer.fullName,
+          email: customer.email,
+          phoneNumber: customer.phoneNumber,
+          referralCode: customer.referralCode,
+          gender: customer.gender,
+          address: customer.address,
+          createdAt: customer.createdAt,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /**
    * GET /admin/customers (Admin / Staff Only)
    * Lists all customers with pagination and search

@@ -18,6 +18,11 @@ const envSchema = z.object({
   CLOUDFLARE_R2_BUCKET: z.string().optional(),
   CLOUDFLARE_R2_ENDPOINT: z.string().optional(),
 
+  // Cloudinary
+  CLOUDINARY_CLOUD_NAME: z.string().optional(),
+  CLOUDINARY_API_KEY: z.string().optional(),
+  CLOUDINARY_API_SECRET: z.string().optional(),
+
   // SendGrid
   SENDGRID_API_KEY: z.string().optional(),
 

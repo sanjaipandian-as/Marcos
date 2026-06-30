@@ -86,6 +86,42 @@ class AppointmentController {
         }
     }
     /**
+     * GET /appointments/availability
+     */
+    static async getAvailability(req, res, next) {
+        const { date } = req.query;
+        if (!date) {
+            return res.status(400).json({ success: false, message: 'Date query parameter is required' });
+        }
+        try {
+            const parsedDate = new Date(date);
+            if (isNaN(parsedDate.getTime())) {
+                return res.status(400).json({ success: false, message: 'Invalid date format' });
+            }
+            const appointments = await db_js_1.default.appointment.groupBy({
+                by: ['timeSlot'],
+                where: {
+                    date: parsedDate,
+                    status: { in: ['PENDING', 'CONFIRMED'] },
+                },
+                _count: {
+                    id: true,
+                },
+            });
+            const availability = appointments.reduce((acc, curr) => {
+                acc[curr.timeSlot] = curr._count.id;
+                return acc;
+            }, {});
+            return res.status(200).json({
+                success: true,
+                data: availability,
+            });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    /**
      * POST /appointments
      */
     static async createAppointment(req, res, next) {

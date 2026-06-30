@@ -82,17 +82,105 @@ export default function CheckoutScreen({ route, navigation }) {
     return `${y}-${m}-${d}`;
   };
   const [bookingDate, setBookingDate] = useState(getDefaultBookingDate());
+  const [calendarViewDate, setCalendarViewDate] = useState(new Date());
   const [bookingNotes, setBookingNotes] = useState('');
   const [showCalendar, setShowCalendar] = useState(false);
   const [bookingType, setBookingType] = useState('STANDARD'); // 'STANDARD' or 'HOME_VISIT'
   const [bookingSlot, setBookingSlot] = useState('');
+  const [bookedSlotsCounts, setBookedSlotsCounts] = useState({});
 
   // Dynamic Settings
   const [timeSlots, setTimeSlots] = useState([]);
   const [systemSettings, setSystemSettings] = useState(null);
 
-  // Finished order details
   const [placedOrder, setPlacedOrder] = useState(null);
+
+  const loadBookedSlots = async (dateStr) => {
+    try {
+      const formattedDate = new Date(`${dateStr}T10:00:00Z`).toISOString();
+      const res = await api.get(`/appointments/availability?date=${formattedDate}`);
+      if (res.success && res.data) {
+        setBookedSlotsCounts(res.data);
+      } else {
+        setBookedSlotsCounts({});
+      }
+    } catch (err) {
+      console.error('Failed to load booked slots counts:', err);
+      setBookedSlotsCounts({});
+    }
+  };
+
+  useEffect(() => {
+    if (bookingDate) {
+      loadBookedSlots(bookingDate);
+    }
+  }, [bookingDate]);
+
+  // Filter time slots dynamically
+  const getFilteredTimeSlots = () => {
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    const todayStr = `${y}-${m}-${d}`;
+
+    const maxSlots = systemSettings?.maxBookingsPerSlot || 5;
+
+    // Filter out slots that have already reached maximum bookings limit
+    let filtered = timeSlots.filter(s => {
+      const count = bookedSlotsCounts[s] || 0;
+      return count < maxSlots;
+    });
+
+    if (bookingDate !== todayStr) {
+      return filtered;
+    }
+
+    return filtered.filter(s => {
+      try {
+        const startPart = s.split(' - ')[0].trim(); // e.g. "10:00 AM" or "10:00"
+        const match = startPart.match(/^(\d+):(\d+)\s*(AM|PM)?$/i);
+        if (!match) return true;
+
+        let hour = parseInt(match[1], 10);
+        const minute = parseInt(match[2], 10);
+        const ampm = match[3];
+
+        if (ampm) {
+          const isPM = ampm.toUpperCase() === 'PM';
+          if (isPM && hour < 12) {
+            hour += 12;
+          } else if (!isPM && hour === 12) {
+            hour = 0;
+          }
+        }
+
+        const currentHour = today.getHours();
+        const currentMinute = today.getMinutes();
+
+        if (hour < currentHour) {
+          return false;
+        }
+        if (hour === currentHour && minute <= currentMinute) {
+          return false;
+        }
+        return true;
+      } catch (e) {
+        return true;
+      }
+    });
+  };
+
+  useEffect(() => {
+    const filtered = getFilteredTimeSlots();
+    if (filtered.length > 0) {
+      if (!filtered.includes(bookingSlot)) {
+        setBookingSlot(filtered[0]);
+      }
+    } else {
+      setBookingSlot('');
+    }
+  }, [bookingDate, timeSlots, bookedSlotsCounts]);
 
   const formatBookingDate = (dateStr) => {
     if (!dateStr) return 'Select Date';
@@ -274,7 +362,8 @@ export default function CheckoutScreen({ route, navigation }) {
     }
   }
 
-  const deliveryCharges = subtotal > 30000 ? 0 : 150; // Free delivery for luxury orders above 30k
+  const hasFreeShippingInCart = cartItems.some(item => item.product?.hasFreeShipping);
+  const deliveryCharges = (subtotal > 30000 || hasFreeShippingInCart) ? 0 : 150; // Free delivery for luxury orders above 30k or if item has free shipping promo
   const taxRate = 0.18; // 18% GST
   const taxableAmount = Math.max(0, subtotal - discountVal);
   const taxVal = taxableAmount * taxRate;
@@ -290,6 +379,11 @@ export default function CheckoutScreen({ route, navigation }) {
 
     if (!bookingDate) {
       Alert.alert('Validation Error', 'Please select a fitting date.');
+      return;
+    }
+
+    if (!bookingSlot) {
+      Alert.alert('Validation Error', 'Please select a valid time slot.');
       return;
     }
 
@@ -417,15 +511,8 @@ export default function CheckoutScreen({ route, navigation }) {
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    let year = today.getFullYear();
-    let month = today.getMonth();
-    if (bookingDate) {
-      const parts = bookingDate.split('-');
-      if (parts.length === 3) {
-        year = parseInt(parts[0], 10);
-        month = parseInt(parts[1], 10) - 1;
-      }
-    }
+    let year = calendarViewDate.getFullYear();
+    let month = calendarViewDate.getMonth();
 
     const totalDays = daysInMonth(year, month);
     const startDay = firstDayOfMonth(year, month);
@@ -434,14 +521,30 @@ export default function CheckoutScreen({ route, navigation }) {
     for (let i = 0; i < startDay; i++) days.push(null);
     for (let i = 1; i <= totalDays; i++) days.push(new Date(year, month, i));
 
+    const handlePrevMonth = () => {
+      const newDate = new Date(year, month - 1, 1);
+      if (newDate.getFullYear() > today.getFullYear() || (newDate.getFullYear() === today.getFullYear() && newDate.getMonth() >= today.getMonth())) {
+        setCalendarViewDate(newDate);
+      }
+    };
+    const handleNextMonth = () => {
+      setCalendarViewDate(new Date(year, month + 1, 1));
+    };
+
     return (
       <Modal visible={showCalendar} transparent animationType="fade">
         <View style={styles.calendarOverlay}>
           <View style={[styles.calendarCard, { backgroundColor: '#ffffff' }]}>
-            <View style={styles.calendarHeader}>
+            <View style={[styles.calendarHeader, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingHorizontal: 16 }]}>
+              <TouchableOpacity onPress={handlePrevMonth} style={{ padding: 8 }}>
+                <Text style={{ fontSize: 20, color: (year === today.getFullYear() && month === today.getMonth()) ? '#cbd5e1' : theme.brand[500], fontFamily: fonts.bold }}>{'<'}</Text>
+              </TouchableOpacity>
               <Text style={[styles.calendarMonthText, { color: '#1e293b', fontFamily: fonts.bold }]}>
-                Select Fitting Date
+                {monthNames[month]} {year}
               </Text>
+              <TouchableOpacity onPress={handleNextMonth} style={{ padding: 8 }}>
+                <Text style={{ fontSize: 20, color: theme.brand[500], fontFamily: fonts.bold }}>{'>'}</Text>
+              </TouchableOpacity>
             </View>
             <View style={styles.daysGrid}>
               {days.map((date, i) => {
@@ -485,30 +588,40 @@ export default function CheckoutScreen({ route, navigation }) {
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    let year = today.getFullYear();
-    let month = today.getMonth();
-    if (quickOrderExpectedDate) {
-      const parts = quickOrderExpectedDate.split('-');
-      if (parts.length === 3) {
-        year = parseInt(parts[0], 10);
-        month = parseInt(parts[1], 10) - 1;
-      }
-    }
+    let year = calendarViewDate.getFullYear();
+    let month = calendarViewDate.getMonth();
 
     const totalDays = daysInMonth(year, month);
     const startDay = firstDayOfMonth(year, month);
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     const days = [];
     for (let i = 0; i < startDay; i++) days.push(null);
     for (let i = 1; i <= totalDays; i++) days.push(new Date(year, month, i));
+
+    const handlePrevMonth = () => {
+      const newDate = new Date(year, month - 1, 1);
+      if (newDate.getFullYear() > today.getFullYear() || (newDate.getFullYear() === today.getFullYear() && newDate.getMonth() >= today.getMonth())) {
+        setCalendarViewDate(newDate);
+      }
+    };
+    const handleNextMonth = () => {
+      setCalendarViewDate(new Date(year, month + 1, 1));
+    };
 
     return (
       <Modal visible={showExpectedDateCalendar} transparent animationType="fade">
         <View style={styles.calendarOverlay}>
           <View style={[styles.calendarCard, { backgroundColor: '#ffffff' }]}>
-            <View style={styles.calendarHeader}>
+            <View style={[styles.calendarHeader, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingHorizontal: 16 }]}>
+              <TouchableOpacity onPress={handlePrevMonth} style={{ padding: 8 }}>
+                <Text style={{ fontSize: 20, color: (year === today.getFullYear() && month === today.getMonth()) ? '#cbd5e1' : theme.brand[500], fontFamily: fonts.bold }}>{'<'}</Text>
+              </TouchableOpacity>
               <Text style={[styles.calendarMonthText, { color: '#1e293b', fontFamily: fonts.bold }]}>
-                Select Expected Date
+                {monthNames[month]} {year}
               </Text>
+              <TouchableOpacity onPress={handleNextMonth} style={{ padding: 8 }}>
+                <Text style={{ fontSize: 20, color: theme.brand[500], fontFamily: fonts.bold }}>{'>'}</Text>
+              </TouchableOpacity>
             </View>
             <View style={styles.daysGrid}>
               {days.map((date, i) => {
@@ -646,26 +759,32 @@ export default function CheckoutScreen({ route, navigation }) {
 
           {/* Time Slot Selection */}
           <View style={styles.slotsContainer}>
-            {timeSlots.map(s => (
-              <TouchableOpacity
-                key={s}
-                style={[
-                  styles.slotOption,
-                  { borderColor: theme.border, backgroundColor: theme.bg.card },
-                  bookingSlot === s && { backgroundColor: theme.brand[50], borderColor: theme.brand[200] }
-                ]}
-                onPress={() => setBookingSlot(s)}
-                activeOpacity={0.8}
-              >
-                <Text style={[
-                  styles.slotText,
-                  { fontFamily: fonts.bold, color: theme.text.secondary },
-                  bookingSlot === s && { color: theme.brand[500] }
-                ]}>
-                  {s}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            {getFilteredTimeSlots().length > 0 ? (
+              getFilteredTimeSlots().map(s => (
+                <TouchableOpacity
+                  key={s}
+                  style={[
+                    styles.slotOption,
+                    { borderColor: theme.border, backgroundColor: theme.bg.card },
+                    bookingSlot === s && { backgroundColor: theme.brand[50], borderColor: theme.brand[200] }
+                  ]}
+                  onPress={() => setBookingSlot(s)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[
+                    styles.slotText,
+                    { fontFamily: fonts.bold, color: theme.text.secondary },
+                    bookingSlot === s && { color: theme.brand[500] }
+                  ]}>
+                    {s}
+                  </Text>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <Text style={{ fontFamily: fonts.medium, color: '#ef4444', marginTop: 10, fontSize: 13, paddingHorizontal: 20 }}>
+                No time slots available for today. Please select another date.
+              </Text>
+            )}
           </View>
 
           {/* Quick Order */}

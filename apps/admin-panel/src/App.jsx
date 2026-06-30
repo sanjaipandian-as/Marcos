@@ -18,10 +18,14 @@ import CouponManager from './components/CouponManager';
 import SupportTicketManager from './components/SupportTicketManager';
 import AuditLogViewer from './components/AuditLogViewer';
 import ReportPanel from './components/ReportPanel';
+import OfferManager from './components/OfferManager';
 import SettingsManager from './components/SettingsManager';
 import Login from './components/Login';
 import OripioFinView from './components/OripioFinView';
 import EzMartView from './components/EzMartView';
+import AppCustomerManager from './components/AppCustomerManager';
+import StoreLocationManager from './components/StoreLocationManager';
+import PromoContentManager from './components/PromoContentManager';
 
 import api from './utils/api';
 
@@ -71,7 +75,7 @@ export default function App() {
     if (!role) return false;
     if (role === 'SUPERADMIN' || role === 'ADMIN') return true;
     if (role === 'STAFF') {
-      const allowedTabs = ['orders', 'orders-bookings', 'orders-fittings', 'orders-visits', 'orders-quick', 'products', 'categories', 'customers', 'support'];
+      const allowedTabs = ['orders', 'orders-bookings', 'orders-fittings', 'orders-visits', 'orders-quick', 'orders-print', 'products', 'categories', 'customers', 'app-customers', 'stores', 'support'];
       return allowedTabs.includes(tabId);
     }
     return false;
@@ -118,11 +122,13 @@ export default function App() {
       case 'orders-fittings':
       case 'orders-visits':
       case 'orders-quick':
+      case 'orders-print':
         const tabMap = {
           'orders-bookings': 'bookings',
           'orders-fittings': 'fittings',
           'orders-visits': 'visits',
-          'orders-quick': 'quick_orders'
+          'orders-quick': 'quick_orders',
+          'orders-print': 'print_schedule'
         };
         const initialTab = tabMap[activeTab] || 'bookings';
         return <OrderManager initialTab={initialTab} />;
@@ -132,6 +138,10 @@ export default function App() {
         return <CategoryManager />;
       case 'customers':
         return <CustomerManager />;
+      case 'app-customers':
+        return <AppCustomerManager />;
+      case 'stores':
+        return <StoreLocationManager />;
       case 'loyalty':
         return (
           <div className="space-y-10">
@@ -145,8 +155,12 @@ export default function App() {
         return <NotificationManager />;
       case 'coupons':
         return <CouponManager />;
+      case 'offers':
+        return <OfferManager />;
       case 'support':
         return <SupportTicketManager />;
+      case 'promos':
+        return <PromoContentManager />;
       case 'audits':
         return <AuditLogViewer />;
       case 'settings':

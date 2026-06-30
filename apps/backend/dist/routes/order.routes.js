@@ -18,4 +18,5 @@ router.get('/admin/:id/packing-slip', (0, auth_middleware_js_1.authorize)(client
 // Dynamic /:id routes — MUST be after all static paths
 router.get('/:id', order_controller_js_1.OrderController.getOrderById);
 router.post('/:id/cancel', order_controller_js_1.OrderController.cancelOrder);
+router.post('/:id/quick-respond', order_controller_js_1.OrderController.customerRespondToQuickOrderProposedDate);
 exports.default = router;

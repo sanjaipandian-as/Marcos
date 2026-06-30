@@ -10,7 +10,9 @@ const db_js_1 = __importDefault(require("../config/db.js"));
 const audit_js_1 = require("../utils/audit.js");
 const crypto_js_1 = require("../utils/crypto.js");
 const r2_service_js_1 = require("../services/r2.service.js");
+const cloudinary_service_js_1 = require("../services/cloudinary.service.js");
 const redis_js_1 = __importDefault(require("../config/redis.js"));
+const env_js_1 = __importDefault(require("../config/env.js"));
 exports.loyaltyAdjustSchema = zod_1.z.object({
     body: zod_1.z.object({
         userId: zod_1.z.string().uuid(),
@@ -957,8 +959,14 @@ class AdminController {
                 return res.status(400).json({ success: false, message: 'No file uploaded.' });
             }
             const file = req.file;
-            const fileKey = `uploads/${Date.now()}-${file.originalname}`;
-            const url = await r2_service_js_1.R2Service.uploadFile(file.buffer, fileKey, file.mimetype);
+            let url;
+            if (env_js_1.default.NODE_ENV === 'development') {
+                url = await cloudinary_service_js_1.CloudinaryService.uploadFile(file.buffer, 'marcos', file.mimetype);
+            }
+            else {
+                const fileKey = `uploads/${Date.now()}-${file.originalname}`;
+                url = await r2_service_js_1.R2Service.uploadFile(file.buffer, fileKey, file.mimetype);
+            }
             return res.status(200).json({
                 success: true,
                 data: { url },

@@ -1,6 +1,5 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../node_modules/@prisma/client"
 }
 
 datasource db {
@@ -84,37 +83,59 @@ model MeasurementHistory {
 }
 
 model Category {
-  id        String    @id @default(uuid())
-  name      String    @unique
-  slug      String    @unique
-  order     Int       @default(0)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  products  Product[]
+  id            String        @id @default(uuid())
+  name          String        @unique
+  slug          String        @unique
+  imageUrl      String?
+  order         Int           @default(0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  products      Product[]
+  subCategories SubCategory[]
+}
+
+model SubCategory {
+  id         String   @id @default(uuid())
+  name       String
+  slug       String
+  imageUrl   String?
+  order      Int      @default(0)
+  categoryId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  products   Product[] @relation("ProductSubCategory")
+
+  @@unique([categoryId, slug])
+  @@index([categoryId])
 }
 
 model Product {
-  id                  String      @id @default(uuid())
+  id                  String       @id @default(uuid())
   name                String
   description         String
-  price               Decimal     @db.Decimal(10, 2)
+  price               Decimal      @db.Decimal(10, 2)
   materialInfo        String?
   images              String[]
+  bannerImage         String?
   categoryId          String
-  isTrending          Boolean     @default(false)
+  subCategoryId       String?
+  isTrending          Boolean      @default(false)
   trendingScheduledAt DateTime?
-  inventoryQty        Int         @default(0)
-  stockStatus         StockStatus @default(IN_STOCK)
+  inventoryQty        Int          @default(0)
+  stockStatus         StockStatus  @default(IN_STOCK)
   targetGender        TargetGender @default(UNISEX)
-  salesCount          Int         @default(0)
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
+  salesCount          Int          @default(0)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
   cartItems           CartItem[]
   favorites           Favorite[]
   orderItems          OrderItem[]
-  category            Category    @relation(fields: [categoryId], references: [id])
+  category            Category     @relation(fields: [categoryId], references: [id])
+  subCategory         SubCategory? @relation("ProductSubCategory", fields: [subCategoryId], references: [id], onDelete: SetNull)
 
   @@index([categoryId])
+  @@index([subCategoryId])
   @@index([price])
   @@index([isTrending])
   @@index([stockStatus])
@@ -265,6 +286,9 @@ model Order {
   quickOrderReason       String?
   quickOrderStatus       QuickOrderStatus?
   quickOrderExpectedDate DateTime?
+  quickOrderProposedDate DateTime?
+  adminProposalNote      String?           @db.Text
+  userRejectionNote      String?           @db.Text
   invoice                Invoice?
   user                   User?             @relation(fields: [userId], references: [id])
   orderItems             OrderItem[]
@@ -449,6 +473,9 @@ enum QuickOrderStatus {
   PENDING
   APPROVED
   REJECTED
+  DATE_CHANGE_PROPOSED
+  USER_REJECTED_PROPOSAL
+  ADMIN_FINAL_APPROVAL_PENDING
 }
 
 enum OrderStatus {
@@ -498,4 +525,80 @@ enum TargetGender {
   WOMEN
   KIDS
   UNISEX
+}
+
+enum OfferType {
+  PERCENTAGE
+  FLAT
+  FREE_SHIPPING
+  NONE
+}
+
+model Offer {
+  id                    String    @id @default(uuid())
+  title                 String
+  description           String?
+  type                  OfferType
+  discountValue         Decimal   @default(0) @db.Decimal(10, 2)
+  isFreeShipping        Boolean   @default(false)
+  minOrderAmount        Decimal   @default(0) @db.Decimal(10, 2)
+  maxDiscount           Decimal?  @db.Decimal(10, 2)
+  applicableProductIds  String[]
+  applicableCategoryIds String[]
+  startDate             DateTime
+  endDate               DateTime
+  isActive              Boolean   @default(true)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([isActive])
+  @@index([startDate, endDate])
+}
+
+model StoreLocation {
+  id           String   @id @default(uuid())
+  name         String
+  address      String
+  city         String
+  state        String
+  pincode      String
+  country      String   @default("India")
+  phone        String?
+  email        String?
+  latitude     Decimal  @db.Decimal(10, 7)
+  longitude    Decimal  @db.Decimal(10, 7)
+  openingHours String   @default("09:00")
+  closingHours String   @default("21:00")
+  isActive     Boolean  @default(true)
+  description  String?
+  imageUrl     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([city])
+}
+
+model PromoContent {
+  id            String        @id @default(uuid())
+  title         String
+  description   String?
+  videoUrl      String
+  thumbnailUrl  String?
+  linkType      PromoLinkType @default(NONE)
+  productId     String?
+  externalUrl   String?
+  sortOrder     Int           @default(0)
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([isActive])
+}
+
+enum PromoLinkType {
+  PRODUCT
+  EXTERNAL
+  BOTH
+  NONE
 }

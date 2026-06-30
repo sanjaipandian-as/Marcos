@@ -131,6 +131,9 @@ export default function OrderTrackingScreen({ route, navigation }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+  const [respondingQuick, setRespondingQuick] = useState(false);
+  const [isRejectingQuickOrder, setIsRejectingQuickOrder] = useState(false);
+  const [rejectNote, setRejectNote] = useState('');
 
   // Rescheduling states
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
@@ -337,9 +340,213 @@ export default function OrderTrackingScreen({ route, navigation }) {
 
   if (!order) return null;
 
-  const isCancelled = order.status === 'CANCELLED';
+  const isCancelled = order.status === 'CANCELLED' || (order.isQuickOrder && order.quickOrderStatus === 'REJECTED');
   const currentStepIdx = getStepIndex(order.status);
-  const canCancel = ['PENDING', 'PAID'].includes(order.status);
+  const canCancel = ['PENDING', 'PAID'].includes(order.status) && !(order.isQuickOrder && order.quickOrderStatus === 'REJECTED');
+
+  const handleRespondToQuickOrder = async (action) => {
+    if (action === 'REJECT' && !rejectNote.trim()) {
+      Alert.alert('Required', 'Please explain why you are rejecting the date.');
+      return;
+    }
+    setRespondingQuick(true);
+    try {
+      const res = await api.post(`/orders/${orderId}/quick-respond`, { 
+        action, 
+        userRejectionNote: action === 'REJECT' ? rejectNote.trim() : undefined 
+      });
+      if (res.success) {
+        Alert.alert(
+          action === 'ACCEPT' ? 'Proposal Accepted' : 'Proposal Rejected',
+          action === 'ACCEPT' 
+            ? 'You have accepted the new delivery date. Awaiting final Admin confirmation.'
+            : 'You have rejected the date proposal with your reason.'
+        );
+        setIsRejectingQuickOrder(false);
+        setRejectNote('');
+        loadOrder();
+      } else {
+        Alert.alert('Error', res.message || 'Failed to respond to proposal.');
+      }
+    } catch (err) {
+      Alert.alert('Error', err.message || 'An error occurred. Please try again.');
+    } finally {
+      setRespondingQuick(false);
+    }
+  };
+
+  // ─── Quick Order Banner ───────────────────────────────────────────────────
+  const renderQuickOrderCard = () => {
+    if (!order.isQuickOrder) return null;
+
+    const reqDate = order.quickOrderExpectedDate 
+      ? new Date(order.quickOrderExpectedDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+      : 'N/A';
+      
+    const propDate = order.quickOrderProposedDate
+      ? new Date(order.quickOrderProposedDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+      : 'N/A';
+
+    return (
+      <View style={[styles.quickOrderCard, shadows.premium, { backgroundColor: theme.bg.card, borderColor: theme.border }]}>
+        <View style={styles.quickOrderHeader}>
+          <Clock size={16} color={theme.brand[500]} />
+          <Text style={[styles.quickOrderTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+            Quick Order Request
+          </Text>
+        </View>
+
+        <View style={styles.quickOrderBody}>
+          {order.quickOrderStatus === 'PENDING' && (
+            <View style={[styles.quickAlert, { backgroundColor: '#fffbeb', borderColor: '#fef3c7' }]}>
+              <Text style={[styles.quickAlertTitle, { fontFamily: fonts.bold, color: '#d97706' }]}>
+                Awaiting Admin Approval
+              </Text>
+              <Text style={[styles.quickAlertMsg, { fontFamily: fonts.regular, color: '#b45309' }]}>
+                Requested Date: {reqDate}
+              </Text>
+            </View>
+          )}
+
+          {order.quickOrderStatus === 'DATE_CHANGE_PROPOSED' && (
+            <View style={[styles.quickAlert, { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }]}>
+              <Text style={[styles.quickAlertTitle, { fontFamily: fonts.bold, color: '#2563eb' }]}>
+                Admin Proposed Delivery Date Change
+              </Text>
+              <Text style={[styles.quickAlertMsg, { fontFamily: fonts.regular, color: '#1d4ed8', marginTop: 4 }]}>
+                The administrator proposed to deliver your order on <Text style={{ fontFamily: fonts.bold }}>{propDate}</Text> instead of your requested date ({reqDate}).
+              </Text>
+              {order.adminProposalNote && (
+                <View style={{ marginTop: 8, padding: 8, backgroundColor: 'rgba(29, 78, 216, 0.05)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(29, 78, 216, 0.1)' }}>
+                  <Text style={{ fontFamily: fonts.bold, fontSize: 11, color: '#1d4ed8', marginBottom: 2 }}>Admin's Note:</Text>
+                  <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: '#1d4ed8' }}>{order.adminProposalNote}</Text>
+                </View>
+              )}
+
+              {isRejectingQuickOrder ? (
+                <View style={{ marginTop: 12 }}>
+                  <TextInput
+                    style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#bfdbfe', borderRadius: 8, padding: 10, fontFamily: fonts.regular, fontSize: 13, color: '#1e293b', textAlignVertical: 'top' }}
+                    placeholder="Why are you rejecting this date?"
+                    multiline
+                    numberOfLines={3}
+                    value={rejectNote}
+                    onChangeText={setRejectNote}
+                  />
+                  <View style={[styles.quickActionsContainer, { marginTop: 8 }]}>
+                    <TouchableOpacity
+                      style={[styles.quickRejectBtn, { borderColor: '#94a3b8', flex: 0.5 }]}
+                      onPress={() => setIsRejectingQuickOrder(false)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.quickRejectBtnText, { fontFamily: fonts.bold, color: '#64748b' }]}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.quickAcceptBtn, { backgroundColor: '#ef4444', flex: 1 }]}
+                      onPress={() => handleRespondToQuickOrder('REJECT')}
+                      disabled={respondingQuick}
+                      activeOpacity={0.8}
+                    >
+                      {respondingQuick ? <ActivityIndicator size="small" color="#fff" /> : <Text style={[styles.quickAcceptBtnText, { fontFamily: fonts.bold, color: '#fff' }]}>Submit Rejection</Text>}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.quickActionsContainer}>
+                  <TouchableOpacity
+                    style={[styles.quickRejectBtn, { borderColor: '#ef4444' }]}
+                    onPress={() => setIsRejectingQuickOrder(true)}
+                    disabled={respondingQuick}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.quickRejectBtnText, { fontFamily: fonts.bold, color: '#ef4444' }]}>
+                      Reject Proposal
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.quickAcceptBtn, { backgroundColor: theme.brand[500] }]}
+                    onPress={() => handleRespondToQuickOrder('ACCEPT')}
+                    disabled={respondingQuick}
+                    activeOpacity={0.8}
+                  >
+                    {respondingQuick ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={[styles.quickAcceptBtnText, { fontFamily: fonts.bold, color: '#fff' }]}>
+                        Accept Date
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
+
+          {order.quickOrderStatus === 'USER_REJECTED_PROPOSAL' && (
+            <View style={[styles.quickAlert, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }]}>
+              <Text style={[styles.quickAlertTitle, { fontFamily: fonts.bold, color: '#dc2626' }]}>
+                You Rejected the Proposed Date
+              </Text>
+              <Text style={[styles.quickAlertMsg, { fontFamily: fonts.regular, color: '#b91c1c', marginTop: 4 }]}>
+                Awaiting Admin response to your rejection.
+              </Text>
+              {order.userRejectionNote && (
+                <View style={{ marginTop: 8, padding: 8, backgroundColor: 'rgba(220, 38, 38, 0.05)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(220, 38, 38, 0.1)' }}>
+                  <Text style={{ fontFamily: fonts.bold, fontSize: 11, color: '#b91c1c', marginBottom: 2 }}>Your Reason:</Text>
+                  <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: '#b91c1c' }}>{order.userRejectionNote}</Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {order.quickOrderStatus === 'ADMIN_FINAL_APPROVAL_PENDING' && (
+            <View style={[styles.quickAlert, { backgroundColor: '#faf5ff', borderColor: '#e9d5ff' }]}>
+              <Text style={[styles.quickAlertTitle, { fontFamily: fonts.bold, color: '#9333ea' }]}>
+                Awaiting Final Confirmation
+              </Text>
+              <Text style={[styles.quickAlertMsg, { fontFamily: fonts.regular, color: '#7e22ce', marginTop: 4 }]}>
+                You have accepted the date. Waiting for the Admin to finalize your Quick Order.
+              </Text>
+            </View>
+          )}
+
+          {order.quickOrderStatus === 'APPROVED' && (
+            <View style={[styles.quickAlert, { backgroundColor: '#ecfdf5', borderColor: '#a7f3d0' }]}>
+              <Text style={[styles.quickAlertTitle, { fontFamily: fonts.bold, color: '#059669' }]}>
+                Quick Order Approved
+              </Text>
+              <Text style={[styles.quickAlertMsg, { fontFamily: fonts.regular, color: '#047857' }]}>
+                Expected Delivery: {reqDate}
+              </Text>
+            </View>
+          )}
+
+          {order.quickOrderStatus === 'REJECTED' && (
+            <View style={[styles.quickAlert, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }]}>
+              <Text style={[styles.quickAlertTitle, { fontFamily: fonts.bold, color: '#dc2626' }]}>
+                Quick Order Rejected
+              </Text>
+              <Text style={[styles.quickAlertMsg, { fontFamily: fonts.regular, color: '#b91c1c' }]}>
+                This quick order request has been rejected.
+              </Text>
+            </View>
+          )}
+
+          {order.quickOrderReason && (
+            <View style={[styles.quickReasonContainer, { backgroundColor: theme.bg.input }]}>
+              <Text style={[styles.quickReasonLabel, { fontFamily: fonts.bold, color: theme.text.secondary }]}>
+                Reason:
+              </Text>
+              <Text style={[styles.quickReasonText, { fontFamily: fonts.regular, color: theme.text.primary }]}>
+                {order.quickOrderReason}
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  };
 
   // ─── Cancelled banner ─────────────────────────────────────────────────────
   const renderCancelledBanner = () => (
@@ -898,8 +1105,13 @@ export default function OrderTrackingScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* CANCELLED banner or stepper */}
-        {isCancelled ? renderCancelledBanner() : renderStepper()}
+        {/* CANCELLED banner, quick order card, and stepper */}
+        {isCancelled ? renderCancelledBanner() : (
+          <>
+            {order.isQuickOrder ? renderQuickOrderCard() : null}
+            {renderStepper()}
+          </>
+        )}
 
         {/* Booking slot info */}
         {order.booking && renderBookingDetails()}
@@ -1312,5 +1524,80 @@ const styles = StyleSheet.create({
   },
   modalSubmitBtnText: {
     fontSize: 13,
+  },
+
+  /* Quick Order Styles */
+  quickOrderCard: {
+    padding: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  quickOrderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    paddingBottom: 10,
+    marginBottom: 12,
+  },
+  quickOrderTitle: {
+    fontSize: 14,
+    letterSpacing: 0.1,
+  },
+  quickOrderBody: {
+    gap: 12,
+  },
+  quickAlert: {
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  quickAlertTitle: {
+    fontSize: 12,
+    letterSpacing: 0.1,
+  },
+  quickAlertMsg: {
+    fontSize: 11,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  quickActionsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 14,
+  },
+  quickRejectBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  quickRejectBtnText: {
+    fontSize: 11,
+  },
+  quickAcceptBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+  },
+  quickAcceptBtnText: {
+    fontSize: 11,
+  },
+  quickReasonContainer: {
+    padding: 12,
+    borderRadius: 12,
+  },
+  quickReasonLabel: {
+    fontSize: 10,
+    textTransform: 'uppercase',
+  },
+  quickReasonText: {
+    fontSize: 11,
+    marginTop: 2,
   },
 });

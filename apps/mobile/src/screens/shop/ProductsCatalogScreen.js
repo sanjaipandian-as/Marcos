@@ -4,6 +4,7 @@ import {
   Text,
   View,
   ScrollView,
+  FlatList,
   TextInput,
   TouchableOpacity,
   Image,
@@ -47,6 +48,14 @@ export default function ProductsCatalogScreen({ navigation, route }) {
   const [loading, setLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const [activeThumb, setActiveThumb] = useState('right');
+  const [subCategories, setSubCategories] = useState([]);
+  const [selectedSubCategory, setSelectedSubCategory] = useState(null);
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const PAGE_SIZE = 20;
 
   // Slider Dragging Logic — use refs so PanResponder closures always read fresh values
   const [sliderWidth, setSliderWidth] = useState(1);
@@ -122,31 +131,63 @@ export default function ProductsCatalogScreen({ navigation, route }) {
     }),
   []);
 
-  // Sync search query parameter from HomeScreen if passed
+  // Sync search query or category parameter from HomeScreen if passed
   useEffect(() => {
     if (route?.params?.searchQuery) {
       setSearchQuery(route.params.searchQuery);
     }
+    if (route?.params?.categoryId) {
+      setSelectedCategory(route.params.categoryId);
+    } else if (!route?.params?.categoryId && !route?.params?.searchQuery) {
+      setSelectedCategory('All');
+    }
+
+    if (route?.params?.subCategoryId) {
+      setSelectedSubCategory(route.params.subCategoryId);
+    }
   }, [route?.params]);
 
-  const loadData = async () => {
+  const loadData = async (page = 1, append = false) => {
     try {
-      if (products.length === 0) {
-        setLoading(true);
+      if (!append) {
+        if (products.length === 0) setLoading(true);
+      } else {
+        setLoadingMore(true);
       }
-      const [productsRes, categoriesRes, favRes, cartRes] = await Promise.all([
-        api.get('/products?page=1&limit=50').catch(() => ({ success: false, data: [] })),
-        api.get('/categories').catch(() => ({ success: false, data: [] })),
-        api.get('/products/favorites').catch(() => ({ success: false, data: [] })),
-        api.get('/products/cart').catch(() => ({ success: false, data: [] }))
-      ]);
+
+      const requests = [
+        api.get(`/products?page=${page}&limit=${PAGE_SIZE}`).catch(() => ({ success: false, data: [], pagination: {} })),
+      ];
+
+      // Only fetch meta data on first load
+      if (!append) {
+        requests.push(
+          api.get('/categories').catch(() => ({ success: false, data: [] })),
+          api.get('/products/favorites').catch(() => ({ success: false, data: [] })),
+          api.get('/products/cart').catch(() => ({ success: false, data: [] }))
+        );
+      }
+
+      const results = await Promise.all(requests);
+      const productsRes = results[0];
 
       if (productsRes.success) {
         const prods = productsRes.data || [];
-        setProducts(prods);
-        
-        // Dynamically calculate the real lowest and highest product budgets
-        if (prods.length > 0 && minPrice === '0' && maxPrice === '50000') {
+        const pagination = productsRes.pagination || {};
+
+        if (append) {
+          setProducts(prev => [...prev, ...prods]);
+        } else {
+          setProducts(prods);
+        }
+
+        // Check if there are more pages
+        const totalPages = pagination.pages || 1;
+        setHasMore(page < totalPages);
+        setCurrentPage(page);
+
+        // Dynamically calculate the real lowest and highest product budgets on first load
+        if (!append && prods.length > 0 && minPrice === '0' && maxPrice === '50000') {
            const prices = prods.map(p => Number(p.price) || 0);
            const lowest = Math.floor(Math.min(...prices));
            const highest = Math.ceil(Math.max(...prices));
@@ -156,26 +197,41 @@ export default function ProductsCatalogScreen({ navigation, route }) {
            setMaxPrice(highest.toString());
         }
       }
-      if (categoriesRes.success) setCategories(categoriesRes.data || []);
-      if (favRes.success && favRes.data) {
-        setFavorites(new Set(favRes.data.map(item => item.productId)));
-      }
-      if (cartRes.success && cartRes.data) {
-        setCartItems(new Set(cartRes.data.map(item => item.productId)));
+
+      if (!append) {
+        const categoriesRes = results[1];
+        const favRes = results[2];
+        const cartRes = results[3];
+        if (categoriesRes?.success) setCategories(categoriesRes.data || []);
+        if (favRes?.success && favRes.data) {
+          setFavorites(new Set(favRes.data.map(item => item.productId)));
+        }
+        if (cartRes?.success && cartRes.data) {
+          setCartItems(new Set(cartRes.data.map(item => item.productId)));
+        }
       }
     } catch (err) {
       console.error('Error loading catalog data:', err);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
+  const loadMoreProducts = () => {
+    if (!loadingMore && hasMore && !loading) {
+      loadData(currentPage + 1, true);
     }
   };
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-      loadData();
+      setCurrentPage(1);
+      setHasMore(true);
+      loadData(1, false);
     });
     return unsubscribe;
-  }, [navigation, products]);
+  }, [navigation]);
 
   // Recalculate price range when category changes
   useEffect(() => {
@@ -196,6 +252,27 @@ export default function ProductsCatalogScreen({ navigation, route }) {
       setMaxPrice(highest.toString());
     }
   }, [selectedCategory, products]);
+
+  // Fetch Subcategories when Category changes
+  useEffect(() => {
+    if (selectedCategory !== 'All') {
+      const fetchSubCategories = async () => {
+        try {
+          const res = await api.get(`/categories/${selectedCategory}/subcategories`);
+          if (res.success) {
+            setSubCategories(res.data || []);
+          } else {
+            setSubCategories([]);
+          }
+        } catch (err) {
+          setSubCategories([]);
+        }
+      };
+      fetchSubCategories();
+    } else {
+      setSubCategories([]);
+    }
+  }, [selectedCategory]);
 
   const toggleFavorite = async (productId) => {
     try {
@@ -249,6 +326,11 @@ export default function ProductsCatalogScreen({ navigation, route }) {
     // Filter by Category
     if (selectedCategory !== 'All') {
       result = result.filter(product => product.categoryId === selectedCategory);
+    }
+
+    // Filter by SubCategory
+    if (selectedSubCategory) {
+      result = result.filter(product => product.subCategoryId === selectedSubCategory);
     }
 
     // Filter by Price Range
@@ -362,48 +444,99 @@ export default function ProductsCatalogScreen({ navigation, route }) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        
+      <FlatList
+        data={filteredProducts}
+        keyExtractor={(item) => item.id}
+        numColumns={2}
+        columnWrapperStyle={styles.gridRow}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        onEndReached={loadMoreProducts}
+        onEndReachedThreshold={0.3}
+        ListHeaderComponent={
+          <>
+            {/* Popular Product Header */}
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                Products
+              </Text>
+              <TouchableOpacity 
+                onPress={() => { 
+                  setSelectedCategory('All'); 
+                  setSelectedSubCategory(null);
+                  setMinPrice(absoluteMin.toString()); 
+                  setMaxPrice(absoluteMax.toString()); 
+                }}
+                style={[styles.seeAllBtn, { backgroundColor: theme.brand[50] }]}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.seeAllBtnText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>
+                  Clear Filters
+                </Text>
+                <X size={12} color={theme.brand[500]} />
+              </TouchableOpacity>
+            </View>
 
-
-        {/* Popular Product Header */}
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-            Products
-          </Text>
-          <TouchableOpacity 
-            onPress={() => { 
-              setSelectedCategory('All'); 
-              setMinPrice(absoluteMin.toString()); 
-              setMaxPrice(absoluteMax.toString()); 
-            }}
-            style={[styles.seeAllBtn, { backgroundColor: theme.brand[50] }]}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.seeAllBtnText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>
-              Clear Filters
-            </Text>
-            <X size={12} color={theme.brand[500]} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Two-Column Products Grid */}
-        <View style={styles.gridContainer}>
-          {filteredProducts.map((item) => {
+            {/* Subcategories Horizontal Scroll */}
+            {selectedCategory !== 'All' && subCategories.length > 0 && (
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 16, gap: 10 }}
+              >
+                <TouchableOpacity
+                  style={[
+                    styles.subCategoryPill,
+                    !selectedSubCategory ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.card }
+                  ]}
+                  onPress={() => setSelectedSubCategory(null)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[
+                    styles.subCategoryText,
+                    { fontFamily: fonts.medium },
+                    !selectedSubCategory ? { color: '#ffffff' } : { color: theme.text.primary }
+                  ]}>
+                    All
+                  </Text>
+                </TouchableOpacity>
+                {subCategories.map(sub => (
+                  <TouchableOpacity
+                    key={sub.id}
+                    style={[
+                      styles.subCategoryPill,
+                      selectedSubCategory === sub.id ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.card }
+                    ]}
+                    onPress={() => setSelectedSubCategory(sub.id)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[
+                      styles.subCategoryText,
+                      { fontFamily: fonts.medium },
+                      selectedSubCategory === sub.id ? { color: '#ffffff' } : { color: theme.text.primary }
+                    ]}>
+                      {sub.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+          </>
+        }
+        renderItem={({ item }) => {
             const isFav = favorites.has(item.id);
             const inCart = cartItems.has(item.id);
-            const originalPrice = Number(item.price) * 1.5;
+            const originalPrice = item.originalPrice ? Number(item.originalPrice) : null;
 
             return (
               <TouchableOpacity
-                key={item.id}
                 style={[styles.productCard, shadows.premium, { backgroundColor: theme.bg.card }]}
                 onPress={() => navigation.navigate('ProductDetails', { productId: item.id })}
                 activeOpacity={0.9}
               >
                 <View style={styles.productImageWrapper}>
                   <Image
-                    source={{ uri: (item.images && item.images[0]) || 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=300&q=80' }}
+                    source={{ uri: (item.images && item.images[0]) || undefined }}
                     style={styles.productImage}
                   />
                   <TouchableOpacity
@@ -425,12 +558,15 @@ export default function ProductsCatalogScreen({ navigation, route }) {
                   </Text>
                   <View style={styles.priceRow}>
                     <View style={styles.priceContainer}>
+                      <Text style={{ fontSize: 10, color: '#94a3b8', marginBottom: 2 }}>Starts from</Text>
                       <Text style={[styles.productPrice, { fontFamily: fonts.bold, color: theme.text.primary }]}>
                         ₹{Number(item.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                       </Text>
-                      <Text style={styles.originalPriceText}>
-                        ₹{originalPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-                      </Text>
+                      {originalPrice ? (
+                        <Text style={styles.originalPriceText}>
+                          ₹{originalPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                        </Text>
+                      ) : null}
                     </View>
                     <TouchableOpacity
                       style={[
@@ -452,18 +588,34 @@ export default function ProductsCatalogScreen({ navigation, route }) {
                 </View>
               </TouchableOpacity>
             );
-          })}
-        </View>
-
-        {filteredProducts.length === 0 && (
-          <View style={styles.emptyContainer}>
-            <ShoppingBag size={48} color="#9e9e9e" />
-            <Text style={[styles.emptyText, { fontFamily: fonts.semiBold, color: theme.text.secondary }]}>
-              No products found in this category.
-            </Text>
-          </View>
-        )}
-      </ScrollView>
+        }}
+        ListFooterComponent={
+          loadingMore ? (
+            <View style={styles.loadingMoreContainer}>
+              <ActivityIndicator size="small" color={theme.brand[500]} />
+              <Text style={[styles.loadingMoreText, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
+                Loading more products...
+              </Text>
+            </View>
+          ) : !hasMore && filteredProducts.length > 0 ? (
+            <View style={styles.loadingMoreContainer}>
+              <Text style={[styles.loadingMoreText, { fontFamily: fonts.medium, color: theme.text.muted }]}>
+                You've seen all products
+              </Text>
+            </View>
+          ) : null
+        }
+        ListEmptyComponent={
+          !loading ? (
+            <View style={styles.emptyContainer}>
+              <ShoppingBag size={48} color="#9e9e9e" />
+              <Text style={[styles.emptyText, { fontFamily: fonts.semiBold, color: theme.text.secondary }]}>
+                No products found in this category.
+              </Text>
+            </View>
+          ) : null
+        }
+      />
 
       {/* Filters Modal */}
       <Modal
@@ -499,7 +651,7 @@ export default function ProductsCatalogScreen({ navigation, route }) {
                         selectedCategory === 'All' ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.card }
                       ]}
                       activeOpacity={0.8}
-                      onPress={() => setSelectedCategory('All')}
+                      onPress={() => { setSelectedCategory('All'); setSelectedSubCategory(null); }}
                     >
                       <Text
                         style={[
@@ -521,7 +673,7 @@ export default function ProductsCatalogScreen({ navigation, route }) {
                             isActive ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.card }
                           ]}
                           activeOpacity={0.8}
-                          onPress={() => setSelectedCategory(cat.id)}
+                          onPress={() => { setSelectedCategory(cat.id); setSelectedSubCategory(null); }}
                         >
                           <Text
                             style={[
@@ -536,6 +688,59 @@ export default function ProductsCatalogScreen({ navigation, route }) {
                       );
                     })}
                   </View>
+                  
+                  {/* Subcategories in Filter Modal */}
+                  {selectedCategory !== 'All' && subCategories.length > 0 && (
+                    <View style={{ marginTop: 24 }}>
+                      <Text style={[styles.filterLabel, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                        Subcategory
+                      </Text>
+                      <View style={styles.filterTabsGrid}>
+                        <TouchableOpacity
+                          style={[
+                            styles.filterTabPill,
+                            !selectedSubCategory ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.card }
+                          ]}
+                          activeOpacity={0.8}
+                          onPress={() => setSelectedSubCategory(null)}
+                        >
+                          <Text
+                            style={[
+                              styles.filterTabText,
+                              { fontFamily: fonts.medium },
+                              !selectedSubCategory ? { color: '#ffffff' } : { color: theme.text.primary }
+                            ]}
+                          >
+                            All
+                          </Text>
+                        </TouchableOpacity>
+                        {subCategories.map((sub) => {
+                          const isActive = selectedSubCategory === sub.id;
+                          return (
+                            <TouchableOpacity
+                              key={sub.id}
+                              style={[
+                                styles.filterTabPill,
+                                isActive ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.card }
+                              ]}
+                              activeOpacity={0.8}
+                              onPress={() => setSelectedSubCategory(sub.id)}
+                            >
+                              <Text
+                                style={[
+                                  styles.filterTabText,
+                                  { fontFamily: fonts.medium },
+                                  isActive ? { color: '#ffffff' } : { color: theme.text.primary }
+                                ]}
+                              >
+                                {sub.name}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  )}
                 </View>
               ) : (
                 <View style={styles.priceFilterContainer}>
@@ -686,6 +891,18 @@ const styles = StyleSheet.create({
   },
   seeAllText: {
     fontSize: 12,
+  },
+  subCategoryPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  subCategoryText: {
+    fontSize: 13,
   },
   modalOverlay: {
     flex: 1,
@@ -886,6 +1103,19 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
+  },
+  gridRow: {
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+  },
+  loadingMoreContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  loadingMoreText: {
+    fontSize: 12,
   },
   productCard: {
     borderRadius: 20,

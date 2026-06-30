@@ -101,7 +101,7 @@ class OrderController {
                         orderItems: {
                             include: {
                                 product: {
-                                    select: { name: true, price: true }
+                                    select: { name: true, price: true, images: true }
                                 }
                             }
                         },
@@ -243,7 +243,7 @@ class OrderController {
                         orderItems: {
                             include: {
                                 product: {
-                                    select: { name: true }
+                                    select: { name: true, images: true }
                                 }
                             }
                         },
@@ -394,6 +394,17 @@ class OrderController {
                             updatedAt: new Date(),
                         });
                     }
+                    // Queue push notification for status update
+                    await jobs_producer_js_1.default.queueNotification({
+                        userId: order.userId,
+                        channels: ['PUSH'],
+                        templates: {
+                            push: {
+                                title: 'Order Status Update',
+                                body: `Your order ${order.invoiceNumber} status is now ${status}.`,
+                            },
+                        },
+                    }).catch(err => console.error('Failed to queue order status notification:', err));
                 }
             }
             // Audit Log for refund processed
@@ -813,9 +824,12 @@ class OrderController {
      */
     static async adminUpdateQuickOrderStatus(req, res, next) {
         const { id } = req.params;
-        const { quickOrderStatus } = req.body;
-        if (!['APPROVED', 'REJECTED'].includes(quickOrderStatus)) {
+        const { quickOrderStatus, quickOrderProposedDate, adminProposalNote } = req.body;
+        if (!['APPROVED', 'REJECTED', 'DATE_CHANGE_PROPOSED'].includes(quickOrderStatus)) {
             return res.status(400).json({ success: false, message: 'Invalid quick order status' });
+        }
+        if (quickOrderStatus === 'DATE_CHANGE_PROPOSED' && (!quickOrderProposedDate || !adminProposalNote)) {
+            return res.status(400).json({ success: false, message: 'Proposed date and admin note are required' });
         }
         try {
             const existing = await db_js_1.default.order.findUnique({ where: { id } });
@@ -826,11 +840,203 @@ class OrderController {
                 return res.status(400).json({ success: false, message: 'Order is not a quick order' });
             }
             let updateData = { quickOrderStatus };
-            // If rejected, remove quick order status to move to normal orders
+            let runCancellation = false;
+            // If rejected, mark main order status as CANCELLED and free slots
             if (quickOrderStatus === 'REJECTED') {
                 updateData = {
-                    isQuickOrder: false,
                     quickOrderStatus: 'REJECTED',
+                    status: 'CANCELLED',
+                    quickOrderProposedDate: null,
+                    adminProposalNote: null,
+                    userRejectionNote: null,
+                };
+                runCancellation = true;
+            }
+            else if (quickOrderStatus === 'DATE_CHANGE_PROPOSED') {
+                updateData = {
+                    quickOrderStatus: 'DATE_CHANGE_PROPOSED',
+                    quickOrderProposedDate: new Date(quickOrderProposedDate),
+                    adminProposalNote: adminProposalNote,
+                    userRejectionNote: null, // Clear any previous user rejection note when admin counters
+                };
+            }
+            else if (quickOrderStatus === 'APPROVED') {
+                updateData = {
+                    quickOrderStatus: 'APPROVED',
+                    quickOrderProposedDate: null,
+                    adminProposalNote: null,
+                    userRejectionNote: null,
+                };
+            }
+            let order;
+            if (runCancellation) {
+                // Load order with items to restore inventory
+                const fullOrder = await db_js_1.default.order.findUnique({
+                    where: { id },
+                    include: {
+                        orderItems: true,
+                    },
+                });
+                if (!fullOrder) {
+                    return res.status(404).json({ success: false, message: 'Order not found' });
+                }
+                order = await db_js_1.default.$transaction(async (tx) => {
+                    // 1. Update order status and quickOrderStatus to REJECTED/CANCELLED
+                    const updated = await tx.order.update({
+                        where: { id },
+                        data: updateData,
+                    });
+                    // 2. Restore inventory for each item in the order
+                    for (const item of fullOrder.orderItems) {
+                        const updatedProd = await tx.product.update({
+                            where: { id: item.productId },
+                            data: {
+                                inventoryQty: { increment: item.quantity },
+                                salesCount: { decrement: item.quantity },
+                            },
+                        });
+                        await tx.product.update({
+                            where: { id: item.productId },
+                            data: {
+                                stockStatus: (0, product_controller_js_1.computeStockStatus)(updatedProd.inventoryQty),
+                            },
+                        });
+                    }
+                    // 3. Cancel associated studio fitting appointment (frees the slot)
+                    await tx.appointment.updateMany({
+                        where: {
+                            notes: {
+                                contains: fullOrder.invoiceNumber,
+                            },
+                        },
+                        data: {
+                            status: 'CANCELLED',
+                        },
+                    });
+                    // 4. Cancel associated home visit fitting (frees the slot)
+                    await tx.storeVisit.updateMany({
+                        where: {
+                            requirements: {
+                                contains: fullOrder.invoiceNumber,
+                            },
+                        },
+                        data: {
+                            status: 'CANCELLED',
+                        },
+                    });
+                    return updated;
+                });
+            }
+            else {
+                order = await db_js_1.default.order.update({
+                    where: { id },
+                    data: updateData,
+                });
+            }
+            await (0, audit_js_1.createAuditLog)({
+                userId: req.user.id,
+                action: 'QUICK_ORDER_STATUS_CHANGED',
+                ipAddress: req.ip,
+                details: {
+                    message: `Quick order request for ${order.invoiceNumber} was ${quickOrderStatus} by ${req.user.fullName}`,
+                    orderId: id,
+                    quickOrderStatus,
+                    quickOrderProposedDate: quickOrderStatus === 'DATE_CHANGE_PROPOSED' ? quickOrderProposedDate : undefined,
+                    adminProposalNote: quickOrderStatus === 'DATE_CHANGE_PROPOSED' ? adminProposalNote : undefined,
+                    triggeredBy: req.user.fullName,
+                },
+            });
+            // Queue notification to user
+            if (order.userId) {
+                let title = 'Quick Order Update';
+                let body = `Your quick order ${order.invoiceNumber} status is now ${order.quickOrderStatus}.`;
+                if (quickOrderStatus === 'APPROVED') {
+                    title = 'Quick Order Approved';
+                    body = `Your quick order ${order.invoiceNumber} has been approved. Expected delivery: ${order.quickOrderExpectedDate ? new Date(order.quickOrderExpectedDate).toLocaleDateString('en-IN') : 'N/A'}`;
+                }
+                else if (quickOrderStatus === 'REJECTED') {
+                    title = 'Quick Order Rejected';
+                    body = `Your quick order request for ${order.invoiceNumber} was rejected by Admin.`;
+                }
+                else if (quickOrderStatus === 'DATE_CHANGE_PROPOSED') {
+                    title = 'Delivery Date Change Proposed';
+                    body = `Admin proposed to deliver your quick order ${order.invoiceNumber} on ${order.quickOrderProposedDate ? new Date(order.quickOrderProposedDate).toLocaleDateString('en-IN') : 'N/A'}. Please accept or reject.`;
+                }
+                await jobs_producer_js_1.default.queueNotification({
+                    userId: order.userId,
+                    channels: ['PUSH'],
+                    templates: {
+                        push: { title, body },
+                    },
+                }).catch(err => console.error('Failed to queue quick order notification:', err));
+                // Also emit real-time event to socket
+                const io = (0, socket_handler_js_1.getIO)();
+                if (io) {
+                    io.to(`user:${order.userId}`).emit('order:status_changed', {
+                        orderId: order.id,
+                        invoiceNumber: order.invoiceNumber,
+                        newStatus: order.status,
+                        quickOrderStatus: order.quickOrderStatus,
+                        updatedAt: new Date(),
+                    });
+                }
+            }
+            // Invalidate admin cache
+            await redis_js_1.default.keys('cache:admin:*').then(keys => {
+                if (keys.length > 0)
+                    return redis_js_1.default.del(...keys);
+            }).catch(err => console.error('Failed to invalidate admin cache:', err));
+            return res.status(200).json({
+                success: true,
+                message: `Quick order ${quickOrderStatus.toLowerCase()} successfully`,
+                data: order,
+            });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    /**
+     * POST /orders/:id/quick-respond
+     * Customer: accepts or rejects proposed date change
+     */
+    static async customerRespondToQuickOrderProposedDate(req, res, next) {
+        const { id } = req.params;
+        const { action, userRejectionNote } = req.body; // 'ACCEPT' | 'REJECT'
+        if (!['ACCEPT', 'REJECT'].includes(action)) {
+            return res.status(400).json({ success: false, message: 'Invalid action. Must be ACCEPT or REJECT' });
+        }
+        if (action === 'REJECT' && !userRejectionNote) {
+            return res.status(400).json({ success: false, message: 'Reason for rejection is required' });
+        }
+        try {
+            const existing = await db_js_1.default.order.findUnique({ where: { id } });
+            if (!existing) {
+                return res.status(404).json({ success: false, message: 'Order not found' });
+            }
+            // Ensure the logged in user is the owner of the order
+            if (existing.userId !== req.user.id) {
+                return res.status(403).json({ success: false, message: 'Unauthorized access to this order' });
+            }
+            if (!existing.isQuickOrder || existing.quickOrderStatus !== 'DATE_CHANGE_PROPOSED') {
+                return res.status(400).json({ success: false, message: 'Order does not have a proposed date change request' });
+            }
+            let updateData = {};
+            if (action === 'ACCEPT') {
+                if (!existing.quickOrderProposedDate) {
+                    return res.status(400).json({ success: false, message: 'No proposed date found on the order' });
+                }
+                updateData = {
+                    quickOrderStatus: 'ADMIN_FINAL_APPROVAL_PENDING',
+                    quickOrderExpectedDate: existing.quickOrderProposedDate,
+                    quickOrderProposedDate: null,
+                    adminProposalNote: null,
+                };
+            }
+            else if (action === 'REJECT') {
+                updateData = {
+                    quickOrderStatus: 'USER_REJECTED_PROPOSAL',
+                    userRejectionNote: userRejectionNote,
                 };
             }
             const order = await db_js_1.default.order.update({
@@ -842,12 +1048,46 @@ class OrderController {
                 action: 'QUICK_ORDER_STATUS_CHANGED',
                 ipAddress: req.ip,
                 details: {
-                    message: `Quick order request for ${order.invoiceNumber} was ${quickOrderStatus} by ${req.user.fullName}`,
+                    message: `Customer ${req.user.fullName} ${action.toLowerCase()}ed the proposed quick order date. Status is now ${order.quickOrderStatus}`,
                     orderId: id,
-                    quickOrderStatus,
+                    action,
                     triggeredBy: req.user.fullName,
                 },
             });
+            // Queue notification to user confirming their action
+            if (order.userId) {
+                const title = action === 'ACCEPT' ? 'Delivery Proposal Accepted' : 'Delivery Proposal Rejected';
+                const body = action === 'ACCEPT'
+                    ? `You have accepted the new proposed delivery date for order ${order.invoiceNumber}. Awaiting final Admin confirmation.`
+                    : `You have rejected the proposed delivery date for order ${order.invoiceNumber}. The admin will review your feedback.`;
+                await jobs_producer_js_1.default.queueNotification({
+                    userId: order.userId,
+                    channels: ['PUSH'],
+                    templates: {
+                        push: { title, body },
+                    },
+                }).catch(err => console.error('Failed to queue customer response notification:', err));
+                // Emit real-time event to the customer's personal socket room
+                const io = (0, socket_handler_js_1.getIO)();
+                if (io) {
+                    io.to(`user:${order.userId}`).emit('order:status_changed', {
+                        orderId: order.id,
+                        invoiceNumber: order.invoiceNumber,
+                        newStatus: order.status,
+                        quickOrderStatus: order.quickOrderStatus,
+                        updatedAt: new Date(),
+                    });
+                    // Emit real-time event to admin room so admin panel refreshes
+                    io.to('admins').emit('order:quick_order_response', {
+                        orderId: order.id,
+                        invoiceNumber: order.invoiceNumber,
+                        quickOrderStatus: order.quickOrderStatus,
+                        action,
+                        userRejectionNote: action === 'REJECT' ? userRejectionNote : undefined,
+                        updatedAt: new Date(),
+                    });
+                }
+            }
             // Invalidate admin cache
             await redis_js_1.default.keys('cache:admin:*').then(keys => {
                 if (keys.length > 0)
@@ -855,7 +1095,7 @@ class OrderController {
             }).catch(err => console.error('Failed to invalidate admin cache:', err));
             return res.status(200).json({
                 success: true,
-                message: `Quick order ${quickOrderStatus.toLowerCase()} successfully`,
+                message: `Quick order date change request ${action.toLowerCase()}ed successfully`,
                 data: order,
             });
         }

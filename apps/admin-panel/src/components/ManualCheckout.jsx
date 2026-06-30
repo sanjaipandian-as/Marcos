@@ -45,6 +45,55 @@ export default function ManualCheckout() {
   const [staffMembers, setStaffMembers] = useState([]);
   const [timeSlots, setTimeSlots] = useState([]);
 
+  // Filter time slots dynamically
+  const getFilteredTimeSlots = () => {
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    const todayStr = `${y}-${m}-${d}`;
+
+    const todayUTCStr = today.toISOString().split('T')[0];
+    if (appointmentDate !== todayStr && appointmentDate !== todayUTCStr) {
+      return timeSlots;
+    }
+
+    return timeSlots.filter(s => {
+      try {
+        const startPart = s.split(' - ')[0].trim(); // e.g. "09:00"
+        const match = startPart.match(/^(\d+):(\d+)/);
+        if (!match) return true;
+
+        let hour = parseInt(match[1], 10);
+        const minute = parseInt(match[2], 10);
+
+        const currentHour = today.getHours();
+        const currentMinute = today.getMinutes();
+
+        if (hour < currentHour) {
+          return false;
+        }
+        if (hour === currentHour && minute <= currentMinute) {
+          return false;
+        }
+        return true;
+      } catch (e) {
+        return true;
+      }
+    });
+  };
+
+  useEffect(() => {
+    const filtered = getFilteredTimeSlots();
+    if (filtered.length > 0) {
+      if (!filtered.includes(appointmentTimeSlot)) {
+        setAppointmentTimeSlot('');
+      }
+    } else {
+      setAppointmentTimeSlot('');
+    }
+  }, [appointmentDate, timeSlots]);
+
   const [completedOrder, setCompletedOrder] = useState(null);
   const [error, setError] = useState('');
 
@@ -670,7 +719,7 @@ export default function ManualCheckout() {
                     className="w-full px-2.5 py-1.5 text-xs font-bold bg-white border border-emerald-200 rounded-xl focus:outline-none focus:border-brand-500"
                   >
                     <option value="">Select Time</option>
-                    {timeSlots.map(t => <option key={t} value={t}>{t}</option>)}
+                    {getFilteredTimeSlots().map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
               </div>

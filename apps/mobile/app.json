@@ -16,14 +16,20 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.sanjaipandian.mobile"
+      "package": "com.sanjaipandian.mobile",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyDtFSThpLf6U7ZWUaXtuSCs_-sfRIiLF2E"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-font",
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-video"
     ]
   }
 }

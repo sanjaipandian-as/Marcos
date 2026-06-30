@@ -8,11 +8,13 @@ import { computeStockStatus } from './product.controller.js';
 export const productCreateSchema = z.object({
   body: z.object({
     name: z.string().min(1),
-    description: z.string().min(1),
-    price: z.coerce.number().positive(),
+    description: z.string(),
+    price: z.coerce.number().nonnegative(),
     materialInfo: z.string().optional(),
     images: z.array(z.string()).default([]),
+    bannerImage: z.string().optional().nullable(),
     categoryId: z.string().uuid(),
+    subCategoryId: z.string().uuid().optional().nullable(),
     inventoryQty: z.coerce.number().int().nonnegative().default(0),
     targetGender: z.enum(['MEN', 'WOMEN', 'KIDS', 'UNISEX']).default('UNISEX'),
   }),
@@ -21,11 +23,13 @@ export const productCreateSchema = z.object({
 export const productUpdateSchema = z.object({
   body: z.object({
     name: z.string().min(1).optional(),
-    description: z.string().min(1).optional(),
-    price: z.coerce.number().positive().optional(),
+    description: z.string().optional(),
+    price: z.coerce.number().nonnegative().optional(),
     materialInfo: z.string().optional(),
     images: z.array(z.string()).optional(),
+    bannerImage: z.string().optional().nullable(),
     categoryId: z.string().uuid().optional(),
+    subCategoryId: z.string().uuid().optional().nullable(),
     inventoryQty: z.coerce.number().int().nonnegative().optional(),
     targetGender: z.enum(['MEN', 'WOMEN', 'KIDS', 'UNISEX']).optional(),
   }),
@@ -45,7 +49,7 @@ export class AdminProductController {
    * POST /admin/products
    */
   static async createProduct(req: Request, res: Response, next: NextFunction) {
-    const { name, description, price, materialInfo, images, categoryId, inventoryQty, targetGender } = req.body;
+    const { name, description, price, materialInfo, images, bannerImage, categoryId, subCategoryId, inventoryQty, targetGender } = req.body;
 
     try {
       // Verify category exists
@@ -63,7 +67,9 @@ export class AdminProductController {
           price,
           materialInfo,
           images,
+          bannerImage,
           categoryId,
+          subCategoryId,
           inventoryQty,
           stockStatus,
           targetGender,
@@ -106,7 +112,7 @@ export class AdminProductController {
    */
   static async updateProduct(req: Request, res: Response, next: NextFunction) {
     const { id } = req.params;
-    const { name, description, price, materialInfo, images, categoryId, inventoryQty, targetGender } = req.body;
+    const { name, description, price, materialInfo, images, bannerImage, categoryId, subCategoryId, inventoryQty, targetGender } = req.body;
 
     try {
       const existingProduct = await prisma.product.findUnique({ where: { id } });
@@ -120,7 +126,9 @@ export class AdminProductController {
         price,
         materialInfo,
         images,
+        bannerImage,
         categoryId,
+        subCategoryId,
         inventoryQty,
         targetGender,
       };

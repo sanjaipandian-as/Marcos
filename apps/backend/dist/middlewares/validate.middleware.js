@@ -21,6 +21,9 @@ function validate(schema) {
         }
         catch (error) {
             if (error instanceof zod_1.ZodError) {
+                console.log('Validation error in schema:', req.originalUrl);
+                console.log('Payload:', JSON.stringify({ body: req.body, query: req.query, params: req.params }));
+                console.log('Errors:', JSON.stringify(error.errors, null, 2));
                 return res.status(400).json({
                     success: false,
                     message: 'Validation failed',

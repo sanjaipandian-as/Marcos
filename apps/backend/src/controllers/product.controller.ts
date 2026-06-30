@@ -8,7 +8,7 @@ import redis from '../config/redis.js';
 export const productQuerySchema = z.object({
   query: z.object({
     page: z.coerce.number().int().min(1).default(1),
-    limit: z.coerce.number().int().min(1).max(1000).default(10),
+    limit: z.coerce.number().int().min(1).max(1000).default(200),
     category: z.string().optional(),
     search: z.string().optional(),
     sortBy: z.enum(['price', 'createdAt', 'name']).default('createdAt'),
@@ -74,7 +74,7 @@ export class ProductController {
         ];
       }
 
-      const [products, total] = await Promise.all([
+      const [products, total, activeOffers] = await Promise.all([
         prisma.product.findMany({
           where,
           orderBy: { [sortBy]: sortOrder },
@@ -83,11 +83,33 @@ export class ProductController {
           include: { category: true },
         }),
         prisma.product.count({ where }),
+        prisma.offer.findMany({
+          where: { isActive: true },
+        }),
       ]);
+
+      const freeShippingProductIds = new Set<string>();
+      const freeShippingCategoryIds = new Set<string>();
+      let storewideFreeShipping = false;
+      activeOffers.forEach(offer => {
+        if (offer.isFreeShipping || offer.type === 'FREE_SHIPPING') {
+          if (offer.applicableProductIds.length === 0 && offer.applicableCategoryIds.length === 0) {
+            storewideFreeShipping = true;
+          } else {
+            offer.applicableProductIds.forEach(id => freeShippingProductIds.add(id));
+            offer.applicableCategoryIds.forEach(id => freeShippingCategoryIds.add(id));
+          }
+        }
+      });
+
+      const processedProducts = products.map(product => ({
+        ...product,
+        hasFreeShipping: storewideFreeShipping || freeShippingProductIds.has(product.id) || freeShippingCategoryIds.has(product.categoryId)
+      }));
 
       const responsePayload = {
         success: true,
-        data: products,
+        data: processedProducts,
         pagination: {
           page: Number(page),
           limit: Number(limit),
@@ -111,14 +133,38 @@ export class ProductController {
     const { id } = req.params;
 
     try {
-      const product = await prisma.product.findUnique({
-        where: { id },
-        include: { category: true },
-      });
+      const [product, activeOffers] = await Promise.all([
+        prisma.product.findUnique({
+          where: { id },
+          include: { category: true },
+        }),
+        prisma.offer.findMany({
+          where: { isActive: true },
+        })
+      ]);
 
       if (!product) {
         return res.status(404).json({ success: false, message: 'Product not found' });
       }
+
+      let hasFreeShipping = false;
+      for (const offer of activeOffers) {
+        if (offer.isFreeShipping || offer.type === 'FREE_SHIPPING') {
+          if (
+            (offer.applicableProductIds.length === 0 && offer.applicableCategoryIds.length === 0) ||
+            offer.applicableProductIds.includes(product.id) ||
+            offer.applicableCategoryIds.includes(product.categoryId)
+          ) {
+            hasFreeShipping = true;
+            break;
+          }
+        }
+      }
+
+      const processedProduct = {
+        ...product,
+        hasFreeShipping
+      };
 
       // Log PRODUCT_VIEW event asynchronously to Redis list
       const userId = req.user?.id || null;
@@ -133,7 +179,7 @@ export class ProductController {
         console.error('Failed to log product view event to Redis:', e);
       }
 
-      return res.status(200).json({ success: true, data: product });
+      return res.status(200).json({ success: true, data: processedProduct });
     } catch (error) {
       next(error);
     }
@@ -147,12 +193,39 @@ export class ProductController {
     if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     try {
-      const items = await prisma.cartItem.findMany({
-        where: { userId },
-        include: { product: true },
+      const [items, activeOffers] = await Promise.all([
+        prisma.cartItem.findMany({
+          where: { userId },
+          include: { product: true },
+        }),
+        prisma.offer.findMany({
+          where: { isActive: true },
+        })
+      ]);
+
+      const freeShippingProductIds = new Set<string>();
+      const freeShippingCategoryIds = new Set<string>();
+      let storewideFreeShipping = false;
+      activeOffers.forEach(offer => {
+        if (offer.isFreeShipping || offer.type === 'FREE_SHIPPING') {
+          if (offer.applicableProductIds.length === 0 && offer.applicableCategoryIds.length === 0) {
+            storewideFreeShipping = true;
+          } else {
+            offer.applicableProductIds.forEach(id => freeShippingProductIds.add(id));
+            offer.applicableCategoryIds.forEach(id => freeShippingCategoryIds.add(id));
+          }
+        }
       });
 
-      return res.status(200).json({ success: true, data: items });
+      const processedItems = items.map(item => ({
+        ...item,
+        product: {
+          ...item.product,
+          hasFreeShipping: storewideFreeShipping || freeShippingProductIds.has(item.product.id) || freeShippingCategoryIds.has(item.product.categoryId)
+        }
+      }));
+
+      return res.status(200).json({ success: true, data: processedItems });
     } catch (error) {
       next(error);
     }

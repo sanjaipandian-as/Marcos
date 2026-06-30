@@ -12,6 +12,10 @@ import ticketRoutes from './ticket.routes.js';
 import orderRoutes from './order.routes.js';
 import categoryRoutes from './category.routes.js';
 import systemRoutes from './system.routes.js';
+import { OfferController } from '../controllers/offer.controller.js';
+import { StoreLocationController } from '../controllers/storeLocation.controller.js';
+import { AdminCategoryController } from '../controllers/adminCategory.controller.js';
+import { PromoContentController } from '../controllers/promoContent.controller.js';
 
 const router = Router();
 
@@ -29,5 +33,10 @@ router.use('/orders', orderRoutes);
 router.use('/categories', categoryRoutes);
 router.use('/system', systemRoutes);
 
-export default router;
+// Public endpoints for mobile app
+router.get('/offers/active', OfferController.getActiveOffers);
+router.get('/stores', StoreLocationController.getPublicStores);
+router.get('/categories/:categoryId/subcategories', AdminCategoryController.listSubCategories);
+router.get('/promos/active', PromoContentController.getActivePromos);
 
+export default router;

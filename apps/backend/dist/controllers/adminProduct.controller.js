@@ -11,11 +11,13 @@ const product_controller_js_1 = require("./product.controller.js");
 exports.productCreateSchema = zod_1.z.object({
     body: zod_1.z.object({
         name: zod_1.z.string().min(1),
-        description: zod_1.z.string().min(1),
-        price: zod_1.z.coerce.number().positive(),
+        description: zod_1.z.string(),
+        price: zod_1.z.coerce.number().nonnegative(),
         materialInfo: zod_1.z.string().optional(),
         images: zod_1.z.array(zod_1.z.string()).default([]),
+        bannerImage: zod_1.z.string().optional().nullable(),
         categoryId: zod_1.z.string().uuid(),
+        subCategoryId: zod_1.z.string().uuid().optional().nullable(),
         inventoryQty: zod_1.z.coerce.number().int().nonnegative().default(0),
         targetGender: zod_1.z.enum(['MEN', 'WOMEN', 'KIDS', 'UNISEX']).default('UNISEX'),
     }),
@@ -23,11 +25,13 @@ exports.productCreateSchema = zod_1.z.object({
 exports.productUpdateSchema = zod_1.z.object({
     body: zod_1.z.object({
         name: zod_1.z.string().min(1).optional(),
-        description: zod_1.z.string().min(1).optional(),
-        price: zod_1.z.coerce.number().positive().optional(),
+        description: zod_1.z.string().optional(),
+        price: zod_1.z.coerce.number().nonnegative().optional(),
         materialInfo: zod_1.z.string().optional(),
         images: zod_1.z.array(zod_1.z.string()).optional(),
+        bannerImage: zod_1.z.string().optional().nullable(),
         categoryId: zod_1.z.string().uuid().optional(),
+        subCategoryId: zod_1.z.string().uuid().optional().nullable(),
         inventoryQty: zod_1.z.coerce.number().int().nonnegative().optional(),
         targetGender: zod_1.z.enum(['MEN', 'WOMEN', 'KIDS', 'UNISEX']).optional(),
     }),
@@ -43,7 +47,7 @@ class AdminProductController {
      * POST /admin/products
      */
     static async createProduct(req, res, next) {
-        const { name, description, price, materialInfo, images, categoryId, inventoryQty, targetGender } = req.body;
+        const { name, description, price, materialInfo, images, bannerImage, categoryId, subCategoryId, inventoryQty, targetGender } = req.body;
         try {
             // Verify category exists
             const categoryExists = await db_js_1.default.category.findUnique({ where: { id: categoryId } });
@@ -58,7 +62,9 @@ class AdminProductController {
                     price,
                     materialInfo,
                     images,
+                    bannerImage,
                     categoryId,
+                    subCategoryId,
                     inventoryQty,
                     stockStatus,
                     targetGender,
@@ -99,7 +105,7 @@ class AdminProductController {
      */
     static async updateProduct(req, res, next) {
         const { id } = req.params;
-        const { name, description, price, materialInfo, images, categoryId, inventoryQty, targetGender } = req.body;
+        const { name, description, price, materialInfo, images, bannerImage, categoryId, subCategoryId, inventoryQty, targetGender } = req.body;
         try {
             const existingProduct = await db_js_1.default.product.findUnique({ where: { id } });
             if (!existingProduct) {
@@ -111,7 +117,9 @@ class AdminProductController {
                 price,
                 materialInfo,
                 images,
+                bannerImage,
                 categoryId,
+                subCategoryId,
                 inventoryQty,
                 targetGender,
             };

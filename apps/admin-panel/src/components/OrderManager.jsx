@@ -283,7 +283,46 @@ export default function OrderManager({ initialTab = 'bookings' }) {
   const [appointments, setAppointments] = useState([]);
   const [visits, setVisits] = useState([]);
   const [staffList, setStaffList] = useState([]);
+  const [allMeasurements, setAllMeasurements] = useState([]);
   const [activeSubTab, setActiveSubTab] = useState(initialTab);
+  const [isUniversalPrintOpen, setIsUniversalPrintOpen] = useState(false);
+
+  const [printDateRange, setPrintDateRange] = useState('ALL');
+  const [printDate, setPrintDate] = useState('');
+  const [printDateFrom, setPrintDateFrom] = useState('');
+  const [printDateTo, setPrintDateTo] = useState('');
+  const [printIncludeFittings, setPrintIncludeFittings] = useState(true);
+  const [printIncludeVisits, setPrintIncludeVisits] = useState(true);
+  const [printFields, setPrintFields] = useState({
+    custName: true,
+    custPhone: true,
+    custEmail: false,
+    custAddress: true,
+    custGender: false,
+    apptTime: true,
+    apptType: true,
+    apptStaff: true,
+    apptStatus: false,
+    apptNotes: true,
+    orderInvoice: true,
+    orderStatus: false,
+    orderItems: true,
+    orderFabric: true,
+    orderCustoms: true,
+    orderTailorNotes: true,
+    measLength: true,
+    measShoulder: true,
+    measChest: true,
+    measBust: true,
+    measWaist: true,
+    measHip: true,
+    measArm: true,
+    measSleeve: true,
+    measNeck: true,
+    measSeat: false,
+    measSkirt: false,
+    measPant: false,
+  });
 
   useEffect(() => {
     setActiveSubTab(initialTab);
@@ -303,6 +342,9 @@ export default function OrderManager({ initialTab = 'bookings' }) {
 
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [pendingStatusChange, setPendingStatusChange] = useState(null); // { orderId, invoiceNumber, from, to }
+  const [proposeDateOrderId, setProposeDateOrderId] = useState(null);
+  const [proposedDateVal, setProposedDateVal] = useState('');
+  const [adminProposalNoteVal, setAdminProposalNoteVal] = useState('');
 
   const [packingSlip, setPackingSlip] = useState(null);
   const [isSlipOpen, setIsSlipOpen] = useState(false);
@@ -673,8 +715,8 @@ export default function OrderManager({ initialTab = 'bookings' }) {
           <div style="flex: 1; padding: 10px 12px; display: flex; flex-direction: column; justify-content: center; font-size: 9px; line-height: 1.4; color: #333;">
             <div style="margin-bottom: 3px;"><strong>Order ID:</strong> <span style="font-family: monospace; font-size: 9.5px; font-weight: 700;">${order.id.substring(0, 12).toUpperCase()}</span></div>
             <div style="margin-bottom: 3px;"><strong>Date:</strong> ${new Date(order.createdAt).toLocaleDateString('en-IN', {day: '2-digit', month: 'short', year: 'numeric'})}</div>
-            <div style="margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;"><strong>Item:</strong> ${order.items?.[0]?.productName || 'Apparel Item'}</div>
-            <div><strong>Qty:</strong> ${order.items?.reduce((sum, item) => sum + item.quantity, 0) || 1} item(s)</div>
+            <div style="margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;"><strong>Item:</strong> ${order.orderItems?.[0]?.product?.name || 'Apparel Item'}</div>
+            <div><strong>Qty:</strong> ${order.orderItems?.reduce((sum, item) => sum + item.quantity, 0) || 1} item(s)</div>
           </div>
         </div>
 
@@ -716,17 +758,159 @@ export default function OrderManager({ initialTab = 'bookings' }) {
     printWindow.document.close();
   };
 
+  const handlePrintInvoice = (order) => {
+    const printWindow = window.open('', '_blank', 'width=900,height=800');
+    if (!printWindow) {
+      alert('Pop-up blocked! Please allow pop-ups to print invoices.');
+      return;
+    }
+
+    const itemsHTML = (order.orderItems || []).map((item, idx) => `
+      <tr>
+        <td style="padding: 10px; border-bottom: 1px solid #eee;">${idx + 1}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: bold;">${item.productName}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;">${item.quantity}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right;">₹${Number(order.payableAmount / item.quantity).toFixed(2)}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold;">₹${Number(order.payableAmount).toFixed(2)}</td>
+      </tr>
+    `).join('');
+
+    let addressObj = parseUserAddress(order.user);
+    if (!addressObj) {
+      addressObj = {
+        name: order.customerName || (order.user && order.user.fullName) || 'Customer',
+        address: order.user?.address || 'No Delivery Address Provided',
+        city: '',
+        area: '',
+        pincode: '',
+        phone: order.user?.phoneNumber || '',
+        phone2: '',
+      };
+    }
+
+    const invoiceHTML = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 800px; margin: 20px auto; padding: 30px; border: 1px solid #eee; box-shadow: 0 0 10px rgba(0, 0, 0, 0.05); color: #333; line-height: 1.5;">
+        
+        <!-- Header -->
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 20px; margin-bottom: 30px;">
+          <div>
+            <h1 style="margin: 0; font-size: 32px; font-weight: 900; letter-spacing: 3px;">MARCOS</h1>
+            <p style="margin: 4px 0 0 0; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #666; letter-spacing: 2px;">Luxury Couture Studio</p>
+          </div>
+          <div style="text-align: right;">
+            <h2 style="margin: 0; font-size: 20px; font-weight: 900; color: #111;">RETAIL INVOICE</h2>
+            <p style="margin: 5px 0 0 0; font-size: 11px; font-weight: 600; color: #555;">Invoice No: <strong>${order.invoiceNumber}</strong></p>
+            <p style="margin: 3px 0 0 0; font-size: 11px; color: #777;">Date: ${new Date(order.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+          </div>
+        </div>
+
+        <!-- Customer & Billing Details -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 40px;">
+          <div>
+            <h3 style="margin: 0 0 10px 0; font-size: 12px; font-weight: 800; color: #000; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #eee; padding-bottom: 5px;">Billing/Shipping Details</h3>
+            <p style="margin: 0; font-size: 13px; font-weight: 700; color: #111;">${addressObj.name.toUpperCase()}</p>
+            <p style="margin: 5px 0 0 0; font-size: 11px; color: #555; leading-height: 1.4;">${addressObj.address}${addressObj.landmark ? `, Near ${addressObj.landmark}` : ''}${addressObj.area ? `, ${addressObj.area}` : ''}</p>
+            <p style="margin: 3px 0 0 0; font-size: 11px; color: #555;">${addressObj.city} ${addressObj.pincode ? `- ${addressObj.pincode}` : ''}</p>
+            <p style="margin: 5px 0 0 0; font-size: 11px; font-weight: 700; color: #111;">Phone: ${addressObj.phone || 'N/A'}</p>
+          </div>
+          <div>
+            <h3 style="margin: 0 0 10px 0; font-size: 12px; font-weight: 800; color: #000; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #eee; padding-bottom: 5px;">Order & Payment Info</h3>
+            <p style="margin: 0; font-size: 11px; color: #555;">Order ID: <strong style="font-family: monospace;">${order.id}</strong></p>
+            <p style="margin: 5px 0 0 0; font-size: 11px; color: #555;">Payment Mode: <strong style="text-transform: uppercase;">${order.paymentMethod}</strong></p>
+            <p style="margin: 3px 0 0 0; font-size: 11px; color: #555;">Payment Status: <strong style="text-transform: uppercase; color: ${order.paymentStatus === 'PAID' || order.paymentStatus === 'COMPLETED' ? '#16a34a' : '#ea580c'}">${order.paymentStatus || 'PENDING'}</strong></p>
+            <p style="margin: 5px 0 0 0; font-size: 11px; color: #555;">Delivery Stage: <strong style="text-transform: uppercase;">${order.status}</strong></p>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <table style="width: 100%; border-collapse: collapse; text-align: left; margin-bottom: 40px; font-size: 12px;">
+          <thead>
+            <tr style="background-color: #f9f9f9; border-bottom: 2px solid #ddd;">
+              <th style="padding: 10px; font-weight: 800; color: #111; width: 40px;">S.No</th>
+              <th style="padding: 10px; font-weight: 800; color: #111;">Description</th>
+              <th style="padding: 10px; font-weight: 800; color: #111; text-align: center; width: 60px;">Qty</th>
+              <th style="padding: 10px; font-weight: 800; color: #111; text-align: right; width: 100px;">Unit Price</th>
+              <th style="padding: 10px; font-weight: 800; color: #111; text-align: right; width: 120px;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHTML}
+          </tbody>
+        </table>
+
+        <!-- Summary & Custom Sizing/Fabric Details -->
+        <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 40px; border-top: 1px solid #eee; padding-top: 25px;">
+          <div>
+            ${order.fabricType || order.customizations || order.tailorNotes ? `
+              <h3 style="margin: 0 0 10px 0; font-size: 11px; font-weight: 800; color: #000; text-transform: uppercase; letter-spacing: 0.5px;">Custom Tailoring Specifications</h3>
+              ${order.fabricType ? `<p style="margin: 0 0 5px 0; font-size: 11px;"><strong>Fabric Selected:</strong> ${order.fabricType}</p>` : ''}
+              ${order.customizations ? `<p style="margin: 0 0 5px 0; font-size: 11px;"><strong>Customizations:</strong> ${order.customizations}</p>` : ''}
+              ${order.tailorNotes ? `<p style="margin: 0; font-size: 11px; color: #666; font-style: italic;"><strong>Tailor Instructions:</strong> ${order.tailorNotes}</p>` : ''}
+            ` : ''}
+          </div>
+          <div style="text-align: right; font-size: 13px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+              <span style="color: #666;">Subtotal:</span>
+              <span style="font-weight: 600;">₹${Number(order.payableAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+              <span style="color: #666;">Shipping & Custom Sizing Charge:</span>
+              <span style="font-weight: 600; color: #16a34a;">FREE</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-top: 2px solid #000; padding-top: 12px; font-size: 18px; font-weight: 900; color: #111;">
+              <span>Total Payable:</span>
+              <span>₹${Number(order.payableAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="border-top: 1px dashed #ccc; margin-top: 50px; padding-top: 20px; text-align: center; font-size: 10px; color: #777;">
+          <p style="margin: 0; font-weight: 700; color: #444; text-transform: uppercase; letter-spacing: 1px;">Thank you for shopping with MARCOS Luxury Couture</p>
+          <p style="margin: 5px 0 0 0;">For returns, tailoring adjustments or custom requests, please contact support@marcoscouture.com</p>
+        </div>
+
+      </div>
+    `;
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Retail Invoice - ${order.invoiceNumber}</title>
+          <style>
+            body { margin: 0; padding: 20px; background-color: #f5f5f5; font-family: sans-serif; }
+            .no-print-btn { text-align: center; margin-bottom: 16px; }
+            .no-print-btn button { background: #000; color: #fff; border: none; padding: 10px 28px; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer; letter-spacing: 1px; text-transform: uppercase; }
+            .no-print-btn button:hover { background: #333; }
+            @media print {
+              .no-print-btn { display: none; }
+              body { margin: 0; padding: 0; background: #fff; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="no-print-btn">
+            <button onclick="window.print()">🖨️ Print Invoice</button>
+          </div>
+          ${invoiceHTML}
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   useEffect(() => {
     loadOrders();
   }, []);
 
   const loadOrders = async () => {
     try {
-      const [list, appList, visitList, staff] = await Promise.all([
+      const [list, appList, visitList, staff, measurementsList] = await Promise.all([
         api.getOrders().catch(() => []),
         api.getAppointments().catch(() => []),
         api.getStoreVisits().catch(() => []),
-        api.getStaffList().catch(() => [])
+        api.getStaffList().catch(() => []),
+        api.getAllMeasurements().catch(() => [])
       ]);
 
       const enrichedOrders = list.map(order => {
@@ -763,6 +947,7 @@ export default function OrderManager({ initialTab = 'bookings' }) {
       setAppointments(appList);
       setVisits(visitList);
       setStaffList(staff);
+      setAllMeasurements(measurementsList || []);
       if (staff.length > 0 && !selectedStaffId) {
         setSelectedStaffId(staff[0].id);
       }
@@ -770,6 +955,348 @@ export default function OrderManager({ initialTab = 'bookings' }) {
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const MEASUREMENT_LABELS = {
+    measLength: { key: 'fullLength', label: 'Length' },
+    measShoulder: { key: 'shoulderWidth', label: 'Shoulder' },
+    measChest: { key: 'upperChest', label: 'Chest' },
+    measBust: { key: 'bust', label: 'Bust' },
+    measWaist: { key: 'waist', label: 'Waist' },
+    measHip: { key: 'hip', label: 'Hip' },
+    measArm: { key: 'armLength', label: 'Arm Length' },
+    measSleeve: { key: 'sleeveLength', label: 'Sleeve' },
+    measNeck: { key: 'neck', label: 'Neck' },
+    measSeat: { key: 'seat', label: 'Seat' },
+    measSkirt: { key: 'skirtLength', label: 'Skirt' },
+    measPant: { key: 'pantLength', label: 'Pant Length' },
+  };
+
+  const togglePrintField = (field) => {
+    setPrintFields(prev => ({ ...prev, [field]: !prev[field] }));
+  };
+
+  const handleSelectAllPrintFields = () => {
+    const updated = {};
+    Object.keys(printFields).forEach(k => { updated[k] = true; });
+    setPrintFields(updated);
+  };
+
+  const handleClearAllPrintFields = () => {
+    const updated = {};
+    Object.keys(printFields).forEach(k => { updated[k] = false; });
+    setPrintFields(updated);
+  };
+
+  const handleDefaultTailorPrintFields = () => {
+    setPrintFields({
+      custName: true,
+      custPhone: true,
+      custEmail: false,
+      custAddress: true,
+      custGender: false,
+      apptTime: true,
+      apptType: true,
+      apptStaff: true,
+      apptStatus: false,
+      apptNotes: true,
+      orderInvoice: true,
+      orderStatus: false,
+      orderItems: true,
+      orderFabric: true,
+      orderCustoms: true,
+      orderTailorNotes: true,
+      measLength: true,
+      measShoulder: true,
+      measChest: true,
+      measBust: true,
+      measWaist: true,
+      measHip: true,
+      measArm: true,
+      measSleeve: true,
+      measNeck: true,
+      measSeat: false,
+      measSkirt: false,
+      measPant: false,
+    });
+  };
+
+  const hasAnyMeasurementFieldChecked = () => {
+    return Object.keys(MEASUREMENT_LABELS).some(k => printFields[k]);
+  };
+
+  const getCombinedPrintItems = () => {
+    const combinedItems = [];
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    const isDateInRange = (dateStr) => {
+      if (printDateRange === 'ALL') return true;
+      if (!dateStr) return false;
+      const d = new Date(dateStr);
+      d.setHours(0,0,0,0);
+      
+      if (printDateRange === 'DAY') {
+        return printDate ? dateStr === printDate : true;
+      }
+      
+      if (printDateRange === 'WEEK') {
+        const currentDay = today.getDay();
+        const firstDayOfWeek = new Date(today);
+        firstDayOfWeek.setDate(today.getDate() - currentDay);
+        const lastDayOfWeek = new Date(firstDayOfWeek);
+        lastDayOfWeek.setDate(firstDayOfWeek.getDate() + 6);
+        return d >= firstDayOfWeek && d <= lastDayOfWeek;
+      }
+      
+      if (printDateRange === 'MONTH') {
+        return d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
+      }
+
+      if (printDateRange === 'CUSTOM') {
+        let matchesFrom = true;
+        let matchesTo = true;
+        if (printDateFrom) {
+          matchesFrom = d.getTime() >= new Date(printDateFrom).setHours(0,0,0,0);
+        }
+        if (printDateTo) {
+          matchesTo = d.getTime() <= new Date(printDateTo).setHours(23,59,59,999);
+        }
+        return matchesFrom && matchesTo;
+      }
+      
+      return true;
+    };
+
+    if (printIncludeFittings) {
+      appointments.forEach(appt => {
+        if (!appt.date) return;
+        const apptDateStr = new Date(appt.date).toISOString().slice(0, 10);
+        if (isDateInRange(apptDateStr)) {
+          // Find matching order
+          let matchedOrder = orders.find(o => appt.notes && appt.notes.includes(o.invoiceNumber));
+          if (!matchedOrder && appt.userId) {
+            matchedOrder = orders.find(o => o.userId === appt.userId);
+          }
+          if (!matchedOrder && appt.userName) {
+            matchedOrder = orders.find(o => o.customerName && o.customerName.toLowerCase() === appt.userName.toLowerCase());
+          }
+
+          // Find measurement profile
+          let matchedMeas = null;
+          if (matchedOrder && matchedOrder.measurementProfileId) {
+            matchedMeas = allMeasurements.find(m => m.id === matchedOrder.measurementProfileId);
+          }
+          if (!matchedMeas && appt.userId) {
+            matchedMeas = allMeasurements.find(m => m.userId === appt.userId);
+          }
+
+          combinedItems.push({
+            id: appt.id,
+            type: 'STUDIO_FITTING',
+            userName: appt.userName || (matchedOrder && matchedOrder.customerName) || 'Customer',
+            phone: (matchedOrder && matchedOrder.user?.phoneNumber) || appt.user?.phoneNumber || '',
+            email: (matchedOrder && matchedOrder.user?.email) || appt.user?.email || '',
+            address: (matchedOrder && parseUserAddress(matchedOrder.user)?.address) || appt.user?.address || '',
+            gender: (matchedOrder && matchedOrder.user?.gender) || appt.user?.gender || '',
+            timeSlot: appt.timeSlot,
+            apptType: appt.type || 'FITTING',
+            status: appt.status,
+            notes: appt.notes,
+            assignedStaffName: appt.assignedStaff?.fullName || (appt.assignedStaffId && staffList.find(s => s.id === appt.assignedStaffId)?.fullName) || 'Unassigned',
+            order: matchedOrder,
+            measurements: matchedMeas
+          });
+        }
+      });
+    }
+
+    if (printIncludeVisits) {
+      visits.forEach(visit => {
+        const visitDate = visit.confirmedDate || visit.preferredDate;
+        if (!visitDate) return;
+        const visitDateStr = new Date(visitDate).toISOString().slice(0, 10);
+        if (isDateInRange(visitDateStr)) {
+          // Find matching order
+          let matchedOrder = orders.find(o => visit.requirements && visit.requirements.includes(o.invoiceNumber));
+          if (!matchedOrder && visit.customerId) {
+            matchedOrder = orders.find(o => o.userId === visit.customerId);
+          }
+          if (!matchedOrder && visit.customerName) {
+            matchedOrder = orders.find(o => o.customerName && o.customerName.toLowerCase() === visit.customerName.toLowerCase());
+          }
+
+          // Find measurement profile
+          let matchedMeas = null;
+          if (matchedOrder && matchedOrder.measurementProfileId) {
+            matchedMeas = allMeasurements.find(m => m.id === matchedOrder.measurementProfileId);
+          }
+          if (!matchedMeas && visit.customerId) {
+            matchedMeas = allMeasurements.find(m => m.userId === visit.customerId);
+          }
+
+          combinedItems.push({
+            id: visit.id,
+            type: 'HOME_VISIT',
+            userName: visit.customerName || (matchedOrder && matchedOrder.customerName) || 'Customer',
+            phone: (matchedOrder && matchedOrder.user?.phoneNumber) || visit.customer?.phoneNumber || '',
+            email: (matchedOrder && matchedOrder.user?.email) || visit.customer?.email || '',
+            address: visit.address || (matchedOrder && parseUserAddress(matchedOrder.user)?.address) || '',
+            gender: (matchedOrder && matchedOrder.user?.gender) || visit.customer?.gender || '',
+            timeSlot: 'Home Visit Fitting',
+            apptType: 'HOME_VISIT',
+            status: visit.status,
+            notes: visit.requirements,
+            assignedStaffName: visit.assignedStaffName || 'Unassigned',
+            order: matchedOrder,
+            measurements: matchedMeas
+          });
+        }
+      });
+    }
+
+    return combinedItems;
+  };
+
+  const handlePrintWorksheets = (items) => {
+    const printWindow = window.open('', '_blank', 'width=900,height=800');
+    if (!printWindow) {
+      alert('Pop-up blocked! Please allow pop-ups to print tailoring sheets.');
+      return;
+    }
+
+    let sheetsHTML = '';
+    items.forEach((item, index) => {
+      let clientInfo = '';
+      if (printFields.custName) clientInfo += `<div><strong>Client Name:</strong> ${item.userName}</div>`;
+      if (printFields.custPhone) clientInfo += `<div><strong>Phone:</strong> ${item.phone || 'N/A'}</div>`;
+      if (printFields.custEmail) clientInfo += `<div><strong>Email:</strong> ${item.email || 'N/A'}</div>`;
+      if (printFields.custAddress) clientInfo += `<div><strong>Address:</strong> ${item.address || 'N/A'}</div>`;
+      if (printFields.custGender) clientInfo += `<div><strong>Gender:</strong> ${item.gender || 'N/A'}</div>`;
+
+      let apptInfo = '';
+      if (printFields.apptType) apptInfo += `<div><strong>Appointment Type:</strong> ${item.apptType}</div>`;
+      if (printFields.apptStaff) apptInfo += `<div><strong>Assigned Tailor:</strong> ${item.assignedStaffName}</div>`;
+      if (printFields.apptStatus) apptInfo += `<div><strong>Status:</strong> ${item.status}</div>`;
+      if (printFields.apptNotes) apptInfo += `<div style="margin-top: 5px;"><strong>Requirements/Notes:</strong> ${item.notes || 'N/A'}</div>`;
+
+      let orderInfo = '';
+      if (item.order) {
+        if (printFields.orderInvoice) orderInfo += `<div><strong>Invoice No:</strong> ${item.order.invoiceNumber}</div>`;
+        if (printFields.orderStatus) orderInfo += `<div><strong>Order Stage:</strong> ${item.order.status}</div>`;
+        if (printFields.orderFabric) orderInfo += `<div><strong>Fabric Selected:</strong> ${item.order.fabricType || 'As specified'}</div>`;
+        if (printFields.orderCustoms) orderInfo += `<div style="margin-top: 4px;"><strong>Customizations:</strong> ${item.order.customizations || 'None'}</div>`;
+        if (printFields.orderTailorNotes) orderInfo += `<div style="margin-top: 4px;"><strong>Order Tailor Notes:</strong> ${item.order.tailorNotes || 'None'}</div>`;
+        if (printFields.orderItems) {
+          orderInfo += `<div style="margin-top: 6px;"><strong>Ordered Apparel:</strong></div>`;
+          orderInfo += `<ul style="margin: 3px 0; padding-left: 15px; font-weight: bold;">`;
+          item.order.orderItems?.forEach(p => {
+            orderInfo += `<li>${p.product?.name} (x${p.quantity})</li>`;
+          });
+          orderInfo += `</ul>`;
+        }
+      } else {
+        orderInfo = '<div style="color: #666; font-style: italic;">No direct retail order linked.</div>';
+      }
+
+      let measInfo = '';
+      if (hasAnyMeasurementFieldChecked() && item.measurements) {
+        measInfo += `<div class="meas-grid">`;
+        Object.entries(MEASUREMENT_LABELS).forEach(([fieldKey, cfg]) => {
+          if (printFields[fieldKey]) {
+            const val = item.measurements[cfg.key];
+            measInfo += `
+              <div class="meas-item">
+                <span class="meas-label">${cfg.label}</span>
+                <span class="meas-value">${val ? val + '"' : '-'}</span>
+              </div>
+            `;
+          }
+        });
+        measInfo += `</div>`;
+      } else if (hasAnyMeasurementFieldChecked()) {
+        measInfo = '<div style="color: #666; font-style: italic;">No size profile registered. Sizing measurements must be taken.</div>';
+      }
+
+      sheetsHTML += `
+        <div class="worksheet">
+          <div class="worksheet-header">
+            <span>WORKSHEET #${index + 1} (${item.type === 'STUDIO_FITTING' ? 'STUDIO FITTING' : 'HOME VISIT'})</span>
+            <span>TIME SLOT: ${item.timeSlot}</span>
+          </div>
+          <div class="grid">
+            <div>
+              <div class="section-title">Customer Info</div>
+              ${clientInfo || '<div style="color: #666; font-style: italic;">No columns selected.</div>'}
+            </div>
+            <div>
+              <div class="section-title">Booking Details</div>
+              ${apptInfo || '<div style="color: #666; font-style: italic;">No columns selected.</div>'}
+            </div>
+          </div>
+          
+          ${(printFields.orderInvoice || printFields.orderStatus || printFields.orderItems || printFields.orderFabric || printFields.orderCustoms || printFields.orderTailorNotes) ? `
+            <div style="margin-top: 15px;">
+              <div class="section-title">Associated Order & Customizations</div>
+              ${orderInfo}
+            </div>
+          ` : ''}
+
+          ${hasAnyMeasurementFieldChecked() ? `
+            <div style="margin-top: 15px;">
+              <div class="section-title">Sizing Measurements (${item.measurements?.profileName || 'Default Size'})</div>
+              ${measInfo}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    });
+
+    const docHTML = `
+      <html>
+        <head>
+          <title>MARCOS Custom Tailoring Worksheet - ${printDate}</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20px; color: #000; background: #fff; font-size: 11px; line-height: 1.4; }
+            h1 { text-align: center; border-bottom: 3px double #000; padding-bottom: 8px; margin: 0 0 5px 0; font-size: 18px; text-transform: uppercase; letter-spacing: 1px; }
+            .meta { display: flex; justify-content: space-between; margin-bottom: 20px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 6px; font-size: 10px; text-transform: uppercase; color: #333; }
+            .worksheet { border: 2px solid #000; padding: 15px; margin-bottom: 25px; page-break-inside: avoid; border-radius: 6px; background-color: #fff; }
+            .worksheet-header { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 12px; font-size: 12px; font-weight: bold; font-family: monospace; }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+            .section-title { font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 2px; margin-bottom: 6px; text-transform: uppercase; font-size: 9px; color: #000; letter-spacing: 0.5px; }
+            .meas-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-top: 5px; }
+            .meas-item { border: 1px solid #000; padding: 4px; background: #fff; text-align: center; }
+            .meas-label { font-size: 8px; color: #000; display: block; text-transform: uppercase; font-weight: bold; }
+            .meas-value { font-weight: bold; font-size: 12px; font-family: monospace; }
+            .no-print-btn { text-align: center; margin-bottom: 20px; }
+            .no-print-btn button { background: #000; color: #fff; border: none; padding: 10px 28px; font-size: 13px; font-weight: bold; border-radius: 6px; cursor: pointer; letter-spacing: 1px; text-transform: uppercase; }
+            .no-print-btn button:hover { background: #333; }
+            ul { margin: 0; padding-left: 15px; }
+            li { margin-bottom: 2px; }
+            @media print {
+              .no-print-btn { display: none; }
+              body { padding: 0; }
+              .worksheet { margin-bottom: 20px; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="no-print-btn">
+            <button onclick="window.print()">🖨️ Print Tailoring Sheets</button>
+          </div>
+          <h1>MARCOS Tailoring Production Worksheet</h1>
+          <div class="meta">
+            <span>Date Scope: ${printDateRange === 'DAY' ? (printDate ? new Date(printDate).toLocaleDateString(undefined, { dateStyle: 'long' }) : 'All Dates') : printDateRange === 'WEEK' ? 'This Week' : printDateRange === 'MONTH' ? 'This Month' : printDateRange === 'CUSTOM' ? ((printDateFrom || 'Start') + ' to ' + (printDateTo || 'End')) : 'All Time'}</span>
+            <span>Total Worksheets: ${items.length}</span>
+            <span>Confidential - For Tailoring Workshop Use Only</span>
+          </div>
+          ${sheetsHTML}
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(docHTML);
+    printWindow.document.close();
   };
 
   const handleUpdateAppStatus = async (id, status) => {
@@ -852,11 +1379,40 @@ export default function OrderManager({ initialTab = 'bookings' }) {
       await api.updateQuickOrderStatus(id, status);
       loadOrders();
       if (selectedOrder && selectedOrder.id === id) {
-        setSelectedOrder(prev => ({ ...prev, quickOrderStatus: status }));
+        setSelectedOrder(prev => ({ ...prev, quickOrderStatus: status, quickOrderProposedDate: null }));
       }
       alert(`Quick order status updated to ${status}`);
     } catch (err) {
       alert(err.message || 'Quick order status update failed.');
+    }
+  };
+
+  const handleProposeQuickOrderDate = async (id, proposedDate, adminNote) => {
+    if (!proposedDate) {
+      alert('Please select a date.');
+      return;
+    }
+    if (!adminNote) {
+      alert('Please provide an explanation for proposing this date.');
+      return;
+    }
+    try {
+      await api.updateQuickOrderStatus(id, 'DATE_CHANGE_PROPOSED', proposedDate, adminNote);
+      loadOrders();
+      if (selectedOrder && selectedOrder.id === id) {
+        setSelectedOrder(prev => ({ 
+          ...prev, 
+          quickOrderStatus: 'DATE_CHANGE_PROPOSED',
+          quickOrderProposedDate: proposedDate,
+          adminProposalNote: adminNote
+        }));
+      }
+      setProposeDateOrderId(null);
+      setProposedDateVal('');
+      setAdminProposalNoteVal('');
+      alert(`Date change proposed successfully to ${new Date(proposedDate).toLocaleDateString('en-IN')}`);
+    } catch (err) {
+      alert(err.message || 'Failed to propose date change.');
     }
   };
 
@@ -1074,7 +1630,7 @@ export default function OrderManager({ initialTab = 'bookings' }) {
           type: 'MEASUREMENT',
           date: booking.date,
           timeSlot: booking.timeSlot,
-          productType: selectedOrder.items?.[0]?.productName || 'Luxury Custom Outfit',
+          productType: selectedOrder.items?.[0]?.product?.name || 'Luxury Custom Outfit',
           notes: selectedOrder.invoiceNumber,
           userId: selectedOrder.userId || selectedOrder.user?.id || undefined,
         };
@@ -1133,7 +1689,7 @@ export default function OrderManager({ initialTab = 'bookings' }) {
           type: 'MEASUREMENT',
           date: formattedDate,
           timeSlot: rescheduleTimeSlot,
-          productType: selectedOrder.items?.[0]?.productName || 'Luxury Custom Outfit',
+          productType: selectedOrder.items?.[0]?.product?.name || 'Luxury Custom Outfit',
           notes: selectedOrder.invoiceNumber,
           userId: selectedOrder.userId || selectedOrder.user?.id || undefined,
         };
@@ -1364,6 +1920,21 @@ export default function OrderManager({ initialTab = 'bookings' }) {
           .printable-invoice-card * {
             visibility: visible !important;
           }
+
+          /* Show only the schedule printout if active */
+          .print-schedule-printout,
+          .print-schedule-printout * {
+            visibility: visible !important;
+          }
+          .print-schedule-printout {
+            display: block !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            background: #fff !important;
+            color: #000 !important;
+          }
           
           /* Reset root layout styles during print to allow natural page height and flow */
           html, body, #root, .fixed, .fixed > div {
@@ -1473,6 +2044,13 @@ export default function OrderManager({ initialTab = 'bookings' }) {
           <p className="text-xs text-slate-500 font-medium">Track customer bookings, manage delivery stages, tailors schedules, and home visits</p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => setIsUniversalPrintOpen(true)}
+            className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5"
+          >
+            <Printer className="w-4 h-4" />
+            <span>Universal Print</span>
+          </button>
           <button
             onClick={loadOrders}
             className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl text-xs font-bold transition-all shadow-sm bg-white"
@@ -1929,15 +2507,51 @@ export default function OrderManager({ initialTab = 'bookings' }) {
                         <td className="py-4 px-6 text-slate-600 font-medium whitespace-nowrap">
                           {order.quickOrderExpectedDate ? new Date(order.quickOrderExpectedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
                         </td>
-                        <td className="py-4 px-6 text-slate-600 font-medium max-w-xs truncate" title={order.quickOrderReason}>{order.quickOrderReason}</td>
                         <td className="py-4 px-6">
-                          <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold border ${order.quickOrderStatus === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : order.quickOrderStatus === 'REJECTED' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                            {order.quickOrderStatus || 'PENDING'}
+                          <div className="text-slate-600 font-medium max-w-xs truncate" title={order.quickOrderReason}>
+                            {order.quickOrderReason}
+                          </div>
+                          {order.quickOrderStatus === 'USER_REJECTED_PROPOSAL' && order.userRejectionNote && (
+                            <div className="mt-1.5 p-1.5 bg-red-50 border border-red-100 rounded text-[10px] text-red-700 font-medium leading-snug" title={order.userRejectionNote}>
+                              <span className="font-extrabold text-red-800 uppercase tracking-wide text-[9px] block mb-0.5">Rejected Reason:</span>
+                              {order.userRejectionNote}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-4 px-6">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold border ${
+                            order.quickOrderStatus === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 
+                            order.quickOrderStatus === 'REJECTED' ? 'bg-red-50 text-red-700 border-red-200' : 
+                            order.quickOrderStatus === 'DATE_CHANGE_PROPOSED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                            order.quickOrderStatus === 'USER_REJECTED_PROPOSAL' ? 'bg-red-50 text-red-700 border-red-200' :
+                            order.quickOrderStatus === 'ADMIN_FINAL_APPROVAL_PENDING' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                            'bg-amber-50 text-amber-700 border-amber-200'
+                          }`}>
+                            {order.quickOrderStatus === 'DATE_CHANGE_PROPOSED' ? 'DATE PROPOSED' : 
+                             order.quickOrderStatus === 'USER_REJECTED_PROPOSAL' ? 'USER REJECTED' :
+                             order.quickOrderStatus === 'ADMIN_FINAL_APPROVAL_PENDING' ? 'FINAL APPROVAL PENDING' :
+                             (order.quickOrderStatus || 'PENDING')}
                           </span>
+                          {order.quickOrderStatus === 'DATE_CHANGE_PROPOSED' && order.quickOrderProposedDate && (
+                            <div className="text-[10px] text-blue-600 font-extrabold mt-1">
+                              Proposed: {new Date(order.quickOrderProposedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                            </div>
+                          )}
+                          {order.quickOrderStatus === 'DATE_CHANGE_PROPOSED' && order.adminProposalNote && (
+                            <div className="mt-1 p-1.5 bg-blue-50 border border-blue-100 rounded text-[10px] text-blue-700 font-medium leading-snug" title={order.adminProposalNote}>
+                              <span className="font-extrabold text-blue-800 uppercase tracking-wide text-[9px] block mb-0.5">Admin Note:</span>
+                              {order.adminProposalNote}
+                            </div>
+                          )}
+                          {order.quickOrderStatus === 'ADMIN_FINAL_APPROVAL_PENDING' && order.quickOrderExpectedDate && (
+                            <div className="text-[10px] text-purple-600 font-extrabold mt-1">
+                              Accepted Date: {new Date(order.quickOrderExpectedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                            </div>
+                          )}
                         </td>
                         <td className="py-4 px-6 text-center">
                           <div className="flex gap-2 justify-center">
-                            {(!order.quickOrderStatus || order.quickOrderStatus === 'PENDING') && (
+                            {order.isQuickOrder && (!order.quickOrderStatus || ['PENDING', 'DATE_CHANGE_PROPOSED', 'USER_REJECTED_PROPOSAL', 'ADMIN_FINAL_APPROVAL_PENDING'].includes(order.quickOrderStatus)) && (
                               <>
                                 <button
                                   onClick={() => handleUpdateQuickStatus(order.id, 'APPROVED')}
@@ -1952,6 +2566,16 @@ export default function OrderManager({ initialTab = 'bookings' }) {
                                   title="Reject Quick Order"
                                 >
                                   <XCircle className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setProposeDateOrderId(order.id);
+                                    setProposedDateVal(order.quickOrderProposedDate ? order.quickOrderProposedDate.substring(0, 10) : '');
+                                  }}
+                                  className="p-1.5 border border-blue-200 bg-blue-50 rounded-lg hover:bg-blue-100 text-blue-600 transition-colors"
+                                  title="Propose Date Change"
+                                >
+                                  <Calendar className="w-4 h-4" />
                                 </button>
                               </>
                             )}
@@ -1972,6 +2596,361 @@ export default function OrderManager({ initialTab = 'bookings' }) {
             </div>
           </div>
         </>
+      )}
+
+      {activeSubTab === 'print_schedule' && (
+        <div className="space-y-6">
+          <div className="bg-white border border-slate-200/60 rounded-3xl p-6 md:p-8 shadow-premium space-y-6">
+            
+            {/* Header Control Header */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-5">
+              <div>
+                <h3 className="font-extrabold text-slate-800 text-base flex items-center gap-2">
+                  <Printer className="w-5 h-5 text-brand-500" />
+                  <span>Production Worksheet Print Center</span>
+                </h3>
+                <p className="text-xs text-slate-400 font-medium mt-1">
+                  Combine today's schedule fittings and home visits with sizing measurements to print worksheets for tailoring artisans.
+                </p>
+              </div>
+              <button
+                onClick={() => handlePrintWorksheets(getCombinedPrintItems())}
+                disabled={getCombinedPrintItems().length === 0}
+                className="flex items-center gap-2 px-5 py-2.5 bg-brand-500 hover:bg-brand-600 disabled:bg-slate-100 disabled:text-slate-400 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 shrink-0"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Print Worksheets ({getCombinedPrintItems().length})</span>
+              </button>
+            </div>
+
+            {/* Layout grid for configurations vs preview */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              
+              {/* Configuration panel */}
+              <div className="lg:col-span-1 space-y-6 border-b lg:border-b-0 lg:border-r border-slate-150/60 pb-6 lg:pb-0 lg:pr-6">
+                
+                {/* 1. Date Scope */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">1. Select Target Date</h4>
+                  
+                  <div className="flex flex-col gap-2">
+                    <label className="text-[10px] font-bold text-slate-450 uppercase tracking-wide">Date Filter Range</label>
+                    <select
+                      value={printDateRange}
+                      onChange={e => setPrintDateRange(e.target.value)}
+                      className="w-full text-xs border border-slate-200 rounded-xl py-2.5 px-3 bg-white font-semibold focus:outline-none focus:border-brand-500"
+                    >
+                      <option value="ALL">All Time</option>
+                      <option value="DAY">Specific Day</option>
+                      <option value="WEEK">This Week</option>
+                      <option value="MONTH">This Month</option>
+                    </select>
+
+                    {printDateRange === 'DAY' && (
+                      <input
+                        type="date"
+                        value={printDate}
+                        onChange={e => setPrintDate(e.target.value)}
+                        className="w-full text-xs border border-slate-200 rounded-xl py-2.5 px-3 mt-1 bg-white font-semibold focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                      />
+                    )}
+                  </div>
+
+                  <div className="space-y-2 pt-1">
+                    <span className="text-[10px] font-bold text-slate-450 uppercase tracking-wide block mb-1">Include Booking Type</span>
+                    <label className="flex items-center gap-2.5 text-xs text-slate-600 font-semibold cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={printIncludeFittings}
+                        onChange={e => setPrintIncludeFittings(e.target.checked)}
+                        className="rounded border-slate-350 text-brand-500 focus:ring-brand-550 w-4 h-4"
+                      />
+                      <span>Studio Fitting Appointments</span>
+                    </label>
+                    <label className="flex items-center gap-2.5 text-xs text-slate-600 font-semibold cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={printIncludeVisits}
+                        onChange={e => setPrintIncludeVisits(e.target.checked)}
+                        className="rounded border-slate-350 text-brand-500 focus:ring-brand-550 w-4 h-4"
+                      />
+                      <span>Home Visit Fittings</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* 2. Sizing / Column checklist */}
+                <div className="space-y-4 pt-4 border-t border-slate-100">
+                  <div className="flex justify-between items-center">
+                    <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">2. Configure Fields</h4>
+                    <div className="flex gap-2 text-[10px] font-extrabold text-brand-500">
+                      <button onClick={handleSelectAllPrintFields} className="hover:underline">All</button>
+                      <span className="text-slate-300">•</span>
+                      <button onClick={handleClearAllPrintFields} className="hover:underline text-slate-400">Clear</button>
+                      <span className="text-slate-300">•</span>
+                      <button onClick={handleDefaultTailorPrintFields} className="hover:underline">Default</button>
+                    </div>
+                  </div>
+
+                  {/* Customer Block */}
+                  <div className="space-y-2">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Customer Info</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="flex items-center gap-2 text-xs text-slate-600 font-medium cursor-pointer">
+                        <input type="checkbox" checked={printFields.custName} onChange={() => togglePrintField('custName')} className="rounded border-slate-300 text-brand-500 w-3.5 h-3.5" />
+                        <span>Client Name</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-600 font-medium cursor-pointer">
+                        <input type="checkbox" checked={printFields.custPhone} onChange={() => togglePrintField('custPhone')} className="rounded border-slate-300 text-brand-500 w-3.5 h-3.5" />
+                        <span>Phone No</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-600 font-medium cursor-pointer">
+                        <input type="checkbox" checked={printFields.custEmail} onChange={() => togglePrintField('custEmail')} className="rounded border-slate-300 text-brand-500 w-3.5 h-3.5" />
+                        <span>Email</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-600 font-medium cursor-pointer">
+                        <input type="checkbox" checked={printFields.custAddress} onChange={() => togglePrintField('custAddress')} className="rounded border-slate-300 text-brand-500 w-3.5 h-3.5" />
+                        <span>Address</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-600 font-medium cursor-pointer">
+                        <input type="checkbox" checked={printFields.custGender} onChange={() => togglePrintField('custGender')} className="rounded border-slate-300 text-brand-500 w-3.5 h-3.5" />
+                        <span>Gender</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Booking Info Block */}
+                  <div className="space-y-2 pt-2 border-t border-slate-100">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Booking Details</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="flex items-center gap-2 text-xs text-slate-600 font-medium cursor-pointer">
+                        <input type="checkbox" checked={printFields.apptTime} onChange={() => togglePrintField('apptTime')} className="rounded border-slate-300 text-brand-500 w-3.5 h-3.5" />
+                        <span>Time Slot</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-600 font-medium cursor-pointer">
+                        <input type="checkbox" checked={printFields.apptType} onChange={() => togglePrintField('apptType')} className="rounded border-slate-300 text-brand-500 w-3.5 h-3.5" />
+                        <span>Session Type</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-600 font-medium cursor-pointer">
+                        <input type="checkbox" checked={printFields.apptStaff} onChange={() => togglePrintField('apptStaff')} className="rounded border-slate-300 text-brand-500 w-3.5 h-3.5" />
+                        <span>Assigned Staff</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-600 font-medium cursor-pointer">
+                        <input type="checkbox" checked={printFields.apptStatus} onChange={() => togglePrintField('apptStatus')} className="rounded border-slate-300 text-brand-500 w-3.5 h-3.5" />
+                        <span>Status</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-600 font-medium cursor-pointer col-span-2">
+                        <input type="checkbox" checked={printFields.apptNotes} onChange={() => togglePrintField('apptNotes')} className="rounded border-slate-300 text-brand-500 w-3.5 h-3.5" />
+                        <span>Requirements/Notes</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Orders & Products Block */}
+                  <div className="space-y-2 pt-2 border-t border-slate-100">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Retail Order Details</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="flex items-center gap-2 text-xs text-slate-600 font-medium cursor-pointer">
+                        <input type="checkbox" checked={printFields.orderInvoice} onChange={() => togglePrintField('orderInvoice')} className="rounded border-slate-300 text-brand-500 w-3.5 h-3.5" />
+                        <span>Invoice Number</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-600 font-medium cursor-pointer">
+                        <input type="checkbox" checked={printFields.orderStatus} onChange={() => togglePrintField('orderStatus')} className="rounded border-slate-300 text-brand-500 w-3.5 h-3.5" />
+                        <span>Order Status</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-600 font-medium cursor-pointer col-span-2">
+                        <input type="checkbox" checked={printFields.orderItems} onChange={() => togglePrintField('orderItems')} className="rounded border-slate-300 text-brand-500 w-3.5 h-3.5" />
+                        <span>Ordered Items List</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-600 font-medium cursor-pointer">
+                        <input type="checkbox" checked={printFields.orderFabric} onChange={() => togglePrintField('orderFabric')} className="rounded border-slate-300 text-brand-500 w-3.5 h-3.5" />
+                        <span>Fabric Type</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-600 font-medium cursor-pointer">
+                        <input type="checkbox" checked={printFields.orderCustoms} onChange={() => togglePrintField('orderCustoms')} className="rounded border-slate-300 text-brand-500 w-3.5 h-3.5" />
+                        <span>Customizations</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-600 font-medium cursor-pointer col-span-2">
+                        <input type="checkbox" checked={printFields.orderTailorNotes} onChange={() => togglePrintField('orderTailorNotes')} className="rounded border-slate-300 text-brand-500 w-3.5 h-3.5" />
+                        <span>Stitching Tailor Notes</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Measurements Sizing Block */}
+                  <div className="space-y-2 pt-2 border-t border-slate-100">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Tailor Sizing Parameters</span>
+                    <div className="grid grid-cols-3 gap-2">
+                      <label className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold cursor-pointer">
+                        <input type="checkbox" checked={printFields.measLength} onChange={() => togglePrintField('measLength')} className="rounded border-slate-300 text-brand-500 w-3 h-3" />
+                        <span>Length</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold cursor-pointer">
+                        <input type="checkbox" checked={printFields.measShoulder} onChange={() => togglePrintField('measShoulder')} className="rounded border-slate-300 text-brand-500 w-3 h-3" />
+                        <span>Shoulder</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold cursor-pointer">
+                        <input type="checkbox" checked={printFields.measChest} onChange={() => togglePrintField('measChest')} className="rounded border-slate-300 text-brand-500 w-3 h-3" />
+                        <span>Chest</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold cursor-pointer">
+                        <input type="checkbox" checked={printFields.measBust} onChange={() => togglePrintField('measBust')} className="rounded border-slate-300 text-brand-500 w-3 h-3" />
+                        <span>Bust</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold cursor-pointer">
+                        <input type="checkbox" checked={printFields.measWaist} onChange={() => togglePrintField('measWaist')} className="rounded border-slate-300 text-brand-500 w-3 h-3" />
+                        <span>Waist</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold cursor-pointer">
+                        <input type="checkbox" checked={printFields.measHip} onChange={() => togglePrintField('measHip')} className="rounded border-slate-300 text-brand-500 w-3 h-3" />
+                        <span>Hip</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold cursor-pointer">
+                        <input type="checkbox" checked={printFields.measArm} onChange={() => togglePrintField('measArm')} className="rounded border-slate-300 text-brand-500 w-3 h-3" />
+                        <span>Arm</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold cursor-pointer">
+                        <input type="checkbox" checked={printFields.measSleeve} onChange={() => togglePrintField('measSleeve')} className="rounded border-slate-300 text-brand-500 w-3 h-3" />
+                        <span>Sleeve</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold cursor-pointer">
+                        <input type="checkbox" checked={printFields.measNeck} onChange={() => togglePrintField('measNeck')} className="rounded border-slate-300 text-brand-500 w-3 h-3" />
+                        <span>Neck</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold cursor-pointer">
+                        <input type="checkbox" checked={printFields.measSeat} onChange={() => togglePrintField('measSeat')} className="rounded border-slate-300 text-brand-500 w-3 h-3" />
+                        <span>Seat</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold cursor-pointer">
+                        <input type="checkbox" checked={printFields.measSkirt} onChange={() => togglePrintField('measSkirt')} className="rounded border-slate-300 text-brand-500 w-3 h-3" />
+                        <span>Skirt</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold cursor-pointer">
+                        <input type="checkbox" checked={printFields.measPant} onChange={() => togglePrintField('measPant')} className="rounded border-slate-300 text-brand-500 w-3 h-3" />
+                        <span>Pant</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Preview Container */}
+              <div className="lg:col-span-2 space-y-4">
+                <div className="flex justify-between items-center bg-slate-50 border border-slate-200/60 p-4 rounded-2xl shadow-sm">
+                  <span className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Live Production Sheet Preview</span>
+                  <span className="text-[10px] bg-slate-200 text-slate-600 font-bold px-2 py-0.5 rounded uppercase">Tailoring Output</span>
+                </div>
+
+                <div className="bg-slate-100 border border-slate-200 rounded-3xl p-5 md:p-6 shadow-inner max-h-[700px] overflow-y-auto space-y-6">
+                  {getCombinedPrintItems().length === 0 ? (
+                    <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-400 font-bold">
+                      No customer appointments or visit fittings match {new Date(printDate).toLocaleDateString(undefined, { dateStyle: 'medium' })}.
+                    </div>
+                  ) : (
+                    getCombinedPrintItems().map((item, idx) => (
+                      <div
+                        key={item.id}
+                        className="bg-white border-2 border-slate-900 p-5 rounded-2xl shadow-premium space-y-4 text-slate-900 leading-relaxed"
+                        style={{ fontFamily: 'monospace' }}
+                      >
+                        {/* Header border */}
+                        <div className="flex justify-between items-center border-b-2 border-slate-900 pb-2 font-bold text-xs">
+                          <span className="bg-slate-900 text-white px-2 py-0.5 rounded text-[10px]">SHEET #{idx + 1} - {item.type.replace(/_/g, ' ')}</span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-slate-850">TIME: {item.timeSlot}</span>
+                            <button 
+                              onClick={() => handlePrintWorksheets([item])}
+                              className="bg-brand-100 hover:bg-brand-200 text-brand-700 px-2.5 py-1 rounded-md text-[10px] uppercase font-bold tracking-wider transition-colors border border-brand-200"
+                            >
+                              Print This Only
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Customer & Appt Details */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+                          {/* Client Section */}
+                          <div className="space-y-1">
+                            <span className="block border-b border-slate-200 font-bold text-[9px] uppercase text-slate-450 tracking-wider mb-1">Customer Profile</span>
+                            {printFields.custName && <div><strong>Client Name :</strong> {item.userName}</div>}
+                            {printFields.custPhone && <div><strong>Phone Number:</strong> {item.phone || 'N/A'}</div>}
+                            {printFields.custEmail && <div><strong>Email Addr  :</strong> {item.email || 'N/A'}</div>}
+                            {printFields.custAddress && <div className="leading-tight"><strong>Home Address:</strong> {item.address || 'N/A'}</div>}
+                            {printFields.custGender && <div><strong>Gender      :</strong> {item.gender || 'N/A'}</div>}
+                          </div>
+
+                          {/* Appt Section */}
+                          <div className="space-y-1">
+                            <span className="block border-b border-slate-200 font-bold text-[9px] uppercase text-slate-450 tracking-wider mb-1">Booking Info</span>
+                            {printFields.apptType && <div><strong>Appt Type   :</strong> {item.apptType}</div>}
+                            {printFields.apptStaff && <div><strong>Assigned to :</strong> {item.assignedStaffName}</div>}
+                            {printFields.apptStatus && <div><strong>Status      :</strong> {item.status}</div>}
+                            {printFields.apptNotes && <div className="leading-tight text-slate-700"><strong>Appt Notes  :</strong> {item.notes || 'None'}</div>}
+                          </div>
+                        </div>
+
+                        {/* Associated Order details */}
+                        {(printFields.orderInvoice || printFields.orderStatus || printFields.orderItems || printFields.orderFabric || printFields.orderCustoms || printFields.orderTailorNotes) && (
+                          <div className="space-y-2 border-t border-slate-200 pt-3 text-xs">
+                            <span className="block font-bold text-[9px] uppercase text-slate-450 tracking-wider">Product Order Specifications</span>
+                            {item.order ? (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                  {printFields.orderInvoice && <div><strong>Invoice No  :</strong> {item.order.invoiceNumber}</div>}
+                                  {printFields.orderStatus && <div><strong>Order Stage :</strong> {item.order.status}</div>}
+                                  {printFields.orderFabric && <div><strong>Fabric Type :</strong> {item.order.fabricType || 'As specified'}</div>}
+                                  {printFields.orderCustoms && <div className="leading-tight"><strong>Customs     :</strong> {item.order.customizations || 'None'}</div>}
+                                </div>
+                                <div className="space-y-1">
+                                  {printFields.orderTailorNotes && <div className="leading-tight text-slate-700"><strong>Tailor Notes:</strong> {item.order.tailorNotes || 'None'}</div>}
+                                  {printFields.orderItems && (
+                                    <div>
+                                      <strong>Ordered Items List:</strong>
+                                      <ul className="list-disc list-inside mt-0.5 font-bold text-slate-800">
+                                        {item.order.orderItems?.map((p, i) => (
+                                          <li key={i}>{p.product?.name} (Qty: {p.quantity})</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-slate-400 italic">No direct retail order found linked for this appointment slot.</div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Size parameters */}
+                        {hasAnyMeasurementFieldChecked() && (
+                          <div className="space-y-2 border-t border-slate-200 pt-3 text-xs">
+                            <span className="block font-bold text-[9px] uppercase text-slate-455 tracking-wider">Custom Sizing Parameters ({item.measurements?.profileName || 'Default Size'})</span>
+                            {item.measurements ? (
+                              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                                {Object.entries(MEASUREMENT_LABELS).map(([fieldKey, cfg]) => {
+                                  if (!printFields[fieldKey]) return null;
+                                  const val = item.measurements[cfg.key];
+                                  return (
+                                    <div key={fieldKey} className="border border-slate-300 p-2 text-center bg-slate-50 rounded-xl">
+                                      <span className="text-[8px] text-slate-450 uppercase block font-bold">{cfg.label}</span>
+                                      <span className="font-extrabold text-sm text-slate-800">{val ? `${val}"` : '-'}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="text-slate-400 italic">No measurement profile loaded for this customer. Sizing needs to be taken.</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Redesigned Unified Order + Appointment Management Slide-Over Panel ── */}
@@ -2287,7 +3266,99 @@ export default function OrderManager({ initialTab = 'bookings' }) {
 
                 {/* ── RIGHT COLUMN: Appointment Management ── */}
                 <div className="lg:col-span-5 space-y-6">
-                  
+
+                  {/* Quick Order Control Center */}
+                  {selectedOrder.isQuickOrder && (
+                    <div className="bg-white border border-slate-200/60 rounded-3xl p-6 shadow-sm hover:shadow-premium transition-shadow space-y-4 animate-fadeIn">
+                      <div className="flex justify-between items-center border-b border-slate-50 pb-2">
+                        <h4 className="font-extrabold text-slate-800 text-sm">
+                          Quick Order Status
+                        </h4>
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border shrink-0 ${
+                          selectedOrder.quickOrderStatus === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          selectedOrder.quickOrderStatus === 'REJECTED' ? 'bg-red-50 text-red-700 border-red-200' :
+                          selectedOrder.quickOrderStatus === 'DATE_CHANGE_PROPOSED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          selectedOrder.quickOrderStatus === 'USER_REJECTED_PROPOSAL' ? 'bg-red-50 text-red-700 border-red-200' :
+                          selectedOrder.quickOrderStatus === 'ADMIN_FINAL_APPROVAL_PENDING' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                          'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>
+                          {selectedOrder.quickOrderStatus === 'DATE_CHANGE_PROPOSED' ? 'DATE PROPOSED' : 
+                           selectedOrder.quickOrderStatus === 'USER_REJECTED_PROPOSAL' ? 'USER REJECTED' :
+                           selectedOrder.quickOrderStatus === 'ADMIN_FINAL_APPROVAL_PENDING' ? 'FINAL APPROVAL PENDING' :
+                           (selectedOrder.quickOrderStatus || 'PENDING')}
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-3.5 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-slate-400 font-bold uppercase text-[10px]">Expected Date</span>
+                          <span className="font-extrabold text-slate-800">
+                            {selectedOrder.quickOrderExpectedDate ? new Date(selectedOrder.quickOrderExpectedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                          </span>
+                        </div>
+                        {selectedOrder.quickOrderStatus === 'DATE_CHANGE_PROPOSED' && selectedOrder.quickOrderProposedDate && (
+                          <div className="flex flex-col gap-1 bg-blue-50/50 p-2.5 rounded-xl border border-blue-100">
+                            <div className="flex justify-between">
+                              <span className="text-blue-600 font-bold uppercase text-[10px]">Proposed Date</span>
+                              <span className="font-extrabold text-blue-700">
+                                {new Date(selectedOrder.quickOrderProposedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              </span>
+                            </div>
+                            {selectedOrder.adminProposalNote && (
+                              <div className="mt-1 pt-1 border-t border-blue-100/50">
+                                <span className="text-blue-600 font-bold uppercase text-[10px] block mb-0.5">Your Note:</span>
+                                <span className="text-xs text-blue-700">{selectedOrder.adminProposalNote}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {selectedOrder.quickOrderStatus === 'USER_REJECTED_PROPOSAL' && selectedOrder.userRejectionNote && (
+                          <div className="flex flex-col gap-1 bg-red-50/50 p-2.5 rounded-xl border border-red-100">
+                            <span className="text-red-600 font-bold uppercase text-[10px] block mb-0.5">User's Rejection Reason:</span>
+                            <span className="text-xs text-red-700">{selectedOrder.userRejectionNote}</span>
+                          </div>
+                        )}
+                        <div className="flex flex-col gap-1">
+                          <span className="text-slate-400 font-bold uppercase text-[10px]">Quick Order Reason</span>
+                          <span className="font-medium text-slate-705 bg-slate-50 p-2.5 rounded-xl border border-slate-100 block">
+                            {selectedOrder.quickOrderReason || 'No reason specified'}
+                          </span>
+                        </div>
+                        
+                        {selectedOrder.isQuickOrder && (!selectedOrder.quickOrderStatus || ['PENDING', 'DATE_CHANGE_PROPOSED', 'USER_REJECTED_PROPOSAL', 'ADMIN_FINAL_APPROVAL_PENDING'].includes(selectedOrder.quickOrderStatus)) && (
+                          <div className="flex gap-2 pt-2">
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateQuickStatus(selectedOrder.id, 'APPROVED')}
+                              className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs rounded-xl shadow-premium transition-all"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateQuickStatus(selectedOrder.id, 'REJECTED')}
+                              className="flex-1 py-2 bg-red-500 hover:bg-red-600 text-white font-extrabold text-xs rounded-xl shadow-premium transition-all"
+                            >
+                              Reject
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setProposeDateOrderId(selectedOrder.id);
+                                setProposedDateVal(selectedOrder.quickOrderProposedDate ? selectedOrder.quickOrderProposedDate.substring(0, 10) : '');
+                                setAdminProposalNoteVal('');
+                              }}
+                              className="flex-1 py-2 bg-blue-500 hover:bg-blue-600 text-white font-extrabold text-xs rounded-xl shadow-premium transition-all"
+                            >
+                              Change Date
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Appointment Details & Status */}
                   <div className="bg-white border border-slate-200/60 rounded-3xl p-6 shadow-sm hover:shadow-premium transition-shadow space-y-4">
                     <div className="flex justify-between items-center border-b border-slate-50 pb-2">
@@ -2540,7 +3611,7 @@ export default function OrderManager({ initialTab = 'bookings' }) {
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => window.print()}
+                  onClick={() => handlePrintInvoice(selectedOrder)}
                   className="px-3 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-655 font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all"
                 >
                   <Printer className="w-4 h-4" />
@@ -2636,6 +3707,54 @@ export default function OrderManager({ initialTab = 'bookings' }) {
                   ✓ Verify &amp; Mark as Shipped
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Propose Quick Order Date Change Modal ── */}
+      {proposeDateOrderId && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setProposeDateOrderId(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="font-bold text-gray-900">Propose New Date</h3>
+              <button onClick={() => setProposeDateOrderId(null)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-gray-600 mb-4">Select a new date and provide an explanation to the user.</p>
+              <input 
+                type="date"
+                className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-black focus:border-transparent outline-none transition-all mb-4"
+                value={proposedDateVal}
+                onChange={e => setProposedDateVal(e.target.value)}
+              />
+              <textarea
+                className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-black focus:border-transparent outline-none transition-all resize-none"
+                placeholder="Explain why you are proposing this date..."
+                rows="3"
+                value={adminProposalNoteVal}
+                onChange={e => setAdminProposalNoteVal(e.target.value)}
+              ></textarea>
+            </div>
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
+              <button 
+                className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-100 rounded-xl transition-colors"
+                onClick={() => {
+                  setProposeDateOrderId(null);
+                  setProposedDateVal('');
+                  setAdminProposalNoteVal('');
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                className="px-4 py-2 bg-black text-white font-medium rounded-xl hover:bg-gray-800 transition-colors shadow-lg shadow-black/10"
+                onClick={() => handleProposeQuickOrderDate(proposeDateOrderId, proposedDateVal, adminProposalNoteVal)}
+              >
+                Send Proposal
+              </button>
             </div>
           </div>
         </div>
@@ -2822,6 +3941,231 @@ export default function OrderManager({ initialTab = 'bookings' }) {
                 Submit Completion File
               </button>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Printable Worksheets (visible during print only) */}
+      <div className="print-schedule-printout print-only text-slate-900 leading-relaxed font-mono p-5 bg-white">
+        <h1 className="text-center font-bold text-lg border-b-4 border-double border-slate-900 pb-2 mb-1 uppercase tracking-wider text-black">
+          MARCOS Tailoring Production Worksheet
+        </h1>
+        <div className="flex justify-between border-b border-slate-900 pb-2 mb-4 font-bold text-xs uppercase text-slate-800">
+          <span>Date: {(() => {
+            if (printDateRange === 'CUSTOM') {
+              return `${printDateFrom || 'Start'} to ${printDateTo || 'End'}`;
+            }
+            const dateObj = new Date(printDate);
+            return !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString(undefined, { dateStyle: 'long' }) : printDate;
+          })()}</span>
+          <span>Total Worksheets: {getCombinedPrintItems().length}</span>
+          <span>Confidential - For Tailoring Workshop Use Only</span>
+        </div>
+
+        {getCombinedPrintItems().map((item, index) => (
+          <div key={item.id} className="border-2 border-slate-900 p-5 mb-6 rounded-xl bg-white" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+            <div className="flex justify-between border-b-2 border-slate-900 pb-2 mb-3 font-bold text-xs">
+              <span>WORKSHEET #{index + 1} ({item.type === 'STUDIO_FITTING' ? 'STUDIO FITTING' : 'HOME VISIT'})</span>
+              <span>TIME SLOT: {item.timeSlot}</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-6 text-xs">
+              {/* Customer Column */}
+              <div>
+                <span className="block border-b border-slate-200 font-bold text-[9px] uppercase text-slate-500 mb-1">Customer Info</span>
+                {printFields.custName && <div><strong>Client Name:</strong> {item.userName}</div>}
+                {printFields.custPhone && <div><strong>Phone:</strong> {item.phone || 'N/A'}</div>}
+                {printFields.custEmail && <div><strong>Email:</strong> {item.email || 'N/A'}</div>}
+                {printFields.custAddress && <div className="leading-tight"><strong>Address:</strong> {item.address || 'N/A'}</div>}
+                {printFields.custGender && <div><strong>Gender:</strong> {item.gender || 'N/A'}</div>}
+              </div>
+
+              {/* Booking Column */}
+              <div>
+                <span className="block border-b border-slate-200 font-bold text-[9px] uppercase text-slate-500 mb-1">Booking Details</span>
+                {printFields.apptType && <div><strong>Appt Type:</strong> {item.apptType}</div>}
+                {printFields.apptStaff && <div><strong>Assigned Tailor:</strong> {item.assignedStaffName}</div>}
+                {printFields.apptStatus && <div><strong>Status:</strong> {item.status}</div>}
+                {printFields.apptNotes && <div className="leading-tight"><strong>Requirements/Notes:</strong> {item.notes || 'N/A'}</div>}
+              </div>
+            </div>
+
+            {/* Order Specification */}
+            {(printFields.orderInvoice || printFields.orderStatus || printFields.orderItems || printFields.orderFabric || printFields.orderCustoms || printFields.orderTailorNotes) && (
+              <div className="mt-4 border-t border-slate-200 pt-3 text-xs">
+                <span className="block font-bold text-[9px] uppercase text-slate-500 mb-1">Associated Order & Customizations</span>
+                {item.order ? (
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-1">
+                      {printFields.orderInvoice && <div><strong>Invoice No:</strong> {item.order.invoiceNumber}</div>}
+                      {printFields.orderStatus && <div><strong>Order Stage:</strong> {item.order.status}</div>}
+                      {printFields.orderFabric && <div><strong>Fabric Selected:</strong> {item.order.fabricType || 'As specified'}</div>}
+                      {printFields.orderCustoms && <div className="leading-tight"><strong>Customizations:</strong> {item.order.customizations || 'None'}</div>}
+                    </div>
+                    <div className="space-y-1">
+                      {printFields.orderTailorNotes && <div className="leading-tight"><strong>Order Tailor Notes:</strong> {item.order.tailorNotes || 'None'}</div>}
+                      {printFields.orderItems && (
+                        <div>
+                          <strong>Ordered Apparel:</strong>
+                          <ul className="list-disc list-inside mt-0.5 font-bold">
+                            {item.order.orderItems?.map((p, i) => (
+                              <li key={i}>{p.product?.name} (x{p.quantity})</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-slate-400 italic">No direct retail order linked.</div>
+                )}
+              </div>
+            )}
+
+            {/* Sizing Grid */}
+            {hasAnyMeasurementFieldChecked() && (
+              <div className="mt-4 border-t border-slate-200 pt-3 text-xs">
+                <span className="block font-bold text-[9px] uppercase text-slate-500 mb-1">Sizing Measurements ({item.measurements?.profileName || 'Default Size'})</span>
+                {item.measurements ? (
+                  <div className="grid grid-cols-6 gap-2">
+                    {Object.entries(MEASUREMENT_LABELS).map(([fieldKey, cfg]) => {
+                      if (!printFields[fieldKey]) return null;
+                      const val = item.measurements[cfg.key];
+                      return (
+                        <div key={fieldKey} className="border border-slate-300 p-1 text-center bg-slate-50 rounded">
+                          <span className="text-[7px] text-slate-500 uppercase block font-bold">{cfg.label}</span>
+                          <span className="font-extrabold text-[11px] text-slate-800">{val ? `${val}"` : '-'}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-slate-400 italic">No size profile registered. Sizing measurements must be taken.</div>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {/* ── Universal Print Modal ── */}
+      {isUniversalPrintOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-lg shadow-2xl p-6 relative flex flex-col space-y-4">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+              <h3 className="font-extrabold text-slate-800 text-base flex items-center gap-2">
+                <Printer className="w-5 h-5 text-brand-500" />
+                <span>Universal Production Print Center</span>
+              </h3>
+              <button
+                onClick={() => setIsUniversalPrintOpen(false)}
+                className="p-1.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div className="space-y-1.5">
+                <label className="block text-[10px] text-slate-400 font-bold uppercase">Date Scope Filter</label>
+                <select
+                  value={printDateRange}
+                  onChange={e => setPrintDateRange(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-brand-500 font-bold"
+                >
+                  <option value="ALL">All Time</option>
+                  <option value="DAY">Specific Day Only</option>
+                  <option value="WEEK">This Whole Week</option>
+                  <option value="MONTH">This Whole Month</option>
+                  <option value="CUSTOM">Specific Date Range (From - To)</option>
+                </select>
+              </div>
+
+              {printDateRange === 'CUSTOM' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] text-slate-400 font-bold uppercase">From Date</label>
+                    <input
+                      type="date"
+                      value={printDateFrom}
+                      onChange={e => setPrintDateFrom(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-brand-500 font-semibold"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] text-slate-400 font-bold uppercase">To Date</label>
+                    <input
+                      type="date"
+                      value={printDateTo}
+                      onChange={e => setPrintDateTo(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-brand-500 font-semibold"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {printDateRange === 'DAY' && (
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] text-slate-400 font-bold uppercase">Select Date</label>
+                  <input
+                    type="date"
+                    value={printDate}
+                    onChange={e => setPrintDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-brand-500 font-semibold"
+                  />
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <label className="block text-[10px] text-slate-400 font-bold uppercase">Include In Production Sheets</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 text-slate-700 font-semibold cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={printIncludeFittings}
+                      onChange={e => setPrintIncludeFittings(e.target.checked)}
+                      className="rounded border-slate-350 text-brand-500 focus:ring-brand-500 w-4 h-4"
+                    />
+                    <span>Studio Fittings</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-slate-700 font-semibold cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={printIncludeVisits}
+                      onChange={e => setPrintIncludeVisits(e.target.checked)}
+                      className="rounded border-slate-350 text-brand-500 focus:ring-brand-500 w-4 h-4"
+                    />
+                    <span>Home Visits</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                <p className="text-[10px] text-slate-500 leading-relaxed">
+                  Universal print gathers all matching fittings, visits, customer custom sizing, and fabric details for the selected scope, opening a clean page formatted specifically for standard paper printing.
+                </p>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 pt-4 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setIsUniversalPrintOpen(false)}
+                className="flex-1 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600 font-bold text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handlePrintWorksheets(getCombinedPrintItems());
+                  setIsUniversalPrintOpen(false);
+                }}
+                disabled={getCombinedPrintItems().length === 0}
+                className="flex-1 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:bg-slate-100 disabled:text-slate-400 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1.5"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Generate &amp; Print ({getCombinedPrintItems().length})</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

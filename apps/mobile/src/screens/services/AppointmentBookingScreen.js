@@ -76,12 +76,69 @@ export default function AppointmentBookingScreen({ navigation }) {
   const [rescheduleNotes, setRescheduleNotes] = useState('');
   const [calendarTarget, setCalendarTarget] = useState('BOOKING'); // 'BOOKING' or 'RESCHEDULE'
 
+  const [bookedSlotsCounts, setBookedSlotsCounts] = useState({});
+  const [maxBookingsPerSlot, setMaxBookingsPerSlot] = useState(5);
+
   const scrollY = React.useRef(new Animated.Value(0)).current;
 
   const availableSlots = [
     '10:00 - 11:00', '11:00 - 12:00', '12:00 - 13:00', '14:00 - 15:00',
     '15:00 - 16:00', '16:00 - 17:00', '17:00 - 18:00', '18:00 - 19:00'
   ];
+
+  const fetchSettings = async () => {
+    try {
+      const res = await api.get('/system/settings/public');
+      if (res.success && res.data) {
+        setMaxBookingsPerSlot(res.data.maxBookingsPerSlot || 5);
+      }
+    } catch (err) {
+      console.error('Error fetching settings:', err);
+    }
+  };
+
+  const loadBookedSlots = async (targetDate) => {
+    if (!targetDate) return;
+    try {
+      const yearVal = targetDate.getFullYear();
+      const monthVal = String(targetDate.getMonth() + 1).padStart(2, '0');
+      const dayVal = String(targetDate.getDate()).padStart(2, '0');
+      const formattedDate = `${yearVal}-${monthVal}-${dayVal}T12:00:00.000Z`;
+      const res = await api.get(`/appointments/availability?date=${formattedDate}`);
+      if (res.success && res.data) {
+        setBookedSlotsCounts(res.data);
+      } else {
+        setBookedSlotsCounts({});
+      }
+    } catch (err) {
+      console.error('Failed to load booked slots counts:', err);
+      setBookedSlotsCounts({});
+    }
+  };
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  useEffect(() => {
+    if (selectedDate) {
+      loadBookedSlots(selectedDate);
+    }
+  }, [selectedDate]);
+
+  useEffect(() => {
+    if (rescheduleDate) {
+      loadBookedSlots(rescheduleDate);
+    }
+  }, [rescheduleDate]);
+
+  const getFilteredAvailableSlots = (dateObj) => {
+    if (!dateObj) return availableSlots;
+    return availableSlots.filter(s => {
+      const count = bookedSlotsCounts[s] || 0;
+      return count < maxBookingsPerSlot;
+    });
+  };
 
   const loadData = async () => {
     try {
@@ -548,7 +605,7 @@ export default function AppointmentBookingScreen({ navigation }) {
                   <TextInput style={[styles.textInput, { backgroundColor: theme.bg.input, borderColor: theme.border, color: theme.text.primary }]} placeholder="Category (e.g. Wedding)" placeholderTextColor={theme.text.muted} value={apptCategory} onChangeText={setApptCategory} />
                   {errors.category && <Text style={styles.errorText}>{errors.category}</Text>}
                   <View style={styles.slotsRow}>
-                    {availableSlots.map(s => (
+                    {getFilteredAvailableSlots(selectedDate).map(s => (
                       <TouchableOpacity key={s} style={[styles.slot, { borderColor: theme.border }, timeSlot === s && { backgroundColor: theme.brand[500], borderColor: theme.brand[500] }]} onPress={() => setTimeSlot(s)}>
                         <Text style={[styles.slotText, { color: theme.text.secondary }, timeSlot === s && { color: '#ffffff' }, { fontFamily: fonts.bold }]}>{s.split(' ')[0]}</Text>
                       </TouchableOpacity>
@@ -603,7 +660,7 @@ export default function AppointmentBookingScreen({ navigation }) {
               {reschedulingItem && !reschedulingItem.address ? (
                 <>
                   <View style={styles.slotsRow}>
-                    {availableSlots.map(s => (
+                    {getFilteredAvailableSlots(rescheduleDate).map(s => (
                       <TouchableOpacity 
                         key={s} 
                         style={[

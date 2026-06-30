@@ -524,21 +524,21 @@ class APIClient {
     }
   }
 
-  async updateCategory(id, name) {
+  async updateCategory(id, updates) {
     try {
       const res = await this.request(`/admin/categories/${id}`, {
         method: 'PUT',
-        body: JSON.stringify({ name, slug: name.toLowerCase().replace(/ /g, '-') }),
+        body: JSON.stringify(updates),
       });
       return res.data;
     } catch (e) {
       const categories = MockDB.get('m_categories');
       const idx = categories.findIndex(c => c.id === id);
       if (idx === -1) throw new Error('Category not found');
-      categories[idx].name = name;
-      categories[idx].slug = name.toLowerCase().replace(/ /g, '-');
+      categories[idx] = { ...categories[idx], ...updates };
+      if (updates.name) categories[idx].slug = updates.name.toLowerCase().replace(/ /g, '-');
       MockDB.set('m_categories', categories);
-      MockDB.addAuditLog('CATEGORY_UPDATED', { message: `Category updated. New Name: '${name}'.`, categoryId: id }, 'INFO');
+      MockDB.addAuditLog('CATEGORY_UPDATED', { message: `Category updated.`, categoryId: id }, 'INFO');
       return categories[idx];
     }
   }
@@ -555,12 +555,12 @@ class APIClient {
       return true;
     }
   }
-
   async reorderCategories(orderedIds) {
     try {
+      const categoriesPayload = orderedIds.map((id, index) => ({ id, order: index + 1 }));
       const res = await this.request('/admin/categories/reorder', {
         method: 'PUT',
-        body: JSON.stringify({ orderedIds }),
+        body: JSON.stringify({ categories: categoriesPayload }),
       });
       return res.data;
     } catch (e) {
@@ -576,7 +576,198 @@ class APIClient {
     }
   }
 
+  // SUBCATEGORIES CRUD
+  async createSubCategory(categoryId, subCategory) {
+    try {
+      const res = await this.request(`/admin/categories/${categoryId}/subcategories`, {
+        method: 'POST',
+        body: JSON.stringify(subCategory),
+      });
+      return res.data;
+    } catch (e) {
+      const categories = MockDB.get('m_categories');
+      const catIdx = categories.findIndex(c => c.id === categoryId);
+      if (catIdx === -1) throw new Error('Category not found');
+      
+      const newSub = {
+        ...subCategory,
+        id: `sub-${Date.now()}`,
+        categoryId
+      };
+      
+      if (!categories[catIdx].subCategories) {
+        categories[catIdx].subCategories = [];
+      }
+      categories[catIdx].subCategories.push(newSub);
+      MockDB.set('m_categories', categories);
+      MockDB.addAuditLog('SUBCATEGORY_CREATED', { message: `Sub-category '${newSub.name}' created.`, subCategoryId: newSub.id }, 'INFO');
+      return newSub;
+    }
+  }
+
+  async updateSubCategory(id, updates) {
+    try {
+      const res = await this.request(`/admin/subcategories/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(updates),
+      });
+      return res.data;
+    } catch (e) {
+      const categories = MockDB.get('m_categories');
+      let found = false;
+      let updatedSub = null;
+      for (const cat of categories) {
+        if (cat.subCategories) {
+          const subIdx = cat.subCategories.findIndex(s => s.id === id);
+          if (subIdx !== -1) {
+            cat.subCategories[subIdx] = {
+              ...cat.subCategories[subIdx],
+              ...updates
+            };
+            updatedSub = cat.subCategories[subIdx];
+            found = true;
+            break;
+          }
+        }
+      }
+      if (!found) throw new Error('Sub-category not found');
+      MockDB.set('m_categories', categories);
+      MockDB.addAuditLog('SUBCATEGORY_UPDATED', { message: `Sub-category '${updatedSub.name}' updated.`, subCategoryId: id }, 'INFO');
+      return updatedSub;
+    }
+  }
+
+  async deleteSubCategory(id) {
+    try {
+      await this.request(`/admin/subcategories/${id}`, { method: 'DELETE' });
+      return true;
+    } catch (e) {
+      const categories = MockDB.get('m_categories');
+      let found = false;
+      for (const cat of categories) {
+        if (cat.subCategories) {
+          const initialLen = cat.subCategories.length;
+          cat.subCategories = cat.subCategories.filter(s => s.id !== id);
+          if (cat.subCategories.length !== initialLen) {
+            found = true;
+            break;
+          }
+        }
+      }
+      if (!found) throw new Error('Sub-category not found');
+      MockDB.set('m_categories', categories);
+      MockDB.addAuditLog('SUBCATEGORY_DELETED', { message: `Sub-category ID: ${id} deleted.`, subCategoryId: id }, 'WARNING');
+      return true;
+    }
+  }
+
+  // OFFERS CRUD
+  async getOffers() {
+    try {
+      const res = await this.request('/admin/offers');
+      return res.data || [];
+    } catch (e) {
+      return MockDB.get('m_offers') || [];
+    }
+  }
+
+  async createOffer(offerData) {
+    try {
+      const res = await this.request('/admin/offers', {
+        method: 'POST',
+        body: JSON.stringify(offerData)
+      });
+      return res.data;
+    } catch (e) {
+      const offers = MockDB.get('m_offers') || [];
+      const newOffer = { id: `offer-${Date.now()}`, ...offerData, createdAt: new Date().toISOString() };
+      offers.push(newOffer);
+      MockDB.set('m_offers', offers);
+      MockDB.addAuditLog('OFFER_CREATED', { message: `Offer '${newOffer.title}' created.` }, 'INFO');
+      return newOffer;
+    }
+  }
+
+  async updateOffer(id, updates) {
+    try {
+      const res = await this.request(`/admin/offers/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(updates)
+      });
+      return res.data;
+    } catch (e) {
+      const offers = MockDB.get('m_offers') || [];
+      const index = offers.findIndex(o => o.id === id);
+      if (index === -1) throw new Error('Offer not found');
+      offers[index] = { ...offers[index], ...updates };
+      MockDB.set('m_offers', offers);
+      MockDB.addAuditLog('OFFER_UPDATED', { message: `Offer '${offers[index].title}' updated.` }, 'INFO');
+      return offers[index];
+    }
+  }
+
+  async deleteOffer(id) {
+    try {
+      await this.request(`/admin/offers/${id}`, { method: 'DELETE' });
+      return true;
+    } catch (e) {
+      const offers = MockDB.get('m_offers') || [];
+      const filtered = offers.filter(o => o.id !== id);
+      MockDB.set('m_offers', filtered);
+      MockDB.addAuditLog('OFFER_DELETED', { message: `Offer ID: ${id} deleted.` }, 'WARNING');
+      return true;
+    }
+  }
+
   // CUSTOMERS & MEASUREMENTS
+  async getAppCustomers() {
+    return this.getCustomers();
+  }
+
+  async createAppCustomer(customer) {
+    try {
+      const res = await this.request('/admin/customers', {
+        method: 'POST',
+        body: JSON.stringify(customer),
+      });
+      return res.data;
+    } catch (e) {
+      const users = MockDB.get('m_users');
+      const newUser = {
+        ...customer,
+        id: `usr-${Date.now()}`,
+        role: 'CUSTOMER',
+        createdAt: new Date().toISOString(),
+      };
+      users.push(newUser);
+      MockDB.set('m_users', users);
+      MockDB.addAuditLog('CUSTOMER_CREATED', { message: `App Customer '${newUser.fullName}' created.`, customerId: newUser.id }, 'INFO');
+      return newUser;
+    }
+  }
+
+  async updateAppCustomer(id, updates) {
+    try {
+      const res = await this.request(`/admin/customers/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(updates),
+      });
+      return res.data;
+    } catch (e) {
+      const users = MockDB.get('m_users');
+      const idx = users.findIndex(u => u.id === id);
+      if (idx === -1) throw new Error('Customer not found');
+      const updated = {
+        ...users[idx],
+        ...updates
+      };
+      users[idx] = updated;
+      MockDB.set('m_users', users);
+      MockDB.addAuditLog('CUSTOMER_UPDATED', { message: `App Customer '${updated.fullName}' updated.`, customerId: id }, 'INFO');
+      return updated;
+    }
+  }
+
   async getCustomers() {
     try {
       const res = await this.request('/admin/customers?limit=1000');
@@ -610,9 +801,77 @@ class APIClient {
     } catch (e) {
       const users = MockDB.get('m_users');
       const user = users.find(u => u.id === id);
-      if (!user) throw new Error('Customer not found');
       const profiles = MockDB.get('m_measurements').filter(m => m.userId === id);
       return { user, profiles };
+    }
+  }
+
+  // STORE LOCATIONS CRUD
+  async getStoreLocations() {
+    try {
+      const res = await this.request('/admin/stores');
+      return res.data;
+    } catch (e) {
+      return MockDB.get('m_stores');
+    }
+  }
+
+  async createStoreLocation(store) {
+    try {
+      const res = await this.request('/admin/stores', {
+        method: 'POST',
+        body: JSON.stringify(store),
+      });
+      return res.data;
+    } catch (e) {
+      const stores = MockDB.get('m_stores');
+      const newStore = {
+        ...store,
+        id: `store-${Date.now()}`,
+        latitude: parseFloat(store.latitude) || 0,
+        longitude: parseFloat(store.longitude) || 0,
+      };
+      stores.push(newStore);
+      MockDB.set('m_stores', stores);
+      MockDB.addAuditLog('STORE_LOCATION_CREATED', { message: `Store '${newStore.name}' registered.`, storeId: newStore.id }, 'INFO');
+      return newStore;
+    }
+  }
+
+  async updateStoreLocation(id, updates) {
+    try {
+      const res = await this.request(`/admin/stores/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(updates),
+      });
+      return res.data;
+    } catch (e) {
+      const stores = MockDB.get('m_stores');
+      const idx = stores.findIndex(s => s.id === id);
+      if (idx === -1) throw new Error('Store not found');
+      const updated = {
+        ...stores[idx],
+        ...updates,
+        latitude: parseFloat(updates.latitude) || stores[idx].latitude || 0,
+        longitude: parseFloat(updates.longitude) || stores[idx].longitude || 0,
+      };
+      stores[idx] = updated;
+      MockDB.set('m_stores', stores);
+      MockDB.addAuditLog('STORE_LOCATION_UPDATED', { message: `Store '${updated.name}' details modified.`, storeId: id }, 'INFO');
+      return updated;
+    }
+  }
+
+  async deleteStoreLocation(id) {
+    try {
+      await this.request(`/admin/stores/${id}`, { method: 'DELETE' });
+      return true;
+    } catch (e) {
+      const stores = MockDB.get('m_stores');
+      const filtered = stores.filter(s => s.id !== id);
+      MockDB.set('m_stores', filtered);
+      MockDB.addAuditLog('STORE_LOCATION_DELETED', { message: `Store ID: ${id} deleted.` }, 'WARNING');
+      return true;
     }
   }
 
@@ -635,6 +894,15 @@ class APIClient {
       return res.data;
     } catch (e) {
       return MockDB.get('m_measurements').filter(m => m.userId === userId);
+    }
+  }
+
+  async getAllMeasurements() {
+    try {
+      const res = await this.request('/measurements');
+      return res.data;
+    } catch (e) {
+      return MockDB.get('m_measurements');
     }
   }
 
@@ -1480,11 +1748,11 @@ class APIClient {
     }
   }
 
-  async updateQuickOrderStatus(id, quickOrderStatus) {
+  async updateQuickOrderStatus(id, quickOrderStatus, quickOrderProposedDate, adminProposalNote) {
     try {
       const res = await this.request(`/orders/admin/${id}/quick-status`, {
         method: 'PUT',
-        body: JSON.stringify({ quickOrderStatus }),
+        body: JSON.stringify({ quickOrderStatus, quickOrderProposedDate, adminProposalNote }),
       });
       return res.data;
     } catch (e) {
@@ -1492,12 +1760,16 @@ class APIClient {
       const idx = orders.findIndex(o => o.id === id);
       if (idx === -1) throw new Error('Order not found');
       orders[idx].quickOrderStatus = quickOrderStatus;
+      if (quickOrderProposedDate) {
+        orders[idx].quickOrderProposedDate = quickOrderProposedDate;
+      }
       MockDB.set('m_orders', orders);
 
       MockDB.addAuditLog('QUICK_ORDER_STATUS_CHANGED', {
         message: `Order ${orders[idx].invoiceNumber} quick status shifted to ${quickOrderStatus}.`,
         orderId: id,
         quickOrderStatus,
+        quickOrderProposedDate,
       }, 'INFO');
 
       return orders[idx];

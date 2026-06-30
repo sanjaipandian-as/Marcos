@@ -60,6 +60,6 @@ export function startAnalyticsFlushWorker() {
     } catch (error: any) {
       logger.error('Error flushing analytics events:', { metadata: { error: error.message } });
     }
-  }, 300000); // 5 minutes interval (was 60 seconds)
+  }, 5000); // 5 seconds interval (was 5 minutes)
 }
 

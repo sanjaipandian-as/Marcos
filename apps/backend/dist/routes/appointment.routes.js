@@ -5,6 +5,7 @@ const appointment_controller_js_1 = require("../controllers/appointment.controll
 const validate_middleware_js_1 = require("../middlewares/validate.middleware.js");
 const auth_middleware_js_1 = require("../middlewares/auth.middleware.js");
 const router = (0, express_1.Router)();
+router.get('/availability', auth_middleware_js_1.authenticate, appointment_controller_js_1.AppointmentController.getAvailability);
 router.get('/', auth_middleware_js_1.authenticate, appointment_controller_js_1.AppointmentController.getAppointments);
 router.post('/', auth_middleware_js_1.authenticate, (0, validate_middleware_js_1.validate)(appointment_controller_js_1.appointmentCreateSchema), appointment_controller_js_1.AppointmentController.createAppointment);
 router.put('/:id', auth_middleware_js_1.authenticate, (0, validate_middleware_js_1.validate)(appointment_controller_js_1.appointmentUpdateSchema), appointment_controller_js_1.AppointmentController.updateAppointment);
