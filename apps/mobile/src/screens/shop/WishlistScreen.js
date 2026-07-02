@@ -129,23 +129,23 @@ export default function WishlistScreen({ navigation }) {
           >
             <Heart 
               size={14} 
-              color="#ef4444" 
-              fill="#ef4444" 
+              color="#3D2E3D" 
+              fill="#3D2E3D" 
             />
           </TouchableOpacity>
         </View>
         
         <View style={styles.prodInfo}>
-          <Text style={[styles.prodName, { color: theme.text.primary, fontFamily: fonts.semiBold }]} numberOfLines={1}>
+          <Text style={[styles.prodName, { color: theme.text.primary, fontFamily: fonts.semiBold }]} numberOfLines={2}>
             {product.name}
           </Text>
           <View style={styles.priceRow}>
             <View style={styles.priceContainer}>
-              <Text style={{ fontSize: 10, color: '#94a3b8', marginBottom: 2 }}>Starts from</Text>
-              <Text style={[styles.prodPrice, { color: theme.brand[500], fontFamily: fonts.bold }]}>
+              <Text style={{ fontSize: 10, color: '#7A6B7A', marginBottom: 2 }}>Starts from</Text>
+              <Text style={[styles.prodPrice, { color: '#3D2E3D', fontFamily: fonts.bold }]}>
                 ₹{Number(product.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
               </Text>
-              <Text style={[styles.originalPrice, { fontFamily: fonts.regular }]}>
+              <Text style={[styles.originalPrice, { fontFamily: fonts.regular, color: '#B8A8B8' }]}>
                 ₹{originalPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
               </Text>
             </View>
@@ -154,16 +154,16 @@ export default function WishlistScreen({ navigation }) {
                style={[
                  styles.cartIconBtn,
                  cartItems.has(product.id)
-                   ? { backgroundColor: theme.brand[500], borderWidth: 1, borderColor: theme.brand[500] }
-                   : { backgroundColor: '#ffffff', borderWidth: 1, borderColor: theme.brand[500] }
+                   ? { backgroundColor: '#3D2E3D', borderWidth: 1, borderColor: '#3D2E3D' }
+                   : { backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#D8BFD8' }
                ]} 
                onPress={() => handleAddToCart(product.id)}
                activeOpacity={0.7}
              >
                {cartItems.has(product.id) ? (
-                 <CustomCartAddedIcon color="#ffffff" size={18} />
+                 <CustomCartAddedIcon color="#FDFBFD" size={18} />
                ) : (
-                 <CustomCartAddIcon color={theme.brand[500]} size={18} />
+                 <CustomCartAddIcon color="#3D2E3D" size={18} />
                )}
              </TouchableOpacity>
           </View>
@@ -239,7 +239,7 @@ export default function WishlistScreen({ navigation }) {
             style={[styles.shopBtn, { backgroundColor: theme.brand[500] }]}
             onPress={() => navigation.navigate('Browse')}
           >
-            <Text style={[styles.shopBtnText, { color: '#ffffff', fontFamily: fonts.bold }]}>EXPLORE CATALOG</Text>
+            <Text style={[styles.shopBtnText, { color: '#3D2E3D', fontFamily: fonts.bold }]}>EXPLORE CATALOG</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -377,7 +377,7 @@ const styles = StyleSheet.create({
   },
   originalPrice: {
     fontSize: 11,
-    color: '#9e9e9e',
+    color: '#B8A8B8',
     textDecorationLine: 'line-through',
     marginTop: 1,
   },

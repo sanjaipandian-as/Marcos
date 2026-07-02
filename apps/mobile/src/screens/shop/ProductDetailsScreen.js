@@ -233,7 +233,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
         </View>
       )}
       <View style={styles.similarInfo}>
-        <Text style={[styles.similarName, { fontFamily: fonts.semiBold, color: theme.text.primary }]} numberOfLines={1}>
+        <Text style={[styles.similarName, { fontFamily: fonts.semiBold, color: theme.text.primary }]} numberOfLines={2}>
           {item.name}
         </Text>
         <Text style={[styles.similarPrice, { fontFamily: fonts.bold, color: theme.text.primary }]}>
@@ -463,8 +463,8 @@ export default function ProductDetailsScreen({ route, navigation }) {
           </View>
 
           {/* Sizing Price Notice */}
-          <View style={{ backgroundColor: 'rgba(0, 98, 65, 0.05)', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(0, 98, 65, 0.15)' }}>
-            <Text style={{ fontSize: 11.5, color: '#006241', fontFamily: fonts.medium, lineHeight: 16 }}>
+          <View style={{ backgroundColor: 'rgba(216, 191, 216, 0.15)', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(216, 191, 216, 0.4)' }}>
+            <Text style={{ fontSize: 11.5, color: theme.brand[700], fontFamily: fonts.medium, lineHeight: 16 }}>
               Note: This is a starting price, not the final price. The amount will differ based on your sizes.
             </Text>
           </View>
@@ -553,8 +553,8 @@ export default function ProductDetailsScreen({ route, navigation }) {
           onPress={handleBuyNow}
           activeOpacity={0.8}
         >
-          <ShoppingBag size={20} color="#ffffff" style={{ marginRight: 8 }} />
-          <Text style={[styles.btnTextFilled, { fontFamily: fonts.bold, color: '#ffffff' }]}>
+          <ShoppingBag size={20} color="#3D2E3D" style={{ marginRight: 8 }} />
+          <Text style={[styles.btnTextFilled, { fontFamily: fonts.bold, color: '#3D2E3D' }]}>
             Buy Now
           </Text>
         </TouchableOpacity>

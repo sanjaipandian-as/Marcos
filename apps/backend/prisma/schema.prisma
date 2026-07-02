@@ -602,3 +602,16 @@ enum PromoLinkType {
   BOTH
   NONE
 }
+
+model VoucherPlan {
+  id             String   @id @default(uuid())
+  pointsRequired Int
+  discountFlat   Decimal  @db.Decimal(10, 2)
+  title          String
+  description    String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([isActive])
+}

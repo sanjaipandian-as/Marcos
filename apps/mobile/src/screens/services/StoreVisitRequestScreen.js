@@ -232,7 +232,7 @@ export default function StoreVisitRequestScreen({ navigation }) {
             style={[styles.bookBtn, { backgroundColor: theme.brand[500] }]}
             onPress={() => setRequestModalVisible(true)}
           >
-            <Text style={[styles.bookBtnText, { color: '#ffffff', fontFamily: fonts.bold }]}>
+            <Text style={[styles.bookBtnText, { color: '#3D2E3D', fontFamily: fonts.bold }]}>
               Request Store Representative Visit
             </Text>
           </TouchableOpacity>
@@ -343,9 +343,9 @@ export default function StoreVisitRequestScreen({ navigation }) {
                 disabled={submitting}
               >
                 {submitting ? (
-                  <ActivityIndicator color="#ffffff" />
+                  <ActivityIndicator color="#3D2E3D" />
                 ) : (
-                  <Text style={[styles.submitBtnText, { color: '#ffffff', fontFamily: fonts.bold }]}>
+                  <Text style={[styles.submitBtnText, { color: '#3D2E3D', fontFamily: fonts.bold }]}>
                     Request Home Visit
                   </Text>
                 )}
@@ -555,7 +555,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 10,
-    shadowColor: '#006241',
+    shadowColor: '#d8bfd8',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 8,

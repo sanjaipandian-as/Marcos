@@ -226,21 +226,21 @@ export default function Sidebar({
       )}
 
       <aside className={`
-        fixed top-0 bottom-0 left-0 z-40 w-64 bg-bg-card border-r border-slate-200/80 
+        fixed top-0 bottom-0 left-0 z-40 w-64 bg-[#FDFBFD] border-r border-[#F0E5F0] 
         flex flex-col transform transition-transform duration-300 ease-in-out lg:translate-x-0
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         {/* Brand Header */}
-        <div className="h-16 flex items-center px-6 border-b border-slate-100 shrink-0">
+        <div className="h-16 flex items-center px-6 border-b border-[#F0E5F0] shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-brand-500 flex items-center justify-center text-white shadow-premium shadow-brand-500/20 transition-all duration-300">
+            <div className="w-9 h-9 rounded-xl bg-brand-500 flex items-center justify-center text-[#3D2E3D] shadow-premium transition-all duration-300">
               <span className="font-extrabold text-lg">M</span>
             </div>
             <div>
-              <span className="font-bold text-slate-800 text-lg tracking-tight">
+              <span className="font-bold text-[#3D2E3D] text-lg tracking-tight">
                 MARCOS
               </span>
-              <span className="text-[10px] block text-brand-600 font-semibold uppercase tracking-wider">
+              <span className="text-[10px] block text-[#8F5C8F] font-semibold uppercase tracking-wider">
                 Admin Panel
               </span>
             </div>
@@ -251,7 +251,7 @@ export default function Sidebar({
         <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
           {filteredMenuGroups.map((group, groupIdx) => (
             <div key={groupIdx} className="space-y-1.5">
-              <span className="text-[10px] font-bold text-slate-400/80 uppercase tracking-widest px-3 block">
+              <span className="text-[10px] font-bold text-[#7A6B7A]/60 uppercase tracking-widest px-3 block">
                 {group.title}
               </span>
               {group.items.map((item) => {
@@ -276,20 +276,20 @@ export default function Sidebar({
                       className={`
                         relative w-full flex items-center justify-between text-sm font-medium rounded-xl transition-all duration-200 group overflow-hidden
                         ${isActive 
-                          ? 'bg-brand-500 text-white shadow-premium shadow-brand-500/20' 
-                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}
+                          ? 'bg-brand-500 text-[#3D2E3D] shadow-sm' 
+                          : 'text-[#7A6B7A] hover:bg-[#F0E5F0]/40 hover:text-[#3D2E3D]'}
                         ${badgeCount > 0 ? 'pr-12' : 'pr-3'}
                         pl-3 py-2.5
                       `}
                     >
                       <div className="flex items-center gap-3">
-                        <Icon className={`w-4.5 h-4.5 transition-transform duration-200 group-hover:scale-110 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                        <Icon className={`w-4.5 h-4.5 transition-transform duration-200 group-hover:scale-110 ${isActive ? 'text-[#3D2E3D]' : 'text-[#7A6B7A] group-hover:text-[#3D2E3D]'}`} />
                         <span>{item.label}</span>
                       </div>
                       
                       {item.subItems && (
                         <div className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}>
-                          <svg className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <svg className={`w-4 h-4 ${isActive ? 'text-[#3D2E3D]' : 'text-[#7A6B7A]'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                           </svg>
                         </div>
@@ -299,14 +299,14 @@ export default function Sidebar({
                         <span className={`
                           absolute top-0 bottom-0 right-0 w-10 flex items-center justify-center border-l font-extrabold text-xs transition-all duration-200
                           ${isActive 
-                            ? 'border-white/20 text-white bg-white/10' 
+                            ? 'border-[#3D2E3D]/10 text-[#3D2E3D] bg-[#3D2E3D]/5' 
                             : item.id === 'products'
-                              ? 'border-red-200 text-red-600 bg-red-50'
+                              ? 'border-red-200 text-[#E24B4A] bg-red-50'
                               : item.id === 'support'
-                                ? 'border-amber-200 text-amber-600 bg-amber-50'
+                                ? 'border-amber-200 text-amber-605 bg-amber-50'
                                 : item.id === 'orders'
                                   ? 'border-indigo-200 text-indigo-650 bg-indigo-50'
-                                  : 'border-emerald-200 text-emerald-700 bg-emerald-50'}
+                                  : 'border-[#F0E5F0] text-brand-700 bg-brand-50'}
                         `}>
                           {badgeCount}
                         </span>
@@ -325,16 +325,16 @@ export default function Sidebar({
                                 setActiveTab(sub.id);
                                 setIsSidebarOpen(false);
                               }}
-                              className={`relative w-full flex items-center justify-between text-xs font-medium rounded-lg py-2.5 px-3 transition-all duration-200 group ${isSubActive ? 'bg-brand-50 text-brand-700 shadow-sm' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}
+                              className={`relative w-full flex items-center justify-between text-xs font-medium rounded-lg py-2.5 px-3 transition-all duration-200 group ${isSubActive ? 'bg-brand-500 text-[#3D2E3D] font-bold shadow-sm' : 'text-[#7A6B7A] hover:text-[#3D2E3D] hover:bg-[#F0E5F0]/40'}`}
                             >
                               <div className="flex items-center gap-3">
                                 {SubIcon && (
-                                  <SubIcon className={`w-4 h-4 transition-transform duration-200 group-hover:scale-110 ${isSubActive ? 'text-brand-600' : 'text-slate-400 group-hover:text-slate-500'}`} />
+                                  <SubIcon className={`w-4 h-4 transition-transform duration-200 group-hover:scale-110 ${isSubActive ? 'text-[#3D2E3D]' : 'text-slate-400 group-hover:text-[#3D2E3D]'}`} />
                                 )}
                                 <span>{sub.label}</span>
                               </div>
                               {counts[sub.id] > 0 && (
-                                <span className="bg-brand-500 text-white px-2 py-0.5 rounded-full text-[9px] font-bold shadow-sm">
+                                <span className="bg-brand-600 text-[#3D2E3D] px-2 py-0.5 rounded-full text-[9px] font-bold shadow-sm">
                                   {counts[sub.id]}
                                 </span>
                               )}
@@ -351,9 +351,9 @@ export default function Sidebar({
         </div>
 
         {/* Configurations Controls Box at Sidebar Bottom */}
-        <div className="p-4 border-t border-slate-100 bg-slate-50/50 space-y-4 shrink-0">
+        <div className="p-4 border-t border-[#F0E5F0] bg-[#FDFBFD] space-y-4 shrink-0">
           {/* Fallback Mode Toggle */}
-          <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-200/60 shadow-sm">
+          <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-[#F0E5F0] shadow-sm">
             <div className="flex items-center gap-2">
               {apiMode === 'live' ? (
                 <Globe className="w-4 h-4 text-emerald-600 animate-pulse" />
@@ -361,10 +361,10 @@ export default function Sidebar({
                 <Database className="w-4 h-4 text-orange-600" />
               )}
               <div className="flex flex-col">
-                <span className="text-[11px] font-bold text-slate-700">
+                <span className="text-[11px] font-bold text-[#3D2E3D]">
                   {apiMode === 'live' ? 'Live API Server' : 'Demo Mode'}
                 </span>
-                <span className="text-[9px] text-slate-400">
+                <span className="text-[9px] text-[#7A6B7A]">
                   {apiMode === 'live' ? 'Port 5000 Active' : 'LocalStorage DB'}
                 </span>
               </div>
@@ -386,7 +386,7 @@ export default function Sidebar({
           {/* Logout Button */}
           <button
             onClick={onLogout}
-            className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border border-red-200/80 hover:bg-red-50 text-red-650 hover:text-red-700 text-xs font-bold transition-all duration-200"
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border border-red-100 hover:bg-red-50 text-[#E24B4A] hover:text-[#E24B4A]/90 text-xs font-bold transition-all duration-200"
           >
             <span>Log Out Account</span>
           </button>

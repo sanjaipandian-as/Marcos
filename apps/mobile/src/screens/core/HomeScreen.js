@@ -816,7 +816,7 @@ export default function HomeScreen({ navigation }) {
                             key={label}
                             style={[
                               styles.cityChip,
-                              isSelected && { borderColor: theme.brand[500], backgroundColor: '#fff7ed' }
+                              isSelected && { borderColor: theme.brand[500], backgroundColor: theme.brand[50] }
                             ]}
                             activeOpacity={0.7}
                             onPress={() => setNewAddressLabel(label)}
@@ -876,7 +876,7 @@ export default function HomeScreen({ navigation }) {
 
                   {/* Use Current Location Button */}
                   <TouchableOpacity 
-                    style={[styles.actionLinkRow, { backgroundColor: '#fff7ed', borderColor: '#ffedd5' }]}
+                    style={[styles.actionLinkRow, { backgroundColor: theme.brand[50], borderColor: theme.brand[100] }]}
                     activeOpacity={0.7}
                     onPress={handleGetCurrentLocation}
                     disabled={isSavingAddress}
@@ -896,7 +896,7 @@ export default function HomeScreen({ navigation }) {
 
                   {/* Add New Button */}
                   <TouchableOpacity 
-                    style={[styles.actionLinkRow, { backgroundColor: '#fff7ed', borderColor: '#ffedd5' }]}
+                    style={[styles.actionLinkRow, { backgroundColor: theme.brand[50], borderColor: theme.brand[100] }]}
                     activeOpacity={0.7}
                     onPress={() => {
                       setNewAddressName(userProfile?.fullName || '');
@@ -933,7 +933,7 @@ export default function HomeScreen({ navigation }) {
                             key={item.id}
                             style={[
                               styles.savedAddressCard,
-                              isSelected && { borderColor: theme.brand[500], backgroundColor: '#fffbf9' }
+                              isSelected && { borderColor: theme.brand[500], backgroundColor: theme.brand[50] }
                             ]}
                             activeOpacity={0.9}
                             onPress={() => handleSelectAddressObject(item)}
@@ -961,7 +961,7 @@ export default function HomeScreen({ navigation }) {
                                   {item.name}
                                 </Text>
                                 {isSelected && (
-                                  <View style={[styles.selectedPillBadge, { backgroundColor: '#ffedd5' }]}>
+                                  <View style={[styles.selectedPillBadge, { backgroundColor: theme.brand[100] }]}>
                                     <Text style={[styles.selectedPillText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>
                                       Selected
                                     </Text>
@@ -1146,6 +1146,7 @@ export default function HomeScreen({ navigation }) {
           cartItems={cartItems}
           theme={theme}
           fonts={fonts}
+          shadows={shadows}
           navigation={navigation}
           handleAddToCart={handleAddToCart}
         />
@@ -1392,13 +1393,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 6,
     left: 6,
-    backgroundColor: '#ef4444',
+    backgroundColor: '#EDE0ED',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 8,
   },
   offerDiscountText: {
-    color: '#ffffff',
+    color: '#6B4B6B',
     fontSize: 9,
     fontWeight: 'bold',
   },
@@ -1423,7 +1424,7 @@ const styles = StyleSheet.create({
   },
   offerOriginalPrice: {
     fontSize: 10,
-    color: '#9ca3af',
+    color: '#B8A8B8',
     textDecorationLine: 'line-through',
     marginBottom: -2,
   },
@@ -1438,13 +1439,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   offerBuyBtn: {
-    backgroundColor: '#111827',
+    backgroundColor: '#D8BFD8',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 18,
   },
   offerBuyBtnText: {
-    color: '#ffffff',
+    color: '#3D2E3D',
     fontSize: 12,
   },
   bannerCard: {

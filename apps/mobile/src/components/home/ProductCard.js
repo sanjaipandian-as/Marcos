@@ -34,35 +34,35 @@ export default function ProductCard({
           style={styles.productImage}
         />
         <TouchableOpacity
-          style={styles.favBtn}
+          style={[styles.favBtn, { backgroundColor: '#ffffff' }]}
           onPress={() => toggleFavorite(item.id)}
           activeOpacity={0.7}
         >
           <Heart
             size={14}
-            color={isFav ? '#ef4444' : '#767676'}
-            fill={isFav ? '#ef4444' : 'transparent'}
+            color="#3D2E3D"
+            fill={isFav ? '#3D2E3D' : 'transparent'}
           />
         </TouchableOpacity>
         {item.hasFreeShipping && (
-          <View style={styles.freeShippingBadge}>
-            <Text style={styles.freeShippingText}>Free Shipping</Text>
+          <View style={[styles.freeShippingBadge, { backgroundColor: '#EDE0ED' }]}>
+            <Text style={[styles.freeShippingText, { color: '#6B4B6B' }]}>Free Shipping</Text>
           </View>
         )}
       </View>
 
       <View style={styles.productInfo}>
-        <Text style={[styles.productName, { fontFamily: fonts.semiBold, color: theme.text.primary }]} numberOfLines={1}>
+        <Text style={[styles.productName, { fontFamily: fonts.semiBold, color: theme.text.primary }]} numberOfLines={2}>
           {item.name}
         </Text>
         <View style={styles.priceRow}>
           <View style={styles.priceContainer}>
-            <Text style={{ fontSize: 10, color: '#94a3b8', marginBottom: 2 }}>Starts from</Text>
+            <Text style={{ fontSize: 10, color: '#7A6B7A', marginBottom: 2 }}>Starts from</Text>
             <Text style={[styles.productPrice, { fontFamily: fonts.bold, color: theme.text.primary }]}>
               ₹{Number(item.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </Text>
             {originalPrice ? (
-              <Text style={styles.originalPriceText}>
+              <Text style={[styles.originalPriceText, { color: '#B8A8B8' }]}>
               ₹{originalPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </Text>
             ) : null}
@@ -71,16 +71,16 @@ export default function ProductCard({
             style={[
               styles.cartBtn,
               inCart
-                ? { backgroundColor: theme.brand[500], borderWidth: 1, borderColor: theme.brand[500] }
-                : { backgroundColor: '#ffffff', borderWidth: 1, borderColor: theme.brand[500] }
+                ? { backgroundColor: '#3D2E3D', borderWidth: 1, borderColor: '#3D2E3D' }
+                : { backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#D8BFD8' }
             ]}
             onPress={() => handleAddToCart(item.id)}
             activeOpacity={0.7}
           >
             {inCart ? (
-              <CustomCartAddedIcon color="#ffffff" size={18} />
+              <CustomCartAddedIcon color="#FDFBFD" size={18} />
             ) : (
-              <CustomCartAddIcon color={theme.brand[500]} size={18} />
+              <CustomCartAddIcon color="#3D2E3D" size={18} />
             )}
           </TouchableOpacity>
         </View>

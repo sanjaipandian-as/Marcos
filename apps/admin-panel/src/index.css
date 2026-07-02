@@ -8,21 +8,37 @@ html, body, #root {
 }
 
 :root {
-  --brand-50: #f0fdf4;
-  --brand-100: #dcfce7;
-  --brand-200: #bbf7d0;
-  --brand-300: #86efac;
-  --brand-400: #4ade80;
-  --brand-500: #006241;
-  --brand-600: #048b57;
-  --brand-700: #15803d;
-  --brand-800: #166534;
-  --brand-900: #14532d;
-  --brand-glow: rgba(4, 139, 87, 0.15);
+  --brand-50: #faf5fa;
+  --brand-100: #f3eaf3;
+  --brand-200: #ebe0eb;
+  --brand-300: #e3d4e3;
+  --brand-400: #dcc8dc;
+  --brand-500: #D8BFD8;
+  --brand-600: #C4A4C4;
+  --brand-700: #ad83ad;
+  --brand-800: #8f5c8f;
+  --brand-900: #3d2e3d;
+  --brand-glow: rgba(216, 191, 216, 0.15);
   
-  --bg-main: #f4f5f7;
+  --bg-main: #F7F4F9;
   --bg-card: #ffffff;
-  --bg-hover: #f9fafb;
+  --bg-hover: #faf5fa;
+}
+
+.border-slate-100,
+.border-slate-200,
+.border-slate-200\/60,
+.border-slate-200\/80,
+.border-slate-300,
+.divide-slate-50 > :not([hidden]) ~ :not([hidden]),
+.divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #F0E5F0 !important;
+}
+
+.shadow-premium {
+  border-width: 0px !important;
+  border-color: transparent !important;
+  box-shadow: 0 1px 3px rgba(16,24,40,0.06), 0 1px 2px rgba(16,24,40,0.04) !important;
 }
 
 [data-theme='ezmart'] {

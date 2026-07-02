@@ -62,20 +62,20 @@ export default function Header({
     
     if (activeTab === 'dashboard') {
       return (
-        <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
-          <span className="text-brand-600 font-bold">{brandName}</span>
+        <div className="flex items-center gap-1.5 text-xs text-[#7A6B7A] font-medium">
+          <span className="text-[#8F5C8F] font-bold">{brandName}</span>
           <span>&gt;</span>
-          <span className="text-slate-800 font-semibold">Dashboard</span>
+          <span className="text-[#3D2E3D] font-semibold">Dashboard</span>
         </div>
       );
     }
     return (
-      <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
-        <span className="text-brand-600 font-bold">{brandName}</span>
+      <div className="flex items-center gap-1.5 text-xs text-[#7A6B7A] font-medium">
+        <span className="text-[#8F5C8F] font-bold">{brandName}</span>
         <span>&gt;</span>
         <span>Dashboard</span>
         <span>&gt;</span>
-        <span className="text-slate-800 font-semibold">{formatTabName(activeTab)}</span>
+        <span className="text-[#3D2E3D] font-semibold">{formatTabName(activeTab)}</span>
       </div>
     );
   };
@@ -100,7 +100,7 @@ export default function Header({
   };
 
   return (
-    <header className="h-16 bg-bg-card border-b border-slate-200/80 flex items-center justify-between px-4 sm:px-6 sticky top-0 z-20 shrink-0 transition-theme">
+    <header className="h-16 bg-[#FDFBFD] border-b border-[#F0E5F0] flex items-center justify-between px-4 sm:px-6 sticky top-0 z-20 shrink-0 transition-theme">
       <div className="flex items-center gap-2 sm:gap-4 flex-1 lg:flex-initial">
         <button
           onClick={() => setIsSidebarOpen(true)}
@@ -111,7 +111,7 @@ export default function Header({
         <div className="hidden lg:block">
           {getBreadcrumbs()}
         </div>
-        <div className="hidden sm:block lg:hidden text-xs font-extrabold text-slate-800">
+        <div className="hidden sm:block lg:hidden text-xs font-extrabold text-[#3D2E3D]">
           MARCOS &gt; {formatTabName(activeTab)}
         </div>
       </div>
@@ -121,17 +121,17 @@ export default function Header({
           <input
             type="text"
             placeholder="Search records, products..."
-            className="w-48 xl:w-64 pl-9 pr-12 py-1.5 text-xs rounded-xl bg-slate-100 border border-transparent focus:bg-white focus:border-slate-300 focus:outline-none transition-all placeholder-slate-400"
+            className="w-48 xl:w-64 pl-9 pr-12 py-1.5 text-xs rounded-xl bg-[#F7F4F9] border border-[#F0E5F0] focus:bg-white focus:border-brand-500 focus:outline-none transition-all placeholder-[#7A6B7A]/65 text-[#3D2E3D]"
           />
           <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
-          <span className="absolute right-3 top-2 bg-white text-[9px] font-bold text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded shadow-sm">
+          <span className="absolute right-3 top-2 bg-white text-[9px] font-bold text-slate-400 border border-[#F0E5F0] px-1.5 py-0.5 rounded shadow-sm">
             ⌘ K
           </span>
         </div>
 
         <button
           onClick={onToggleLiveFeed}
-          className="relative p-2 rounded-xl text-slate-500 hover:bg-slate-100 transition-colors focus:outline-none group"
+          className="relative p-2 rounded-xl text-[#7A6B7A] hover:bg-[#F0E5F0]/40 transition-colors focus:outline-none group"
           title="Toggle Live WebSocket Feed"
         >
           <Bell className="w-4.5 h-4.5" />
@@ -143,7 +143,7 @@ export default function Header({
         <div className="relative">
           <button 
             onClick={() => { setShowMailDropdown(!showMailDropdown); }}
-            className="relative p-2 rounded-xl text-slate-500 hover:bg-slate-100 transition-colors focus:outline-none"
+            className="relative p-2 rounded-xl text-[#7A6B7A] hover:bg-[#F0E5F0]/40 transition-colors focus:outline-none"
             title="Support Inbox"
           >
             <Mail className="w-4.5 h-4.5" />
@@ -157,8 +157,8 @@ export default function Header({
           {showMailDropdown && (
             <>
               <div className="fixed inset-0 z-30" onClick={() => setShowMailDropdown(false)} />
-              <div className="absolute right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl py-2 w-72 z-40 text-xs text-slate-655 animate-fadeIn">
-                <div className="px-4 py-2 border-b border-slate-100 flex justify-between items-center bg-slate-550/5">
+              <div className="absolute right-0 mt-2 bg-white border border-[#F0E5F0] rounded-2xl shadow-xl py-2 w-72 z-40 text-xs text-slate-655 animate-fadeIn">
+                <div className="px-4 py-2 border-b border-[#F0E5F0] flex justify-between items-center bg-slate-550/5">
                   <span className="font-extrabold text-slate-800">Support Inbox</span>
                   <span className="text-[10px] text-brand-650 font-bold">{openTickets.length} Active Queries</span>
                 </div>
@@ -191,7 +191,7 @@ export default function Header({
                     setActiveTab('support');
                     setShowMailDropdown(false);
                   }}
-                  className="w-full text-center py-2 text-[10px] font-extrabold text-brand-650 hover:underline border-t border-slate-100 block"
+                  className="w-full text-center py-2 text-[10px] font-extrabold text-brand-650 hover:underline border-t border-[#F0E5F0] block"
                 >
                   View All Tickets
                 </button>
@@ -202,25 +202,25 @@ export default function Header({
 
         <button 
           onClick={() => setShowHelpModal(true)}
-          className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 transition-colors focus:outline-none hidden sm:block"
+          className="p-2 rounded-xl text-[#7A6B7A] hover:bg-[#F0E5F0]/40 transition-colors focus:outline-none hidden sm:block"
           title="Administrator Guide"
         >
           <HelpCircle className="w-4.5 h-4.5" />
         </button>
 
-        <div className="w-px h-6 bg-slate-200 hidden sm:block" />
+        <div className="w-px h-6 bg-[#F0E5F0] hidden sm:block" />
 
         <div className="flex items-center gap-1.5 sm:gap-3">
           <img
             src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100"
             alt="Profile Avatar"
-            className="w-8 h-8 sm:w-9 h-9 rounded-xl object-cover ring-2 ring-slate-100"
+            className="w-8 h-8 sm:w-9 h-9 rounded-xl object-cover ring-2 ring-[#F0E5F0]"
           />
           <div className="hidden lg:flex flex-col">
-            <span className="text-xs font-bold text-slate-800 leading-tight">
+            <span className="text-xs font-bold text-[#3D2E3D] leading-tight">
               {currentUser?.fullName || 'Marcus George'}
             </span>
-            <span className="text-[10px] text-slate-400 leading-none">
+            <span className="text-[10px] text-[#7A6B7A] leading-none">
               {currentUser?.role === 'SUPERADMIN' ? 'Super Admin' : currentUser?.role === 'ADMIN' ? 'Admin' : currentUser?.role === 'STAFF' ? 'Staff' : 'Guest'}
             </span>
           </div>
@@ -228,7 +228,7 @@ export default function Header({
 
         <button
           onClick={handleShare}
-          className="flex items-center justify-center p-2 sm:py-1.5 sm:px-3 rounded-xl bg-brand-500 hover:bg-brand-600 transition-colors text-white text-xs font-semibold shadow-premium shadow-brand-500/10 focus:outline-none shrink-0"
+          className="flex items-center justify-center p-2 sm:py-1.5 sm:px-3 rounded-xl bg-brand-500 hover:bg-brand-600 transition-colors text-[#3D2E3D] text-xs font-semibold shadow-premium focus:outline-none shrink-0"
         >
           {copied ? (
             <>

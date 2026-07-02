@@ -274,18 +274,104 @@ export default function CheckoutScreen({ route, navigation }) {
 
   // Address parsing
   const getParsedAddresses = () => {
-    const addressStr = userProfile?.address;
+    let addressStr = userProfile?.address;
     if (!addressStr || addressStr === '[]') {
       return [];
     }
-    try {
-      const parsed = JSON.parse(addressStr);
-      if (Array.isArray(parsed)) {
-        return parsed;
+
+    const parseAddressItem = (item) => {
+      if (typeof item === 'string') {
+        try {
+          const parsed = JSON.parse(item);
+          if (parsed && (Array.isArray(parsed) || typeof parsed === 'object')) {
+            return parseAddressItem(parsed);
+          }
+        } catch (e) {
+          // Plain string
+        }
+        return [
+          {
+            id: 'default',
+            name: userProfile?.fullName || 'My Address',
+            address: item,
+            city: '',
+            area: '',
+            pincode: '',
+            phone: userProfile?.phoneNumber || '',
+            phone2: '',
+            selected: true,
+            type: 'home'
+          }
+        ];
       }
+
+      if (Array.isArray(item)) {
+        let flattened = [];
+        item.forEach(subItem => {
+          flattened = flattened.concat(parseAddressItem(subItem));
+        });
+        return flattened;
+      }
+
+      if (item && typeof item === 'object') {
+        if (typeof item.address === 'string' && (item.address.trim().startsWith('[') || item.address.trim().startsWith('{'))) {
+          try {
+            const nested = JSON.parse(item.address);
+            const resolved = parseAddressItem(nested);
+            if (resolved.length > 0) {
+              return resolved.map(r => ({
+                ...r,
+                selected: r.selected || item.selected,
+                type: r.type || item.type || 'home'
+              }));
+            }
+          } catch (e) {
+            // Treat as plain text
+          }
+        }
+
+        return [
+          {
+            id: item.id || Date.now().toString() + Math.random().toString(36).substring(2, 5),
+            name: item.name || userProfile?.fullName || 'My Address',
+            address: item.address || item.street || '',
+            landmark: item.landmark || '',
+            city: item.city || '',
+            area: item.area || '',
+            pincode: item.pincode || '',
+            phone: item.phone || userProfile?.phoneNumber || '',
+            phone2: item.phone2 || '',
+            selected: item.selected === true,
+            type: item.type || 'home'
+          }
+        ];
+      }
+
+      return [];
+    };
+
+    try {
+      let parsed = JSON.parse(addressStr);
+      let list = parseAddressItem(parsed);
+      
+      const seen = new Set();
+      const uniqueList = [];
+      list.forEach(addr => {
+        const uniqueKey = `${addr.name}_${addr.address}_${addr.pincode}`;
+        if (!seen.has(uniqueKey) && addr.address) {
+          seen.add(uniqueKey);
+          uniqueList.push(addr);
+        }
+      });
+
+      if (uniqueList.length > 0 && !uniqueList.some(a => a.selected)) {
+        uniqueList[0].selected = true;
+      }
+      return uniqueList;
     } catch (e) {
-      // Ignored
+      // Fallback
     }
+
     return [
       {
         id: 'default',
@@ -925,7 +1011,7 @@ export default function CheckoutScreen({ route, navigation }) {
                     style={styles.summaryItemImage}
                   />
                   <View style={styles.summaryItemInfo}>
-                    <Text style={[styles.summaryItemName, { fontFamily: fonts.bold, color: theme.text.primary }]} numberOfLines={1}>
+                    <Text style={[styles.summaryItemName, { fontFamily: fonts.bold, color: theme.text.primary }]} numberOfLines={2}>
                       {item.product.name}
                     </Text>
                     <Text style={[styles.summaryItemSize, { fontFamily: fonts.medium, color: theme.text.muted }]}>
@@ -1054,7 +1140,7 @@ export default function CheckoutScreen({ route, navigation }) {
 
             <View style={styles.pricingRow}>
               <Text style={[styles.grandTotalLabel, { fontFamily: fonts.bold, color: theme.text.primary }]}>Est. Total Payable</Text>
-              <Text style={[styles.grandTotalValue, { fontFamily: fonts.bold, color: theme.brand[500] }]}>₹{grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</Text>
+              <Text style={[styles.grandTotalValue, { fontFamily: fonts.bold, color: theme.text.primary }]}>₹{grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</Text>
             </View>
           </View>
 
@@ -1434,7 +1520,7 @@ const styles = StyleSheet.create({
   },
   primaryCTAButtonText: {
     fontSize: 15,
-    color: '#ffffff',
+    color: '#3D2E3D',
   },
 
   /* Step 2: Summary cards styles */
@@ -1521,7 +1607,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   couponApplyBtnText: {
-    color: '#ffffff',
+    color: '#3D2E3D',
     fontSize: 13,
   },
   appliedCouponRow: {
@@ -1748,7 +1834,7 @@ const styles = StyleSheet.create({
   },
   successTrackBtnText: {
     fontSize: 15,
-    color: '#ffffff',
+    color: '#3D2E3D',
   },
   successSecondaryActions: {
     flexDirection: 'row',

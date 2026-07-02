@@ -348,6 +348,12 @@ export class ProductController {
       return res.status(200).json({
         success: true,
         message: 'Coupon is valid',
+        data: {
+          code: coupon.code,
+          discountPercent: coupon.discountPercent,
+          discountFlat: coupon.discountFlat,
+          maxDiscount: coupon.maxDiscount,
+        },
         coupon: {
           code: coupon.code,
           discountPercent: coupon.discountPercent,

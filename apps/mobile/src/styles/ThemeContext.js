@@ -25,7 +25,7 @@ export function ThemeProvider({ children }) {
   if (!fontsLoaded) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f4f5f7' }}>
-        <ActivityIndicator size="large" color="#006241" />
+        <ActivityIndicator size="large" color={theme.brand[500]} />
       </View>
     );
   }

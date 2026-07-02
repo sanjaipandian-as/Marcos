@@ -41,13 +41,20 @@ export default function LoyaltyDashboardScreen({ navigation }) {
   const [redeemedCoupon, setRedeemedCoupon] = useState(null);
   const [redeeming, setRedeeming] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
+  const [voucherPlans, setVoucherPlans] = useState([]);
 
   const loadProfile = async (silent = false) => {
     try {
       if (!silent) setLoading(true);
-      const res = await api.get('/auth/profile');
+      const [res, plansRes] = await Promise.all([
+        api.get('/auth/profile'),
+        api.get('/auth/loyalty/voucher-plans').catch(() => ({ success: false, data: [] }))
+      ]);
       if (res.success) {
         setProfile(res.data);
+      }
+      if (plansRes.success && plansRes.data) {
+        setVoucherPlans(plansRes.data);
       }
     } catch (err) {
       console.error('Error fetching loyalty profile:', err);
@@ -90,7 +97,11 @@ export default function LoyaltyDashboardScreen({ navigation }) {
     }
   };
 
-  const handleRedeem = (pointsToRedeem, label) => {
+  const handleRedeem = (plan) => {
+    const pointsToRedeem = plan.pointsRequired;
+    const label = plan.title;
+    const voucherPlanId = plan.id;
+
     if (points < pointsToRedeem) {
       Alert.alert('Insufficient Points', `You need at least ${pointsToRedeem} points to redeem this voucher.`);
       return;
@@ -106,7 +117,7 @@ export default function LoyaltyDashboardScreen({ navigation }) {
           onPress: async () => {
             try {
               setRedeeming(true);
-              const res = await api.post('/auth/loyalty/redeem', { pointsToRedeem });
+              const res = await api.post('/auth/loyalty/redeem', { voucherPlanId });
               if (res.success) {
                 setRedeemedCoupon(res.data.couponCode);
                 setModalVisible(true);
@@ -401,39 +412,43 @@ export default function LoyaltyDashboardScreen({ navigation }) {
               </Text>
             </View>
             
-            <TouchableOpacity 
-              style={[styles.redeemItem, shadows.premium, { backgroundColor: theme.bg.card }]} 
-              activeOpacity={0.8}
-              onPress={() => handleRedeem(500, '₹500 Discount Voucher')}
-            >
-              <View style={[styles.redeemIconWrapper, { backgroundColor: theme.brand[50] }]}>
-                <Trophy size={20} color={theme.brand[500]} />
+            {voucherPlans.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Trophy size={40} color={theme.text.muted} />
+                <Text style={[styles.emptyStateText, { fontFamily: fonts.medium, color: theme.text.secondary, marginTop: 8 }]}>
+                  No active voucher reward plans available
+                </Text>
               </View>
-              <View style={styles.redeemInfo}>
-                <Text style={[styles.redeemTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>₹500 Discount Voucher</Text>
-                <Text style={[styles.redeemPoints, { fontFamily: fonts.bold, color: theme.brand[500] }]}>500 POINTS</Text>
-              </View>
-              <View style={[styles.redeemAction, { backgroundColor: theme.brand[500], opacity: points >= 500 ? 1 : 0.4 }]}>
-                <Text style={[styles.redeemActionText, { fontFamily: fonts.bold }]}>REDEEM</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[styles.redeemItem, shadows.premium, { backgroundColor: theme.bg.card }]} 
-              activeOpacity={0.8}
-              onPress={() => handleRedeem(1000, '₹1,200 Discount Voucher')}
-            >
-              <View style={[styles.redeemIconWrapper, { backgroundColor: theme.brand[50] }]}>
-                <Trophy size={20} color={theme.brand[500]} />
-              </View>
-              <View style={styles.redeemInfo}>
-                <Text style={[styles.redeemTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>₹1,200 Discount Voucher</Text>
-                <Text style={[styles.redeemPoints, { fontFamily: fonts.bold, color: theme.brand[500] }]}>1000 POINTS</Text>
-              </View>
-              <View style={[styles.redeemAction, { backgroundColor: theme.brand[500], opacity: points >= 1000 ? 1 : 0.4 }]}>
-                <Text style={[styles.redeemActionText, { fontFamily: fonts.bold }]}>REDEEM</Text>
-              </View>
-            </TouchableOpacity>
+            ) : (
+              voucherPlans.map((plan) => (
+                <TouchableOpacity 
+                  key={plan.id}
+                  style={[styles.redeemItem, shadows.premium, { backgroundColor: theme.bg.card }]} 
+                  activeOpacity={0.8}
+                  onPress={() => handleRedeem(plan)}
+                >
+                  <View style={[styles.redeemIconWrapper, { backgroundColor: theme.brand[50] }]}>
+                    <Trophy size={20} color={theme.brand[500]} />
+                  </View>
+                  <View style={styles.redeemInfo}>
+                    <Text style={[styles.redeemTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                      {plan.title}
+                    </Text>
+                    <Text style={[styles.redeemPoints, { fontFamily: fonts.bold, color: theme.brand[500] }]}>
+                      {plan.pointsRequired} POINTS
+                    </Text>
+                    {plan.description ? (
+                      <Text style={{ fontSize: 10, color: theme.text.secondary, marginTop: 2, fontFamily: fonts.medium }}>
+                        {plan.description}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <View style={[styles.redeemAction, { backgroundColor: theme.brand[500], opacity: points >= plan.pointsRequired ? 1 : 0.4 }]}>
+                    <Text style={[styles.redeemActionText, { fontFamily: fonts.bold }]}>REDEEM</Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
           </View>
         )}
 

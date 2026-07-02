@@ -6,7 +6,9 @@ import {
   Minus, 
   History,
   TrendingUp,
-  UserCheck
+  UserCheck,
+  Gift,
+  Trash2
 } from 'lucide-react';
 import api from '../utils/api';
 
@@ -23,6 +25,13 @@ export default function LoyaltyManager() {
   const [adjustReason, setAdjustReason] = useState('Campaign Bonus');
   const [isDeduct, setIsDeduct] = useState(false);
 
+  // Voucher Plans states
+  const [voucherPlans, setVoucherPlans] = useState([]);
+  const [newPlanTitle, setNewPlanTitle] = useState('');
+  const [newPlanPoints, setNewPlanPoints] = useState('');
+  const [newPlanDiscount, setNewPlanDiscount] = useState('');
+  const [newPlanDesc, setNewPlanDesc] = useState('');
+
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -34,8 +43,10 @@ export default function LoyaltyManager() {
     try {
       const custs = await api.getCustomers();
       const txs = await api.getPointTransactions();
+      const plans = await api.getVoucherPlans();
       setCustomers(custs);
       setTransactions(txs);
+      setVoucherPlans(plans);
       if (custs.length > 0 && !selectedCustId) {
         setSelectedCustId(custs[0].id);
       }
@@ -72,6 +83,45 @@ export default function LoyaltyManager() {
       loadData();
     } catch (err) {
       setError(err.message || 'Points adjustment failed.');
+    }
+  };
+
+  const handleCreatePlan = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    if (!newPlanTitle.trim() || !newPlanPoints || !newPlanDiscount) {
+      setError('Please fill in title, points required, and discount amount.');
+      return;
+    }
+    try {
+      await api.createVoucherPlan({
+        title: newPlanTitle.trim(),
+        pointsRequired: Number(newPlanPoints),
+        discountFlat: Number(newPlanDiscount),
+        description: newPlanDesc.trim() || undefined
+      });
+      setSuccess('Voucher Reward Plan created successfully!');
+      setNewPlanTitle('');
+      setNewPlanPoints('');
+      setNewPlanDiscount('');
+      setNewPlanDesc('');
+      loadData();
+    } catch (err) {
+      setError(err.message || 'Failed to create reward plan.');
+    }
+  };
+
+  const handleDeactivatePlan = async (id) => {
+    if (!window.confirm('Are you sure you want to deactivate this reward plan?')) return;
+    setError('');
+    setSuccess('');
+    try {
+      await api.deactivateVoucherPlan(id);
+      setSuccess('Voucher Reward Plan deactivated successfully.');
+      loadData();
+    } catch (err) {
+      setError(err.message || 'Failed to deactivate reward plan.');
     }
   };
 
@@ -285,6 +335,120 @@ export default function LoyaltyManager() {
             </button>
           </div>
         )}
+      </div>
+
+      {/* Voucher Reward Plans section */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start mt-6">
+        
+        {/* Create Voucher Plan Form (5 cols) */}
+        <div className="lg:col-span-5 bg-white border border-slate-200/60 rounded-3xl p-6 shadow-premium space-y-4">
+          <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+            <Gift className="w-4.5 h-4.5 text-brand-500" />
+            <span>Create Voucher Reward Plan</span>
+          </h3>
+
+          <form onSubmit={handleCreatePlan} className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase block font-sans">Plan Title *</label>
+              <input
+                type="text"
+                placeholder="e.g. ₹50 Discount Voucher"
+                value={newPlanTitle}
+                onChange={e => setNewPlanTitle(e.target.value)}
+                className="w-full text-xs border border-slate-200 rounded-xl py-2 px-3 focus:outline-none focus:border-brand-500 font-semibold"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase block font-sans">Points Required *</label>
+                <input
+                  type="number"
+                  placeholder="e.g. 5000"
+                  value={newPlanPoints}
+                  onChange={e => setNewPlanPoints(e.target.value)}
+                  className="w-full text-xs border border-slate-200 rounded-xl py-2 px-3 focus:outline-none focus:border-brand-500 font-semibold"
+                  required
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase block font-sans">Flat Discount (₹) *</label>
+                <input
+                  type="number"
+                  placeholder="e.g. 50"
+                  value={newPlanDiscount}
+                  onChange={e => setNewPlanDiscount(e.target.value)}
+                  className="w-full text-xs border border-slate-200 rounded-xl py-2 px-3 focus:outline-none focus:border-brand-500 font-semibold"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase block font-sans">Description (Optional)</label>
+              <input
+                type="text"
+                placeholder="e.g. Get ₹50 off on any tailoring order"
+                value={newPlanDesc}
+                onChange={e => setNewPlanDesc(e.target.value)}
+                className="w-full text-xs border border-slate-200 rounded-xl py-2 px-3 focus:outline-none focus:border-brand-500"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-2 rounded-xl text-white font-extrabold text-xs shadow-sm bg-brand-500 hover:bg-brand-650 transition-colors focus:outline-none"
+            >
+              Create Reward Plan
+            </button>
+          </form>
+        </div>
+
+        {/* Voucher Plans List (7 cols) */}
+        <div className="lg:col-span-7 bg-white border border-slate-200/60 rounded-3xl p-6 shadow-premium space-y-4">
+          <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+            <Gift className="w-4.5 h-4.5 text-slate-400" />
+            <span>Active Voucher Reward Plans</span>
+          </h3>
+
+          <div className="divide-y divide-slate-100 max-h-[400px] overflow-y-auto pr-1">
+            {voucherPlans.length === 0 ? (
+              <p className="text-xs text-center text-slate-400 py-8">No voucher plans created yet</p>
+            ) : (
+              voucherPlans.map(plan => (
+                <div key={plan.id} className="py-3.5 flex justify-between items-center text-xs">
+                  <div>
+                    <span className="font-bold text-slate-800">{plan.title}</span>
+                    <p className="text-[10px] text-slate-450 mt-0.5">{plan.description || 'No description provided.'}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 bg-brand-50 text-brand-700 rounded-md">
+                        {plan.pointsRequired} Points Required
+                      </span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-md">
+                        ₹{Number(plan.discountFlat)} discount
+                      </span>
+                      {!plan.isActive && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-red-50 text-red-700 rounded-md">
+                          Inactive
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {plan.isActive && (
+                    <button
+                      onClick={() => handleDeactivatePlan(plan.id)}
+                      className="text-red-500 hover:text-red-700 font-bold flex items-center gap-1 transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Deactivate
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -83,8 +83,8 @@ export default function MoreScreen({ navigation, onLogout }) {
                 activeOpacity={0.75}
                 onPress={() => handlePress(item)}
               >
-                <View style={styles.iconWrapper}>
-                  <Icon size={20} color="#006241" />
+                <View style={[styles.iconWrapper, { backgroundColor: theme.brand[50] }]}>
+                  <Icon size={20} color={theme.brand[700]} />
                 </View>
                 <View style={styles.itemTextWrapper}>
                   <Text style={[styles.itemLabel, { fontFamily: fonts.bold }]}>
@@ -166,7 +166,6 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#f0fdf4',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
@@ -186,7 +185,7 @@ const styles = StyleSheet.create({
   rewardsBanner: {
     marginHorizontal: 20,
     marginTop: 20,
-    backgroundColor: '#0a1d17',
+    backgroundColor: '#2e1c2e',
     borderRadius: 16,
     paddingVertical: 12,
     paddingHorizontal: 16,

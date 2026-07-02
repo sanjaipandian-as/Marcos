@@ -25,6 +25,7 @@ import {
   Plus,
   Trash2,
   Filter,
+  ArrowRight,
 } from 'lucide-react';
 import api from '../utils/api';
 
@@ -2146,13 +2147,31 @@ export default function OrderManager({ initialTab = 'bookings' }) {
                           </span>
                         </td>
                         <td className="py-4 px-6 text-center">
-                          <button
-                            onClick={() => setSelectedOrder(order)}
-                            className="p-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-500 transition-colors"
-                            title="View order &amp; manage delivery stage"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => setSelectedOrder(order)}
+                              className="p-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-500 transition-colors"
+                              title="View order &amp; manage delivery stage"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            {(() => {
+                              const currentIdx = HAPPY_PATH.indexOf(order.status);
+                              if (currentIdx !== -1 && currentIdx < HAPPY_PATH.length - 1) {
+                                const nextStatus = HAPPY_PATH[currentIdx + 1];
+                                return (
+                                  <button
+                                    onClick={() => handleUpdateStatus(order.id, nextStatus)}
+                                    className="p-1.5 border border-slate-200 rounded-lg hover:bg-brand-50 hover:text-brand-600 hover:border-brand-200 text-slate-500 transition-colors"
+                                    title={`Move to next level: ${getStatusLabel(nextStatus)}`}
+                                  >
+                                    <ArrowRight className="w-4 h-4" />
+                                  </button>
+                                );
+                              }
+                              return null;
+                            })()}
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -2190,12 +2209,31 @@ export default function OrderManager({ initialTab = 'bookings' }) {
                         ₹{Number(order.payableAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </p>
                     </div>
-                    <button
-                      onClick={() => setSelectedOrder(order)}
-                      className="p-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-500 transition-colors"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setSelectedOrder(order)}
+                        className="p-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-500 transition-colors"
+                        title="View order"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                      {(() => {
+                        const currentIdx = HAPPY_PATH.indexOf(order.status);
+                        if (currentIdx !== -1 && currentIdx < HAPPY_PATH.length - 1) {
+                          const nextStatus = HAPPY_PATH[currentIdx + 1];
+                          return (
+                            <button
+                              onClick={() => handleUpdateStatus(order.id, nextStatus)}
+                              className="p-2 border border-slate-200 rounded-xl hover:bg-brand-50 hover:text-brand-600 hover:border-brand-200 text-slate-500 transition-colors"
+                              title={`Move to next level: ${getStatusLabel(nextStatus)}`}
+                            >
+                              <ArrowRight className="w-4 h-4" />
+                            </button>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
                   </div>
                 </div>
               ))

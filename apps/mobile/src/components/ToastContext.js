@@ -241,7 +241,7 @@ export const ToastProvider = ({ children }) => {
                 activeOpacity={0.7}
                 style={styles.actionButton}
               >
-                <Text style={styles.actionText}>{toast.actionLabel}</Text>
+                <Text style={[styles.actionText, { color: theme.brand[700] }]}>{toast.actionLabel}</Text>
               </TouchableOpacity>
             )}
           </View>
