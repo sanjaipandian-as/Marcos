@@ -694,7 +694,7 @@ async function main() {
           bannerImage: 'https://images.unsplash.com/photo-1509941943102-10c232535736?q=80&w=1200&auto=format&fit=crop'
         },
         {
-          name: 'Minimalist Chronograph Wristwatch',
+          name: 'Minimalist Chronograph',
           description: 'Matte black case watch, quartz movement, premium leather strap.',
           price: 12500,
           materialInfo: 'Stainless Steel Case, Genuine Leather Strap',

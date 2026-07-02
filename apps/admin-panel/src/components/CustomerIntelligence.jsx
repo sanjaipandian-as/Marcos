@@ -140,7 +140,7 @@ export default function CustomerIntelligence() {
               <div key={i} className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <span className="text-slate-400 w-4 font-medium text-sm">{i + 1}</span>
-                  <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold shrink-0">
+                  <div className="w-8 h-8 rounded-full bg-[#EDE0ED] text-[#6B4B6B] flex items-center justify-center text-xs font-bold shrink-0">
                     {c.initials}
                   </div>
                   <span className="font-bold text-slate-800 w-28 truncate">{c.fullName}</span>

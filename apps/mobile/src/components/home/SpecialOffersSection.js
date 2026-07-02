@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, useWindowD
 import { ChevronRight } from 'lucide-react-native';
 import { CustomCartAddIcon, CustomCartAddedIcon } from '../CartIcons';
 
-export default function SpecialOffersSection({ offers, products, cartItems, theme, fonts, navigation, handleAddToCart }) {
+export default function SpecialOffersSection({ offers, products, cartItems, theme, fonts, shadows, navigation, handleAddToCart }) {
   const { width } = useWindowDimensions();
 
   if (!offers || offers.length === 0) return null;
@@ -61,15 +61,15 @@ export default function SpecialOffersSection({ offers, products, cartItems, them
               const inCart = displayProduct && cartItems.has(displayProduct.id);
 
               return (
-                <View key={offer.id} style={[styles.offerCard, { backgroundColor: theme.bg.card, marginBottom: 16, borderWidth: 1, borderColor: '#f1f5f9' }]}>
+                <View key={offer.id} style={[styles.offerCard, { backgroundColor: theme.bg.card, marginBottom: 16, borderWidth: 1, borderColor: theme.border }, shadows.premium]}>
                   <View style={styles.offerImageContainer}>
                     <Image
                       source={{ uri: (displayProduct?.images && displayProduct.images[0]) || 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=300&q=80' }}
                       style={styles.offerImage}
                       resizeMode="cover"
                     />
-                    <View style={styles.offerDiscountBadge}>
-                      <Text style={styles.offerDiscountText}>{discountText}</Text>
+                    <View style={[styles.offerDiscountBadge, { backgroundColor: '#EDE0ED' }]}>
+                      <Text style={[styles.offerDiscountText, { color: '#6B4B6B' }]}>{discountText}</Text>
                     </View>
                   </View>
                   <View style={styles.offerInfoContainer}>
@@ -101,24 +101,24 @@ export default function SpecialOffersSection({ offers, products, cartItems, them
                           style={[
                             styles.offerCartBtn,
                             inCart
-                              ? { backgroundColor: theme.brand[500], borderWidth: 1, borderColor: theme.brand[500] }
-                              : { backgroundColor: '#ffffff', borderWidth: 1, borderColor: theme.brand[500] }
+                              ? { backgroundColor: '#3D2E3D', borderWidth: 1, borderColor: '#3D2E3D' }
+                              : { backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#D8BFD8' }
                           ]}
                           activeOpacity={0.8}
                           onPress={() => displayProduct && handleAddToCart(displayProduct.id)}
                         >
                           {inCart ? (
-                            <CustomCartAddedIcon color="#ffffff" size={16} />
+                            <CustomCartAddedIcon color="#FDFBFD" size={16} />
                           ) : (
-                            <CustomCartAddIcon color={theme.brand[500]} size={16} />
+                            <CustomCartAddIcon color="#3D2E3D" size={16} />
                           )}
                         </TouchableOpacity>
                         <TouchableOpacity
-                          style={styles.offerBuyBtn}
+                          style={[styles.offerBuyBtn, { backgroundColor: theme.brand[500] }]}
                           activeOpacity={0.8}
                           onPress={() => displayProduct && navigation.navigate('ProductDetails', { productId: displayProduct.id })}
                         >
-                          <Text style={[styles.offerBuyBtnText, { fontFamily: fonts.bold }]}>Buy Now</Text>
+                          <Text style={[styles.offerBuyBtnText, { fontFamily: fonts.bold, color: '#3D2E3D' }]}>Buy Now</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
   },
   offerOriginalPrice: {
     fontSize: 10,
-    color: '#94a3b8',
+    color: '#B8A8B8',
     textDecorationLine: 'line-through',
     marginBottom: 2,
   },

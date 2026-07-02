@@ -131,7 +131,7 @@ export default function NotificationHistoryScreen({ navigation }) {
     <View key={item.id} style={[styles.paymentCard, shadows.premium]}>
       <View style={styles.paymentCardTop}>
         <View style={styles.paymentBrand}>
-          <CreditCard size={24} color="#006241" />
+          <CreditCard size={24} color={theme.brand[700]} />
           <View style={styles.brandMeta}>
             <Text style={[styles.cardBrandName, { fontFamily: fonts.bold }]}>{item.brand}</Text>
             <Text style={[styles.cardNumber, { fontFamily: fonts.bold }]}>•••• •••• •••• {item.last4}</Text>
@@ -139,7 +139,7 @@ export default function NotificationHistoryScreen({ navigation }) {
         </View>
         {item.isDefault && (
           <View style={styles.defaultBadge}>
-            <ShieldCheck size={10} color="#006241" />
+            <ShieldCheck size={10} color={theme.brand[600]} />
             <Text style={[styles.defaultBadgeText, { fontFamily: fonts.bold }]}>DEFAULT</Text>
           </View>
         )}
@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
   markAllBtn: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', marginRight: 24, marginTop: 12, gap: 6 },
   markAllText: { fontSize: 11 },
   notifCard: { flexDirection: 'row', backgroundColor: '#ffffff', borderRadius: 20, padding: 16, marginBottom: 12 },
-  unreadCard: { borderLeftWidth: 4, borderLeftColor: '#e85c1c' },
+  unreadCard: { borderLeftWidth: 4, borderLeftColor: '#d8bfd8' },
   notifIconWrapper: { marginRight: 16 },
   notifIconCircle: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   notifContent: { flex: 1 },
@@ -252,15 +252,15 @@ const styles = StyleSheet.create({
   paymentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   sectionTitle: { fontSize: 11, color: '#94a3b8', letterSpacing: 1.5 },
   addCardBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  addCardBtnText: { fontSize: 11, color: '#006241' },
+  addCardBtnText: { fontSize: 11, color: '#ad83ad' },
   paymentCard: { backgroundColor: '#ffffff', borderRadius: 24, padding: 24, marginBottom: 16 },
   paymentCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 },
   paymentBrand: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   brandMeta: { gap: 2 },
   cardBrandName: { fontSize: 14, color: '#94a3b8', textTransform: 'uppercase' },
   cardNumber: { fontSize: 18, color: '#1e293b', letterSpacing: 1 },
-  defaultBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f0fdf4', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, gap: 4 },
-  defaultBadgeText: { fontSize: 9, color: '#006241' },
+  defaultBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#faf5fa', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, gap: 4 },
+  defaultBadgeText: { fontSize: 9, color: '#ad83ad' },
   paymentCardBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
   expiryText: { fontSize: 13, color: '#64748b' },
   paymentActions: { flexDirection: 'row', gap: 20 },

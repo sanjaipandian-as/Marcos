@@ -14,6 +14,7 @@ import {
   confirmContactUpdateSchema,
   verifyPasswordSchema
 } from '../controllers/auth.controller.js';
+import { VoucherPlanController } from '../controllers/voucherPlan.controller.js';
 import { validate } from '../middlewares/validate.middleware.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
 import { sensitiveRateLimiter } from '../middlewares/rateLimit.middleware.js';
@@ -41,5 +42,11 @@ router.delete('/delete-account', authenticate, AuthController.deleteAccount);
 // Loyalty Points Redemption route
 router.post('/loyalty/redeem', authenticate, validate(redeemPointsSchema), AuthController.redeemPoints);
 router.get('/loyalty/coupons', authenticate, AuthController.listUserCoupons);
+
+// Voucher Plans Management routes
+router.get('/loyalty/voucher-plans', authenticate, VoucherPlanController.listVoucherPlans);
+router.get('/admin/loyalty/voucher-plans', authenticate, VoucherPlanController.adminListVoucherPlans);
+router.post('/admin/loyalty/voucher-plans', authenticate, VoucherPlanController.adminCreateVoucherPlan);
+router.delete('/admin/loyalty/voucher-plans/:id', authenticate, VoucherPlanController.adminDeactivateVoucherPlan);
 
 export default router;

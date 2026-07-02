@@ -145,7 +145,7 @@ export default function OtpVerifyScreen({ navigation, onLoginSuccess }) {
         activeOpacity={0.8}
       >
         {loading ? (
-          <ActivityIndicator color="#ffffff" />
+          <ActivityIndicator color="#3D2E3D" />
         ) : (
           <Text style={[styles.btnText, { fontFamily: fonts.bold }]}>Get OTP</Text>
         )}
@@ -199,7 +199,7 @@ export default function OtpVerifyScreen({ navigation, onLoginSuccess }) {
         activeOpacity={0.8}
       >
         {loading ? (
-          <ActivityIndicator color="#ffffff" />
+          <ActivityIndicator color="#3D2E3D" />
         ) : (
           <Text style={[styles.btnText, { fontFamily: fonts.bold }]}>Verify</Text>
         )}
@@ -390,7 +390,7 @@ const styles = StyleSheet.create({
   },
   btnText: {
     fontSize: 16,
-    color: '#ffffff',
+    color: '#3D2E3D',
   },
   footer: {
     alignItems: 'center',

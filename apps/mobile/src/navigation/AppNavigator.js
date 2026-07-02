@@ -127,69 +127,65 @@ function TabNavigator({ onLogout }) {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: '#e85c1c', // Premium Orange color
-        tabBarInactiveTintColor: '#000000', // Full black when inactive
+        tabBarActiveTintColor: '#3D2E3D', // Active label and icon
+        tabBarInactiveTintColor: '#7A6B7A', // Inactive label and icon
         tabBarShowLabel: true,
         tabBarStyle: {
           backgroundColor: '#ffffff',
-          height: Platform.OS === 'ios' ? 88 : 68,
-          paddingBottom: Platform.OS === 'ios' ? 28 : 10,
-          paddingTop: 8,
+          height: Platform.OS === 'ios' ? 96 : 76,
+          paddingBottom: Platform.OS === 'ios' ? 28 : 12,
+          paddingTop: 10,
           borderTopWidth: 1,
-          borderTopColor: '#f0f0f2',
-          elevation: 8,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -3 },
-          shadowOpacity: 0.06,
-          shadowRadius: 8,
+          borderTopColor: '#E8D9E8',
+          elevation: 2,
+          shadowColor: 'rgba(16, 24, 40, 0.06)',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
         },
         tabBarLabelStyle: {
           fontFamily: fonts.medium,
-          fontSize: 9,
+          fontSize: 9.5,
           marginTop: 2,
         },
         tabBarIcon: ({ color, focused }) => {
-          const size = focused ? 26 : 23;
+          const size = 20;
+          let icon = null;
 
           if (route.name === 'HomeTab') {
-            return (
-              <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                <CustomHomeIcon color={color} size={size} />
-              </View>
-            );
+            icon = <CustomHomeIcon color={color} size={size} />;
           } else if (route.name === 'BookingsTab') {
-            return (
-              <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                <CustomBookIcon color={color} size={size} />
-              </View>
-            );
+            icon = <CustomBookIcon color={color} size={size} />;
           } else if (route.name === 'Profile') {
-            return (
-              <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                <CustomProfileIcon color={color} size={size} />
-              </View>
-            );
+            icon = <CustomProfileIcon color={color} size={size} />;
           } else if (route.name === 'Browse') {
-            return (
-              <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                <CustomShoppingIcon color={color} size={size} />
-              </View>
-            );
+            icon = <CustomShoppingIcon color={color} size={size} />;
           } else if (route.name === 'Cart') {
-            return (
-              <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                <CustomCartIcon color={color} size={size} />
-              </View>
-            );
+            icon = <CustomCartIcon color={color} size={size} />;
           } else if (route.name === 'Stores') {
+            icon = <CustomStoreIcon color={color} size={size} />;
+          }
+
+          if (focused) {
             return (
-              <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                <CustomStoreIcon color={color} size={size} />
+              <View style={{
+                backgroundColor: '#EDE0ED',
+                paddingVertical: 5,
+                paddingHorizontal: 16,
+                borderRadius: 20,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                {icon}
               </View>
             );
           }
 
-          return null;
+          return (
+            <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 5 }}>
+              {icon}
+            </View>
+          );
         },
       })}
     >

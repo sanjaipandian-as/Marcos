@@ -47,7 +47,7 @@ export default function WelcomeScreen({ navigation }) {
             onPress={() => navigation.navigate('Login')}
             activeOpacity={0.8}
           >
-            <Text style={[styles.btnText, { color: '#ffffff', fontFamily: fonts.bold }]}>
+            <Text style={[styles.btnText, { color: '#3D2E3D', fontFamily: fonts.bold }]}>
               Log in
             </Text>
           </TouchableOpacity>
@@ -57,7 +57,7 @@ export default function WelcomeScreen({ navigation }) {
             onPress={() => navigation.navigate('Register')}
             activeOpacity={0.8}
           >
-            <Text style={[styles.btnText, { color: theme.brand[500], fontFamily: fonts.bold }]}>
+            <Text style={[styles.btnText, { color: '#3D2E3D', fontFamily: fonts.bold }]}>
               Sign up
             </Text>
           </TouchableOpacity>

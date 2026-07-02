@@ -166,7 +166,7 @@ export default function LoginScreen({ navigation, onLoginSuccess }) {
               activeOpacity={0.8}
             >
               {loading ? (
-                <ActivityIndicator color="#ffffff" />
+                <ActivityIndicator color="#3D2E3D" />
               ) : (
                 <Text style={[styles.loginBtnText, { fontFamily: fonts.bold }]}>
                   Login
@@ -324,7 +324,7 @@ const styles = StyleSheet.create({
   },
   loginBtnText: {
     fontSize: 16,
-    color: '#ffffff',
+    color: '#3D2E3D',
   },
   signUpRow: {
     flexDirection: 'row',

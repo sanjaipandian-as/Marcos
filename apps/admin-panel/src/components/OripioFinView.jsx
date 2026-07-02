@@ -140,7 +140,7 @@ export default function OripioFinView({ setActiveTab }) {
           <p className="font-semibold text-slate-400">Cash Flow Metrics</p>
           <div className="flex justify-between gap-4">
             <span>Amount:</span>
-            <span className="font-bold text-emerald-400">₹{payload[0].value.toLocaleString()}</span>
+            <span className="font-bold text-brand-700">₹{payload[0].value.toLocaleString()}</span>
           </div>
         </div>
       );
@@ -159,128 +159,119 @@ export default function OripioFinView({ setActiveTab }) {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">MARCOS Dashboard</h2>
-          <p className="text-sm text-slate-500 font-medium font-sans">Real-time statistics, balance overview, and invoices</p>
+          <h2 className="text-2xl font-semibold text-[#3D2E3D] tracking-tight">Marcos dashboard</h2>
+          <p className="text-sm text-[#7A6B7A] font-medium font-sans">Real-time statistics, balance overview, and invoices</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
-        <div className="relative bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-950 text-white rounded-3xl p-6 shadow-2xl hover:-translate-y-1 transition-all duration-300 group ring-1 ring-emerald-500/20">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(16,185,129,0.15),transparent_60%)] rounded-3xl pointer-events-none" />
-          <div className="flex justify-between items-start z-20 relative">
+        {/* Total Revenue Card - Green top accent */}
+        <div className="relative bg-white rounded-3xl p-6 shadow-premium border-t-2 border-[#639922] hover:-translate-y-0.5 transition-all duration-300 group">
+          <div className="flex justify-between items-start">
             <div className="flex gap-3 items-center">
-              <div className="w-11 h-11 rounded-2xl bg-emerald-800/40 border border-emerald-700/50 flex items-center justify-center text-emerald-300">
+              <div className="w-11 h-11 rounded-2xl bg-[#639922]/10 flex items-center justify-center text-[#639922]">
                 <CreditCard className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-xs text-emerald-300 font-bold tracking-wide leading-tight">Total Revenue</p>
-                <p className="text-[10px] text-emerald-400/80 leading-none">Overall Earnings</p>
+                <p className="text-xs text-[#7A6B7A] font-medium tracking-wide leading-tight">Total revenue</p>
+                <p className="text-[10px] text-[#7A6B7A] leading-none mt-1">Overall earnings</p>
               </div>
-            </div>
-            <div className="relative">
-              {/* Removed card menu for real data */}
             </div>
           </div>
 
-          <div className="my-6 z-10 relative">
+          <div className="my-6">
             <div className="flex items-baseline gap-2">
-              <h3 className="text-3xl font-black tracking-tight text-white">
+              <h3 className="text-3xl font-bold tracking-tight text-[#3D2E3D]">
                 ₹{metrics[0].balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </h3>
-              <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 py-0.5 px-2 rounded-full flex items-center gap-0.5">
+              <span className="text-[10px] font-bold bg-green-50 text-[#639922] py-0.5 px-2 rounded-full flex items-center gap-0.5">
                 <TrendingUp className="w-3 h-3" /> +1.5%
               </span>
             </div>
           </div>
 
-          <div className="flex items-center justify-between border-t border-emerald-800/80 pt-3 z-10 relative">
-            <span className="text-xs text-emerald-300/80 font-medium">All successful payments</span>
+          <div className="flex items-center justify-between border-t border-[#F0E5F0] pt-3">
+            <span className="text-xs text-[#7A6B7A] font-medium">All successful payments</span>
             <button
               onClick={() => setActiveTab && setActiveTab('staff')}
-              className="text-xs font-bold text-emerald-300 hover:text-white flex items-center gap-1 focus:outline-none"
+              className="text-xs font-bold text-[#3D2E3D] hover:text-[#C4A4C4] flex items-center gap-1 focus:outline-none"
             >
-              <span>View Roster</span>
+              <span>View roster</span>
               <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
             </button>
           </div>
         </div>
 
-        <div className="relative bg-gradient-to-br from-white via-slate-50 to-emerald-50/20 border border-slate-200/80 rounded-3xl p-6 shadow-xl hover:-translate-y-1 transition-all duration-300 group">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(16,185,129,0.05),transparent_60%)] rounded-3xl pointer-events-none" />
-          <div className="flex justify-between items-start z-20 relative">
+        {/* Total Orders Card - Blue top accent */}
+        <div className="relative bg-white rounded-3xl p-6 shadow-premium border-t-2 border-[#378ADD] hover:-translate-y-0.5 transition-all duration-300 group">
+          <div className="flex justify-between items-start">
             <div className="flex gap-3 items-center">
-              <div className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
+              <div className="w-11 h-11 rounded-2xl bg-[#378ADD]/10 flex items-center justify-center text-[#378ADD]">
                 <ArrowDownLeft className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-xs text-slate-500 font-bold tracking-wide leading-tight">Total Orders</p>
-                <p className="text-[10px] text-slate-400 leading-none font-medium">Successful Transactions</p>
+                <p className="text-xs text-[#7A6B7A] font-medium tracking-wide leading-tight">Total orders</p>
+                <p className="text-[10px] text-[#7A6B7A] leading-none mt-1">Successful transactions</p>
               </div>
-            </div>
-            <div className="relative">
-              {/* Removed card menu */}
             </div>
           </div>
 
-          <div className="my-6 z-10 relative">
+          <div className="my-6">
             <div className="flex items-baseline gap-2">
-              <h3 className="text-3xl font-black text-slate-800 tracking-tight">
+              <h3 className="text-3xl font-bold text-[#3D2E3D] tracking-tight">
                 {metrics[1].balance.toLocaleString()}
               </h3>
-              <span className="text-[10px] font-bold bg-emerald-50 text-emerald-600 py-0.5 px-2 rounded-full flex items-center gap-0.5">
+              <span className="text-[10px] font-bold bg-blue-50 text-[#378ADD] py-0.5 px-2 rounded-full flex items-center gap-0.5">
                 <TrendingUp className="w-3 h-3" /> +3.2%
               </span>
             </div>
           </div>
 
-          <div className="flex items-center justify-between border-t border-slate-100 pt-3 z-10 relative">
-            <span className="text-xs text-slate-400 font-medium">All completed orders</span>
+          <div className="flex items-center justify-between border-t border-[#F0E5F0] pt-3">
+            <span className="text-xs text-[#7A6B7A] font-medium">All completed orders</span>
             <button
               onClick={() => setActiveTab && setActiveTab('loyalty')}
-              className="text-xs font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1 focus:outline-none"
+              className="text-xs font-bold text-[#3D2E3D] hover:text-[#C4A4C4] flex items-center gap-1 focus:outline-none"
             >
-              <span>View Reserve</span>
+              <span>View reserve</span>
               <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
             </button>
           </div>
         </div>
 
-        <div className="relative bg-gradient-to-br from-white via-slate-50 to-blue-50/20 border border-slate-200/80 rounded-3xl p-6 shadow-xl hover:-translate-y-1 transition-all duration-300 group">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(59,130,246,0.05),transparent_60%)] rounded-3xl pointer-events-none" />
-          <div className="flex justify-between items-start z-20 relative">
+        {/* Average Order Value Card - Thistle top accent */}
+        <div className="relative bg-white rounded-3xl p-6 shadow-premium border-t-2 border-[#D8BFD8] hover:-translate-y-0.5 transition-all duration-300 group">
+          <div className="flex justify-between items-start">
             <div className="flex gap-3 items-center">
-              <div className="w-11 h-11 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+              <div className="w-11 h-11 rounded-2xl bg-[#D8BFD8]/20 flex items-center justify-center text-[#ad83ad]">
                 <ArrowUpRight className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-xs text-slate-500 font-bold tracking-wide leading-tight">Average Order Value</p>
-                <p className="text-[10px] text-slate-400 leading-none font-medium">Per Order Average</p>
+                <p className="text-xs text-[#7A6B7A] font-medium tracking-wide leading-tight">Average order value</p>
+                <p className="text-[10px] text-[#7A6B7A] leading-none mt-1">Per order average</p>
               </div>
-            </div>
-            <div className="relative">
-              {/* Removed card menu */}
             </div>
           </div>
 
-          <div className="my-6 z-10 relative">
+          <div className="my-6">
             <div className="flex items-baseline gap-2">
-              <h3 className="text-3xl font-black text-slate-800 tracking-tight">
+              <h3 className="text-3xl font-bold text-[#3D2E3D] tracking-tight">
                 ₹{metrics[2].balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </h3>
-              <span className="text-[10px] font-bold bg-blue-50 text-blue-600 py-0.5 px-2 rounded-full flex items-center gap-0.5">
+              <span className="text-[10px] font-bold bg-brand-50 text-[#ad83ad] py-0.5 px-2 rounded-full flex items-center gap-0.5">
                 <TrendingUp className="w-3 h-3" /> +4.7%
               </span>
             </div>
           </div>
 
-          <div className="flex items-center justify-between border-t border-slate-100 pt-3 z-10 relative">
-            <span className="text-xs text-slate-400 font-medium">Average purchase value</span>
+          <div className="flex items-center justify-between border-t border-[#F0E5F0] pt-3">
+            <span className="text-xs text-[#7A6B7A] font-medium">Average purchase value</span>
             <button
               onClick={() => setActiveTab && setActiveTab('reports')}
-              className="text-xs font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1 focus:outline-none"
+              className="text-xs font-bold text-[#3D2E3D] hover:text-[#C4A4C4] flex items-center gap-1 focus:outline-none"
             >
-              <span>View Analysis</span>
+              <span>View analysis</span>
               <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
             </button>
           </div>
@@ -293,8 +284,8 @@ export default function OripioFinView({ setActiveTab }) {
         <div className="lg:col-span-5 bg-white border border-slate-200/60 rounded-3xl p-6 shadow-premium space-y-4">
           <div className="flex justify-between items-center">
             <div>
-              <h4 className="font-bold text-slate-850 text-sm">Key Performance Metrics</h4>
-              <p className="text-[10px] text-slate-450 font-semibold uppercase tracking-wider">MARCOS Platform</p>
+              <h4 className="font-semibold text-[#3D2E3D] text-sm">Key performance metrics</h4>
+              <p className="text-[10px] text-[#7A6B7A] font-semibold uppercase tracking-wider">Marcos platform</p>
             </div>
           </div>
 
@@ -302,17 +293,17 @@ export default function OripioFinView({ setActiveTab }) {
             {metrics.map((metric) => (
               <div
                 key={metric.id}
-                className="p-4 rounded-2xl border transition-all flex flex-col justify-between h-28 bg-slate-50/50 border-slate-200/50"
+                className="p-4 rounded-2xl border transition-all flex flex-col justify-between h-28 bg-[#F7F4F9]/30 border-[#F0E5F0]"
               >
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-bold text-slate-800">{metric.flag} {metric.code}</span>
+                  <span className="text-sm font-semibold text-[#3D2E3D]">{metric.flag} {metric.code}</span>
                 </div>
                 <div className="my-2">
-                  <span className="text-base font-extrabold text-slate-800 tracking-tight">
+                  <span className="text-base font-bold text-[#3D2E3D] tracking-tight">
                     {metric.symbol}{metric.balance.toLocaleString(undefined, { minimumFractionDigits: metric.symbol ? 2 : 0 })}
                   </span>
                 </div>
-                <span className="text-[9px] text-slate-400 font-semibold">{metric.desc}</span>
+                <span className="text-[9px] text-[#7A6B7A] font-medium">{metric.desc}</span>
               </div>
             ))}
           </div>
@@ -321,27 +312,27 @@ export default function OripioFinView({ setActiveTab }) {
         <div className="lg:col-span-7 bg-white border border-slate-200/60 rounded-3xl p-6 shadow-premium flex flex-col justify-between">
           <div className="flex justify-between items-start flex-wrap gap-4">
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cash Flow Overview</span>
-              <h4 className="text-2xl font-black text-slate-800 tracking-tight">
+              <span className="text-[10px] font-bold text-[#7A6B7A]/80 uppercase tracking-wider">Cash flow overview</span>
+              <h4 className="text-2xl font-bold text-[#3D2E3D] tracking-tight">
                 ₹{cashFlowData.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </h4>
-              <div className="flex gap-3 text-[10px] text-slate-500 font-bold mt-1">
-                <span className="text-emerald-600">Inflow: +₹{cashFlowData.inflow.toLocaleString()}</span>
-                <span className="text-red-500">Outflow: -₹{cashFlowData.outflow.toLocaleString()}</span>
+              <div className="flex gap-3 text-[10px] text-[#7A6B7A] font-bold mt-1">
+                <span className="text-[#639922]">Inflow: +₹{cashFlowData.inflow.toLocaleString()}</span>
+                <span className="text-[#E24B4A]">Outflow: -₹{cashFlowData.outflow.toLocaleString()}</span>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="flex gap-1 p-1 bg-slate-100 rounded-xl shrink-0">
+              <div className="flex gap-1 p-1 bg-[#F7F4F9] rounded-xl shrink-0">
                 <button
                   onClick={() => { setCashFlowMode('MONTHLY'); }}
-                  className={`py-1 px-3 text-[10px] font-bold rounded-lg transition-all ${cashFlowMode === 'MONTHLY' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-800'}`}
+                  className={`py-1 px-3 text-[10px] font-bold rounded-lg transition-all ${cashFlowMode === 'MONTHLY' ? 'bg-white text-[#3D2E3D] shadow-sm' : 'text-[#7A6B7A] hover:text-[#3D2E3D]'}`}
                 >
                   Monthly
                 </button>
                 <button
                   onClick={() => { setCashFlowMode('YEARLY'); setChartData([]); loadStats(); }}
-                  className={`py-1 px-3 text-[10px] font-bold rounded-lg transition-all ${cashFlowMode === 'YEARLY' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-800'}`}
+                  className={`py-1 px-3 text-[10px] font-bold rounded-lg transition-all ${cashFlowMode === 'YEARLY' ? 'bg-white text-[#3D2E3D] shadow-sm' : 'text-[#7A6B7A] hover:text-[#3D2E3D]'}`}
                 >
                   Yearly
                 </button>
@@ -351,9 +342,9 @@ export default function OripioFinView({ setActiveTab }) {
                 <div className="relative shrink-0 z-30">
                   <button
                     onClick={() => setShowCalendarDropdown(!showCalendarDropdown)}
-                    className="text-[10px] font-bold border border-slate-200 bg-white hover:bg-slate-50 py-1.5 px-3.5 rounded-xl shadow-sm focus:outline-none flex items-center gap-1.5"
+                    className="text-[10px] font-bold border border-[#F0E5F0] bg-white hover:bg-slate-50 py-1.5 px-3.5 rounded-xl shadow-sm focus:outline-none flex items-center gap-1.5 text-[#3D2E3D]"
                   >
-                    <CalendarIcon className="w-3.5 h-3.5 text-slate-400" />
+                    <CalendarIcon className="w-3.5 h-3.5 text-[#7A6B7A]" />
                     <span>{(() => {
                       const [year, month] = selectedMonth.split('-');
                       const monthsName = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -364,8 +355,8 @@ export default function OripioFinView({ setActiveTab }) {
                   {showCalendarDropdown && (
                     <>
                       <div className="fixed inset-0 z-10" onClick={() => setShowCalendarDropdown(false)} />
-                      <div className="absolute right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl p-4 w-60 z-20 animate-fadeIn space-y-3">
-                        <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                      <div className="absolute right-0 mt-2 bg-white border border-[#F0E5F0] rounded-2xl shadow-xl p-4 w-60 z-20 animate-fadeIn space-y-3">
+                        <div className="flex justify-between items-center border-b border-[#F0E5F0] pb-2">
                           <button
                             type="button"
                             onClick={() => setCalendarYear(prev => prev - 1)}
@@ -373,7 +364,7 @@ export default function OripioFinView({ setActiveTab }) {
                           >
                             &lt;
                           </button>
-                          <span className="font-extrabold text-slate-800 text-xs">{calendarYear}</span>
+                          <span className="font-extrabold text-[#3D2E3D] text-xs">{calendarYear}</span>
                           <button
                             type="button"
                             onClick={() => setCalendarYear(prev => prev + 1)}
@@ -398,8 +389,8 @@ export default function OripioFinView({ setActiveTab }) {
                                 className={`
                                   py-2 text-[10px] font-bold rounded-xl text-center border transition-all
                                   ${isActive
-                                    ? 'bg-brand-500 border-brand-500 text-white shadow-sm font-black'
-                                    : 'border-slate-100 bg-slate-50/50 text-slate-600 hover:bg-slate-100 hover:text-slate-800'}
+                                    ? 'bg-brand-500 border-brand-500 text-[#3D2E3D] shadow-sm font-black'
+                                    : 'border-[#F0E5F0] bg-[#F7F4F9]/50 text-[#7A6B7A] hover:bg-[#F0E5F0]/40 hover:text-[#3D2E3D]'}
                                 `}
                               >
                                 {monName}
@@ -424,7 +415,7 @@ export default function OripioFinView({ setActiveTab }) {
                 <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f1f5f9' }} />
                 <Bar
                   dataKey="revenue"
-                  fill="#064e3b"
+                  fill="#c3a1c3"
                   radius={[8, 8, 0, 0]}
                   maxBarSize={32}
                 />
@@ -437,7 +428,7 @@ export default function OripioFinView({ setActiveTab }) {
 
       <div className="bg-white border border-slate-200/60 rounded-3xl p-6 shadow-premium space-y-4">
         <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 w-full">
-          <h4 className="font-bold text-slate-800 text-sm">Recent Ledger Activities</h4>
+          <h4 className="font-semibold text-[#3D2E3D] text-sm">Recent ledger activities</h4>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
             <div className="relative w-full sm:w-auto">
@@ -446,17 +437,17 @@ export default function OripioFinView({ setActiveTab }) {
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 placeholder="Search activity..."
-                className="w-full sm:w-auto pl-8 pr-4 py-1.5 text-xs rounded-xl bg-slate-50 border border-slate-200/80 focus:bg-white focus:outline-none"
+                className="w-full sm:w-auto pl-8 pr-4 py-1.5 text-xs rounded-xl bg-[#F7F4F9] border border-[#F0E5F0] focus:bg-white focus:outline-none text-[#3D2E3D] placeholder-[#7A6B7A]/60"
               />
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-[#7A6B7A]" />
             </div>
 
             <select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
-              className="w-full sm:w-auto text-xs font-bold border border-slate-200 rounded-xl py-1.5 px-3 bg-white text-slate-650 focus:outline-none"
+              className="w-full sm:w-auto text-xs font-semibold border border-[#F0E5F0] rounded-xl py-1.5 px-3 bg-white text-[#3D2E3D] focus:outline-none"
             >
-              <option value="ALL">All Status</option>
+              <option value="ALL">All status</option>
               <option value="PAID">Paid</option>
               <option value="PENDING">Pending</option>
               <option value="DELIVERED">Delivered</option>
@@ -468,40 +459,40 @@ export default function OripioFinView({ setActiveTab }) {
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              <tr className="border-b border-[#F0E5F0] text-[10px] font-bold text-[#7A6B7A] uppercase tracking-wider">
                 <th className="py-3 px-4">Invoice ID</th>
                 <th className="py-3 px-4">Customer</th>
                 <th className="py-3 px-4">Date</th>
-                <th className="py-3 px-4">Payment Method</th>
+                <th className="py-3 px-4">Payment method</th>
                 <th className="py-3 px-4">Amount</th>
                 <th className="py-3 px-4 text-right">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50 text-xs">
+            <tbody className="divide-y divide-[#F0E5F0] text-xs">
               {filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="py-8 text-center text-slate-400 font-medium">No activity matching criteria.</td>
+                  <td colSpan="6" className="py-8 text-center text-[#7A6B7A] font-medium">No activity matching criteria.</td>
                 </tr>
               ) : (
                 filteredOrders.map((order) => (
-                  <tr key={order.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="py-4 px-4 font-bold text-slate-800">{order.invoiceNumber}</td>
-                    <td className="py-4 px-4 text-slate-600 font-medium">{order.customerName}</td>
-                    <td className="py-4 px-4 text-slate-400 font-medium">
+                  <tr key={order.id} className="hover:bg-brand-50/20 transition-colors">
+                    <td className="py-4 px-4 font-bold text-[#3D2E3D]">{order.invoiceNumber}</td>
+                    <td className="py-4 px-4 text-[#7A6B7A] font-medium">{order.customerName}</td>
+                    <td className="py-4 px-4 text-[#7A6B7A]/80 font-medium">
                       {new Date(order.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
                     </td>
-                    <td className="py-4 px-4 font-semibold text-slate-500">{order.paymentMethod}</td>
-                    <td className="py-4 px-4 font-extrabold text-slate-800">
+                    <td className="py-4 px-4 font-semibold text-[#7A6B7A]">{order.paymentMethod}</td>
+                    <td className="py-4 px-4 font-extrabold text-[#3D2E3D]">
                       ₹{Number(order.payableAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </td>
                     <td className="py-4 px-4 text-right">
                       <span className={`
                         inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase
                         ${order.status === 'PAID' || order.status === 'DELIVERED'
-                          ? 'bg-emerald-50 text-emerald-700'
+                          ? 'bg-green-50 text-[#639922]'
                           : order.status === 'PENDING'
-                            ? 'bg-amber-50 text-amber-700'
-                            : 'bg-red-50 text-red-700'}
+                            ? 'bg-blue-50 text-[#378ADD]'
+                            : 'bg-red-50 text-[#E24B4A]'}
                       `}>
                         • {order.status}
                       </span>
@@ -515,35 +506,35 @@ export default function OripioFinView({ setActiveTab }) {
 
         <div className="md:hidden space-y-3">
           {filteredOrders.length === 0 ? (
-            <div className="py-8 text-center text-slate-400 font-medium bg-slate-50/50 rounded-2xl border border-slate-100">
+            <div className="py-8 text-center text-[#7A6B7A] font-medium bg-[#F7F4F9]/30 rounded-2xl border border-[#F0E5F0]">
               No activity matching criteria.
             </div>
           ) : (
             filteredOrders.map((order) => (
-              <div key={order.id} className="bg-slate-50/50 border border-slate-100 rounded-2xl p-4 space-y-3 hover:bg-slate-50 transition-colors">
+              <div key={order.id} className="bg-[#F7F4F9]/30 border border-[#F0E5F0] rounded-2xl p-4 space-y-3 hover:bg-slate-50 transition-colors">
                 <div className="flex justify-between items-center">
-                  <span className="font-bold text-slate-800">{order.invoiceNumber}</span>
+                  <span className="font-bold text-[#3D2E3D]">{order.invoiceNumber}</span>
                   <span className={`
                     inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase
                     ${order.status === 'PAID' || order.status === 'DELIVERED'
-                      ? 'bg-emerald-50 text-emerald-700'
+                      ? 'bg-green-50 text-[#639922]'
                       : order.status === 'PENDING'
-                        ? 'bg-amber-50 text-amber-700'
-                        : 'bg-red-50 text-red-700'}
+                        ? 'bg-blue-50 text-[#378ADD]'
+                        : 'bg-red-50 text-[#E24B4A]'}
                   `}>
                     • {order.status}
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <div>
-                    <p className="text-slate-600 font-semibold">{order.customerName}</p>
-                    <p className="text-slate-400 font-medium">
+                    <p className="text-[#7A6B7A] font-semibold">{order.customerName}</p>
+                    <p className="text-[#7A6B7A]/80 font-medium">
                       {new Date(order.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-slate-500">{order.paymentMethod}</p>
-                    <p className="font-extrabold text-slate-800 text-sm">
+                    <p className="font-semibold text-[#7A6B7A]">{order.paymentMethod}</p>
+                    <p className="font-extrabold text-[#3D2E3D] text-sm">
                       ₹{Number(order.payableAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </p>
                   </div>

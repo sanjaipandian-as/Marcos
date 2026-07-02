@@ -1196,6 +1196,51 @@ class APIClient {
     }
   }
 
+  async getVoucherPlans() {
+    try {
+      const res = await this.request('/auth/admin/loyalty/voucher-plans');
+      return res.data;
+    } catch (e) {
+      return MockDB.get('m_voucher_plans') || [
+        { id: '1', title: '₹500 Discount Voucher', pointsRequired: 500, discountFlat: 500, isActive: true },
+        { id: '2', title: '₹1,200 Discount Voucher', pointsRequired: 1000, discountFlat: 1200, isActive: true }
+      ];
+    }
+  }
+
+  async createVoucherPlan(plan) {
+    try {
+      const res = await this.request('/auth/admin/loyalty/voucher-plans', {
+        method: 'POST',
+        body: JSON.stringify(plan),
+      });
+      return res.data;
+    } catch (e) {
+      const plans = MockDB.get('m_voucher_plans') || [];
+      const newPlan = { id: `vp-${Date.now()}`, ...plan, isActive: true, createdAt: new Date().toISOString() };
+      plans.push(newPlan);
+      MockDB.set('m_voucher_plans', plans);
+      return newPlan;
+    }
+  }
+
+  async deactivateVoucherPlan(id) {
+    try {
+      await this.request(`/auth/admin/loyalty/voucher-plans/${id}`, {
+        method: 'DELETE',
+      });
+      return true;
+    } catch (e) {
+      const plans = MockDB.get('m_voucher_plans') || [];
+      const idx = plans.findIndex(p => p.id === id);
+      if (idx !== -1) {
+        plans[idx].isActive = false;
+        MockDB.set('m_voucher_plans', plans);
+      }
+      return true;
+    }
+  }
+
   // BANNERS MANAGEMENT
   async getBanners() {
     try {

@@ -208,7 +208,7 @@ export default function AppCustomerManager() {
             filtered.map((c) => (
               <div key={c.id} className="p-4 flex items-center justify-between hover:bg-slate-50/50 transition-colors">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 font-extrabold text-xs">
+                  <div className="w-9 h-9 rounded-full bg-[#EDE0ED] flex items-center justify-center text-[#6B4B6B] font-extrabold text-xs">
                     {c.fullName?.substring(0, 2).toUpperCase()}
                   </div>
                   <div>

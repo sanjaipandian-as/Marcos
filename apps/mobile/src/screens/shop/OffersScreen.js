@@ -124,8 +124,8 @@ export default function DiscountsScreen({ navigation }) {
         >
           <Heart
             size={16}
-            color={favorites.has(item.id) ? '#ef4444' : '#475569'}
-            fill={favorites.has(item.id) ? '#ef4444' : 'transparent'}
+            color={favorites.has(item.id) ? '#3D2E3D' : '#475569'}
+            fill={favorites.has(item.id) ? '#3D2E3D' : 'transparent'}
           />
         </TouchableOpacity>
 
@@ -136,7 +136,7 @@ export default function DiscountsScreen({ navigation }) {
         </View>
       </View>
       <View style={styles.prodInfo}>
-        <Text style={[styles.prodName, { fontFamily: fonts.semiBold }]} numberOfLines={1}>
+        <Text style={[styles.prodName, { fontFamily: fonts.semiBold, color: '#3D2E3D' }]} numberOfLines={2}>
           {item.name}
         </Text>
         <Text style={[styles.prodMaterial, { fontFamily: fonts.regular }]} numberOfLines={1}>
@@ -145,8 +145,8 @@ export default function DiscountsScreen({ navigation }) {
 
         <View style={styles.priceRow}>
           <View>
-            <Text style={{ fontSize: 10, color: '#94a3b8', marginBottom: 2 }}>Starts from</Text>
-            <Text style={[styles.prodPrice, { fontFamily: fonts.bold, color: '#006241' }]}>
+            <Text style={{ fontSize: 10, color: '#7A6B7A', marginBottom: 2 }}>Starts from</Text>
+            <Text style={[styles.prodPrice, { fontFamily: fonts.bold, color: '#3D2E3D' }]}>
             ₹{Number(item.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
           </Text>
           </View>
@@ -198,7 +198,7 @@ export default function DiscountsScreen({ navigation }) {
       {/* Product list */}
       {loading ? (
         <View style={styles.loader}>
-          <ActivityIndicator size="large" color="#006241" />
+          <ActivityIndicator size="large" color={theme.brand[500]} />
         </View>
       ) : products.length === 0 ? (
         <View style={styles.emptyContainer}>

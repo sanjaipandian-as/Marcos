@@ -173,7 +173,7 @@ export default function ForgotPasswordScreen({ navigation }) {
         activeOpacity={0.8}
       >
         {loading ? (
-          <ActivityIndicator color="#ffffff" />
+          <ActivityIndicator color="#3D2E3D" />
         ) : (
           <Text style={[styles.primaryBtnText, { fontFamily: fonts.bold }]}>
             Continue
@@ -225,7 +225,7 @@ export default function ForgotPasswordScreen({ navigation }) {
         activeOpacity={0.8}
       >
         {loading ? (
-          <ActivityIndicator color="#ffffff" />
+          <ActivityIndicator color="#3D2E3D" />
         ) : (
           <Text style={[styles.primaryBtnText, { fontFamily: fonts.bold }]}>
             Verify Code
@@ -292,7 +292,7 @@ export default function ForgotPasswordScreen({ navigation }) {
         activeOpacity={0.8}
       >
         {loading ? (
-          <ActivityIndicator color="#ffffff" />
+          <ActivityIndicator color="#3D2E3D" />
         ) : (
           <Text style={[styles.primaryBtnText, { fontFamily: fonts.bold }]}>
             Complete Reset
@@ -541,7 +541,7 @@ const styles = StyleSheet.create({
   },
   primaryBtnText: {
     fontSize: 16,
-    color: '#ffffff',
+    color: '#3D2E3D',
   },
   modalBg: {
     flex: 1,

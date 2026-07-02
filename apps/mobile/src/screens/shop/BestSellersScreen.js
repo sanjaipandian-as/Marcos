@@ -138,8 +138,8 @@ export default function BestSellersScreen({ navigation }) {
           >
             <Heart 
               size={14} 
-              color={isFav ? '#ef4444' : '#767676'} 
-              fill={isFav ? '#ef4444' : 'transparent'} 
+              color={isFav ? '#3D2E3D' : '#767676'} 
+              fill={isFav ? '#3D2E3D' : 'transparent'} 
             />
           </TouchableOpacity>
 
@@ -149,14 +149,14 @@ export default function BestSellersScreen({ navigation }) {
         </View>
 
         <View style={styles.prodInfo}>
-          <Text style={[styles.prodName, { fontFamily: fonts.semiBold, color: theme.text.primary }]} numberOfLines={1}>
+          <Text style={[styles.prodName, { fontFamily: fonts.semiBold, color: '#3D2E3D' }]} numberOfLines={2}>
             {item.name}
           </Text>
           
           <View style={styles.priceRow}>
             <View style={styles.priceContainer}>
-              <Text style={{ fontSize: 10, color: '#94a3b8', marginBottom: 2 }}>Starts from</Text>
-              <Text style={[styles.prodPrice, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+              <Text style={{ fontSize: 10, color: '#7A6B7A', marginBottom: 2 }}>Starts from</Text>
+              <Text style={[styles.prodPrice, { fontFamily: fonts.bold, color: '#3D2E3D' }]}>
                 ₹{Number(item.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
               </Text>
               {originalPrice ? (
@@ -170,16 +170,16 @@ export default function BestSellersScreen({ navigation }) {
               style={[
                 styles.cartIconBtn,
                 inCart
-                  ? { backgroundColor: theme.brand[500], borderWidth: 1, borderColor: theme.brand[500] }
-                  : { backgroundColor: '#ffffff', borderWidth: 1, borderColor: theme.brand[500] }
+                  ? { backgroundColor: '#3D2E3D', borderWidth: 1, borderColor: '#3D2E3D' }
+                  : { backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#D8BFD8' }
               ]} 
               onPress={() => handleAddToCart(item.id)}
               activeOpacity={0.7}
             >
               {inCart ? (
-                <CustomCartAddedIcon color="#ffffff" size={18} />
+                <CustomCartAddedIcon color="#FDFBFD" size={18} />
               ) : (
-                <CustomCartAddIcon color={theme.brand[500]} size={18} />
+                <CustomCartAddIcon color="#3D2E3D" size={18} />
               )}
             </TouchableOpacity>
           </View>
@@ -209,7 +209,7 @@ export default function BestSellersScreen({ navigation }) {
           <ArrowLeft size={22} color={theme.text.primary} />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-          <Text style={[styles.headerTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+          <Text style={[styles.headerTitle, { fontFamily: fonts.bold, color: '#3D2E3D' }]}>
             Best Sellers
           </Text>
           <Text style={[styles.headerSubtitle, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
@@ -221,7 +221,7 @@ export default function BestSellersScreen({ navigation }) {
           activeOpacity={0.7} 
           onPress={() => setShowCategories(v => !v)}
         >
-          <SlidersHorizontal size={18} color={showCategories ? '#ffffff' : theme.text.primary} />
+          <SlidersHorizontal size={18} color={showCategories ? '#3D2E3D' : theme.text.primary} />
         </TouchableOpacity>
       </View>
 
@@ -245,7 +245,7 @@ export default function BestSellersScreen({ navigation }) {
                   style={[
                     styles.categoryTabText,
                     { fontFamily: fonts.medium },
-                    isActive ? { color: '#ffffff' } : { color: theme.text.primary }
+                    isActive ? { color: '#ffffff' } : { color: '#3D2E3D' }
                   ]}
                 >
                   {tab}
@@ -412,7 +412,7 @@ const styles = StyleSheet.create({
   },
   originalPriceText: {
     fontSize: 10,
-    color: '#9e9e9e',
+    color: '#B8A8B8',
     textDecorationLine: 'line-through',
     marginTop: 1,
   },

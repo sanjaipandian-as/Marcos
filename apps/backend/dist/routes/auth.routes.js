@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const auth_controller_js_1 = require("../controllers/auth.controller.js");
+const voucherPlan_controller_js_1 = require("../controllers/voucherPlan.controller.js");
 const validate_middleware_js_1 = require("../middlewares/validate.middleware.js");
 const auth_middleware_js_1 = require("../middlewares/auth.middleware.js");
 const rateLimit_middleware_js_1 = require("../middlewares/rateLimit.middleware.js");
@@ -25,4 +26,9 @@ router.delete('/delete-account', auth_middleware_js_1.authenticate, auth_control
 // Loyalty Points Redemption route
 router.post('/loyalty/redeem', auth_middleware_js_1.authenticate, (0, validate_middleware_js_1.validate)(auth_controller_js_1.redeemPointsSchema), auth_controller_js_1.AuthController.redeemPoints);
 router.get('/loyalty/coupons', auth_middleware_js_1.authenticate, auth_controller_js_1.AuthController.listUserCoupons);
+// Voucher Plans Management routes
+router.get('/loyalty/voucher-plans', auth_middleware_js_1.authenticate, voucherPlan_controller_js_1.VoucherPlanController.listVoucherPlans);
+router.get('/admin/loyalty/voucher-plans', auth_middleware_js_1.authenticate, voucherPlan_controller_js_1.VoucherPlanController.adminListVoucherPlans);
+router.post('/admin/loyalty/voucher-plans', auth_middleware_js_1.authenticate, voucherPlan_controller_js_1.VoucherPlanController.adminCreateVoucherPlan);
+router.delete('/admin/loyalty/voucher-plans/:id', auth_middleware_js_1.authenticate, voucherPlan_controller_js_1.VoucherPlanController.adminDeactivateVoucherPlan);
 exports.default = router;

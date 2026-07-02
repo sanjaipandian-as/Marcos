@@ -1,7 +1,7 @@
 import React from 'react';
 import Svg, { Path } from 'react-native-svg';
 
-export const CustomCartAddIcon = ({ color = '#e85c1c', size = 14 }) => (
+export const CustomCartAddIcon = ({ color = '#ad83ad', size = 14 }) => (
   <Svg width={size} height={size} viewBox="0 0 64 64">
     <Path fill={color} d="m30.9 47.1c0.1-6.7 5.2-15.1 14.6-16.2 1-0.1 2.9-0.3 4.9 0l0.8 0.1-1.4-11.8c-0.4-2.5-2.9-5.4-6.8-5.4h-3.7v8.2c0 1.9-2.8 2.2-2.8 0.1v-8.3h-16.9v8.4c0 1.8-2.8 1.7-2.8-0.1v-8.3h-3.5c-3.3 0-6.2 2.3-7 5.4l-4.2 34.7c-0.2 4 2.8 7.5 6.9 7.5h29.4c-4.3-2.4-7.5-7.4-7.5-14.3z" />
     <Path fill={color} d="m28.3 2.6c-6 0-11.4 4.9-11.5 11.2h2.8c0.1-4.4 3.6-8.3 8.6-8.5 4.6 0 8.1 3.5 8.3 8.5h2.8c-0.1-5.9-4.6-11.2-11-11.2z" />
@@ -9,7 +9,7 @@ export const CustomCartAddIcon = ({ color = '#e85c1c', size = 14 }) => (
   </Svg>
 );
 
-export const CustomCartAddedIcon = ({ color = '#e85c1c', size = 14 }) => (
+export const CustomCartAddedIcon = ({ color = '#ad83ad', size = 14 }) => (
   <Svg width={size} height={size} viewBox="0 0 99.8 102">
     <Path fill={color} d="m45.7 75.8c0-13.8 10.8-28.8 28.5-28.9 2-0.1 4.9 0.1 7.5 0.9l-2.1-17.8c-0.5-5-4.8-9.8-10.6-9.8h-6.6v13.2c0 2.6-4.4 3-4.4-0.2v-13h-26.4v13.5c-0.2 3.1-4.9 2-4.9-0.5v-13h-6.4c-5.1 0-10.3 4.3-10.9 9.8l-7.3 55.9c-0.8 5.9 3.2 13.3 11.5 13.3h45.2c-7.7-4.2-13.1-12.6-13.1-23.4z" />
     <Path fill={color} d="m31.3 20.3h30.8c1-11.5-11.7-23.3-24.2-16.7-5.6 2.5-11.2 8.1-11.2 16.1v0.6zm13.6-13.4c7 0 13 5.5 13 13v0.4h-26.6c0-7.3 5.8-13.4 13.6-13.4z" />

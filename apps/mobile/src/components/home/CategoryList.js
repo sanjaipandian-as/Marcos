@@ -23,15 +23,19 @@ export default function CategoryList({ categories, theme, fonts, shadows, naviga
       <View style={styles.categoriesGrid}>
         {/* "All" Category Pill */}
         <TouchableOpacity
-          style={[styles.categoryPill, { backgroundColor: theme.brand[50] }]}
+          style={[styles.categoryPill, { backgroundColor: theme.brand[500] }]}
           activeOpacity={0.9}
           onPress={() => navigation.navigate('Browse')}
         >
-          <Text style={[styles.categoryPillText, { fontFamily: fonts.bold, color: theme.brand[600] }]} numberOfLines={1}>
+          <Text style={[styles.categoryPillText, { fontFamily: fonts.bold, color: '#3D2E3D' }]} numberOfLines={2}>
             All
           </Text>
-          <View style={[styles.categoryPillImageContainer, { backgroundColor: '#ffffff' }]}>
-            <LayoutGrid size={16} color={theme.brand[500]} />
+          <View style={styles.categoryPillImageContainer}>
+            <Image
+              source={{ uri: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=100&q=80' }}
+              style={styles.categoryPillImage}
+              resizeMode="cover"
+            />
           </View>
         </TouchableOpacity>
 
@@ -43,7 +47,7 @@ export default function CategoryList({ categories, theme, fonts, shadows, naviga
             activeOpacity={0.8}
             onPress={() => navigation.navigate('Browse', { categoryId: category.id })}
           >
-            <Text style={[styles.categoryPillText, { fontFamily: fonts.semiBold, color: theme.text.primary }]} numberOfLines={1}>
+            <Text style={[styles.categoryPillText, { fontFamily: fonts.semiBold, color: theme.text.primary }]} numberOfLines={2}>
               {category.name}
             </Text>
             <View style={styles.categoryPillImageContainer}>

@@ -1,31 +1,35 @@
 export const theme = {
-  name: 'MarcosOrange',
+  name: 'MarcosThistle',
   brand: {
-    50: '#fff7ed',
-    100: '#ffedd5',
-    200: '#fed7aa',
-    300: '#fdba74',
-    400: '#fb923c',
-    500: '#e85c1c', // Primary Vibrant Accent Orange
-    600: '#ea580c',
-    700: '#c2410c',
-    800: '#9a3412',
-    900: '#7c2d12',
+    50: '#faf5fa',
+    100: '#f3eaf3',
+    200: '#ebe0eb',
+    300: '#e3d4e3',
+    400: '#dcc8dc',
+    500: '#D8BFD8', // Primary Vibrant Accent Thistle
+    600: '#C4A4C4', // Hover/Pressed state
+    700: '#ad83ad',
+    800: '#8f5c8f',
+    900: '#3D2E3D', // Heading text
   },
   bg: {
-    main: '#fcfaf7', // Soft warm cream/off-white background
-    card: '#ffffff',
-    hover: '#fdfbfa',
-    input: '#f5f5f7',
+    main: '#F7F4F9', // App background
+    card: '#FFFFFF', // Card background
+    hover: '#EDE0ED', // Accent tint (badges/chips)
+    banner: '#F5EEF5', // Section background
+    input: '#F7F4F9',
   },
-  glow: 'rgba(232, 92, 28, 0.15)',
+  glow: 'rgba(216, 191, 216, 0.15)',
   text: {
-    primary: '#1e1e1e', // Soft charcoal black
-    secondary: '#767676', // Slate grey
-    muted: '#9e9e9e',
-    light: '#ffffff',
+    primary: '#3D2E3D', // Heading text plum
+    secondary: '#7A6B7A', // Body/secondary text
+    muted: '#B8A8B8',
+    light: '#FFFFFF',
   },
-  border: '#f0f0f2',
+  border: '#E8D9E8', // Borders/dividers
+  success: '#639922',
+  warning: '#BA7517',
+  error: '#E24B4A',
 };
 
 export const fonts = {
@@ -38,14 +42,14 @@ export const fonts = {
 
 export const shadows = {
   premium: {
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 12,
-    elevation: 2,
+    shadowColor: '#101828',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 1,
   },
   glow: {
-    shadowColor: '#006241',
+    shadowColor: '#d8bfd8',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.2,
     shadowRadius: 10,

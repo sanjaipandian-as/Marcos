@@ -215,7 +215,7 @@ export default function CartScreen({ navigation }) {
             style={[styles.exploreBtn, { backgroundColor: theme.brand[500] }]}
             onPress={() => navigation.navigate('Browse')}
           >
-            <Text style={[styles.exploreBtnText, { fontFamily: fonts.bold, color: '#ffffff' }]}>
+            <Text style={[styles.exploreBtnText, { fontFamily: fonts.bold, color: '#3D2E3D' }]}>
               EXPLORE CATALOG
             </Text>
           </TouchableOpacity>
@@ -240,7 +240,7 @@ export default function CartScreen({ navigation }) {
                 />
                 <View style={styles.itemInfo}>
                   <View style={styles.itemHeader}>
-                    <Text style={[styles.itemName, { fontFamily: fonts.bold, color: theme.text.primary }]} numberOfLines={1}>
+                    <Text style={[styles.itemName, { fontFamily: fonts.bold, color: theme.text.primary }]} numberOfLines={2}>
                       {item.product.name}
                     </Text>
                     <TouchableOpacity onPress={() => handleRemoveItem(item.productId)} activeOpacity={0.7} style={styles.deleteBtn}>
@@ -252,7 +252,7 @@ export default function CartScreen({ navigation }) {
                   </Text>
                   <View style={styles.priceRow}>
                     <View>
-            <Text style={{ fontSize: 10, color: '#94a3b8', marginBottom: 2 }}>Starts from</Text>
+            <Text style={{ fontSize: 10, color: '#7A6B7A', marginBottom: 2 }}>Starts from</Text>
             <Text style={[styles.itemPrice, { fontFamily: fonts.bold, color: theme.text.primary }]}>
                       ₹{Number(item.product.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                     </Text>
@@ -281,7 +281,7 @@ export default function CartScreen({ navigation }) {
                         disabled={qtyUpdating === item.productId}
                         activeOpacity={0.7}
                       >
-                        <Plus size={16} color="#ffffff" />
+                        <Plus size={16} color="#3D2E3D" />
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -604,7 +604,7 @@ const styles = StyleSheet.create({
   },
   checkoutText: {
     fontSize: 16,
-    color: '#ffffff',
+    color: '#3D2E3D',
   },
   emptyContainer: {
     flex: 1,

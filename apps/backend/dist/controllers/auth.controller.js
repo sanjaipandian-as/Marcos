@@ -105,9 +105,8 @@ exports.updateProfileSchema = zod_1.z.object({
 // Redeem points schema
 exports.redeemPointsSchema = zod_1.z.object({
     body: zod_1.z.object({
-        pointsToRedeem: zod_1.z.coerce.number().int().refine(val => [500, 1000].includes(val), {
-            message: 'Points to redeem must be either 500 or 1000',
-        }),
+        voucherPlanId: zod_1.z.string().uuid().optional(),
+        pointsToRedeem: zod_1.z.coerce.number().int().optional(),
     }),
 });
 // Verify password schema
@@ -862,9 +861,34 @@ class AuthController {
      */
     static async redeemPoints(req, res, next) {
         const userId = req.user.id;
-        const { pointsToRedeem } = req.body;
+        const { voucherPlanId, pointsToRedeem: legacyPoints } = req.body;
         try {
             const result = await db_js_1.default.$transaction(async (tx) => {
+                let pointsRequired = 0;
+                let discountFlat = 0;
+                let reasonLabel = '';
+                if (voucherPlanId) {
+                    const plan = await tx.voucherPlan.findUnique({
+                        where: { id: voucherPlanId }
+                    });
+                    if (!plan) {
+                        throw new Error('Voucher plan not found.');
+                    }
+                    if (!plan.isActive) {
+                        throw new Error('Voucher plan is inactive.');
+                    }
+                    pointsRequired = plan.pointsRequired;
+                    discountFlat = Number(plan.discountFlat);
+                    reasonLabel = plan.title;
+                }
+                else if (legacyPoints) {
+                    pointsRequired = legacyPoints;
+                    discountFlat = legacyPoints === 500 ? 500.00 : 1200.00;
+                    reasonLabel = `₹${discountFlat} Discount Voucher`;
+                }
+                else {
+                    throw new Error('Either voucherPlanId or pointsToRedeem is required.');
+                }
                 const user = await tx.user.findUnique({
                     where: { id: userId },
                     select: { pointsBalance: true }
@@ -872,12 +896,11 @@ class AuthController {
                 if (!user) {
                     throw new Error('User not found.');
                 }
-                if (user.pointsBalance < pointsToRedeem) {
+                if (user.pointsBalance < pointsRequired) {
                     throw new Error('Insufficient points balance.');
                 }
-                const discountFlat = pointsToRedeem === 500 ? 500.00 : 1200.00;
                 // Generate unique coupon code
-                const code = `REDEEM-${pointsToRedeem}-${crypto_1.default.randomBytes(3).toString('hex').toUpperCase()}`;
+                const code = `REDEEM-${pointsRequired}-${crypto_1.default.randomBytes(3).toString('hex').toUpperCase()}`;
                 const expiryDate = new Date();
                 expiryDate.setDate(expiryDate.getDate() + 30); // Valid for 30 days
                 // 1. Create Coupon in database
@@ -896,7 +919,7 @@ class AuthController {
                 // 2. Decrement User points balance
                 const updatedUser = await tx.user.update({
                     where: { id: userId },
-                    data: { pointsBalance: { decrement: pointsToRedeem } }
+                    data: { pointsBalance: { decrement: pointsRequired } }
                 });
                 if (updatedUser.pointsBalance < 0) {
                     throw new Error('Insufficient points balance.');
@@ -905,11 +928,11 @@ class AuthController {
                 await tx.pointTransaction.create({
                     data: {
                         userId,
-                        points: -pointsToRedeem,
+                        points: -pointsRequired,
                         reason: `Redeemed points for Coupon: ${code}`
                     }
                 });
-                return { couponCode: code, discountFlat, pointsRemaining: updatedUser.pointsBalance };
+                return { couponCode: code, discountFlat, pointsRemaining: updatedUser.pointsBalance, pointsRequired, reasonLabel };
             });
             // Log points redeemed
             await (0, audit_js_1.createAuditLog)({
@@ -917,8 +940,8 @@ class AuthController {
                 action: 'POINTS_REDEEMED',
                 ipAddress: req.ip,
                 details: {
-                    message: `Customer redeemed ${pointsToRedeem} points for a ₹${result.discountFlat} discount coupon (${result.couponCode})`,
-                    pointsRedeemed: pointsToRedeem,
+                    message: `Customer redeemed ${result.pointsRequired} points for a ₹${result.discountFlat} discount coupon (${result.couponCode})`,
+                    pointsRedeemed: result.pointsRequired,
                     discountFlat: result.discountFlat,
                     couponCode: result.couponCode,
                 },

@@ -25,10 +25,27 @@ function TopSellingCard({ item, index, onShopPress, onAddToCart, inCart, theme, 
           style={styles.image}
           resizeMode="cover"
         />
-        {/* Giant translucent number overlay on the image */}
-        <Text style={[styles.rankNumber, { fontFamily: fonts.bold }]}>
-          {rank}
-        </Text>
+        {/* Circular ranking badge in top-left corner */}
+        <View style={{
+          position: 'absolute',
+          top: 8,
+          left: 8,
+          width: 24,
+          height: 24,
+          borderRadius: 12,
+          backgroundColor: '#D8BFD8',
+          alignItems: 'center',
+          justifyContent: 'center',
+          elevation: 2,
+          shadowColor: '#101828',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.1,
+          shadowRadius: 2,
+        }}>
+          <Text style={{ fontSize: 11, fontFamily: fonts.bold, color: '#3D2E3D' }}>
+            {rank}
+          </Text>
+        </View>
       </View>
 
       <View style={styles.detailsContainer}>
@@ -44,7 +61,7 @@ function TopSellingCard({ item, index, onShopPress, onAddToCart, inCart, theme, 
         <View style={styles.bottomRow}>
           <View>
             <Text style={{ fontSize: 10, color: theme.text.secondary, marginBottom: 2 }}>Starts from</Text>
-            <Text style={[styles.price, { color: theme.brand[500], fontFamily: fonts.bold }]}>
+            <Text style={[styles.price, { color: '#3D2E3D', fontFamily: fonts.bold }]}>
               ₹{Math.round(Number(item.price))}
             </Text>
           </View>
@@ -52,20 +69,22 @@ function TopSellingCard({ item, index, onShopPress, onAddToCart, inCart, theme, 
           <TouchableOpacity
             style={[
               styles.actionBtn,
-              { backgroundColor: inCart ? theme.brand[500] : theme.brand[50] }
+              inCart
+                ? { backgroundColor: '#3D2E3D', borderWidth: 1, borderColor: '#3D2E3D' }
+                : { backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#D8BFD8' }
             ]}
             onPress={onAddToCart}
             activeOpacity={0.8}
           >
             {inCart ? (
               <>
-                <Text style={{ color: '#fff', fontFamily: fonts.semiBold, fontSize: 12, marginRight: 6 }}>View</Text>
-                <CustomCartAddedIcon color="#fff" size={16} />
+                <Text style={{ color: '#FDFBFD', fontFamily: fonts.semiBold, fontSize: 12, marginRight: 6 }}>View</Text>
+                <CustomCartAddedIcon color="#FDFBFD" size={16} />
               </>
             ) : (
               <>
-                <Text style={{ color: theme.brand[500], fontFamily: fonts.semiBold, fontSize: 12, marginRight: 6 }}>Add</Text>
-                <CustomCartAddIcon color={theme.brand[500]} size={16} />
+                <Text style={{ color: '#3D2E3D', fontFamily: fonts.semiBold, fontSize: 12, marginRight: 6 }}>Add</Text>
+                <CustomCartAddIcon color="#3D2E3D" size={16} />
               </>
             )}
           </TouchableOpacity>
@@ -170,17 +189,6 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: '100%',
-  },
-  rankNumber: {
-    position: 'absolute',
-    left: 4,
-    bottom: -8,
-    fontSize: 76,
-    color: 'rgba(255,255,255,0.95)',
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 0, height: 4 },
-    textShadowRadius: 8,
-    includeFontPadding: false,
   },
   detailsContainer: {
     flex: 1,

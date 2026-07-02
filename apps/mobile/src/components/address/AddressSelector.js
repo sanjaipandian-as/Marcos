@@ -53,18 +53,104 @@ export default function AddressSelector({
   const [newAddressType, setNewAddressType] = useState('home');
 
   const getParsedAddresses = () => {
-    const addressStr = userProfile?.address;
+    let addressStr = userProfile?.address;
     if (!addressStr || addressStr === '[]') {
       return [];
     }
-    try {
-      const parsed = JSON.parse(addressStr);
-      if (Array.isArray(parsed)) {
-        return parsed;
+
+    const parseAddressItem = (item) => {
+      if (typeof item === 'string') {
+        try {
+          const parsed = JSON.parse(item);
+          if (parsed && (Array.isArray(parsed) || typeof parsed === 'object')) {
+            return parseAddressItem(parsed);
+          }
+        } catch (e) {
+          // Plain string
+        }
+        return [
+          {
+            id: 'default',
+            name: userProfile?.fullName || 'My Address',
+            address: item,
+            city: '',
+            area: '',
+            pincode: '',
+            phone: userProfile?.phoneNumber || '',
+            phone2: '',
+            selected: true,
+            type: 'home'
+          }
+        ];
       }
+
+      if (Array.isArray(item)) {
+        let flattened = [];
+        item.forEach(subItem => {
+          flattened = flattened.concat(parseAddressItem(subItem));
+        });
+        return flattened;
+      }
+
+      if (item && typeof item === 'object') {
+        if (typeof item.address === 'string' && (item.address.trim().startsWith('[') || item.address.trim().startsWith('{'))) {
+          try {
+            const nested = JSON.parse(item.address);
+            const resolved = parseAddressItem(nested);
+            if (resolved.length > 0) {
+              return resolved.map(r => ({
+                ...r,
+                selected: r.selected || item.selected,
+                type: r.type || item.type || 'home'
+              }));
+            }
+          } catch (e) {
+            // Treat as plain text
+          }
+        }
+
+        return [
+          {
+            id: item.id || Date.now().toString() + Math.random().toString(36).substring(2, 5),
+            name: item.name || userProfile?.fullName || 'My Address',
+            address: item.address || item.street || '',
+            landmark: item.landmark || '',
+            city: item.city || '',
+            area: item.area || '',
+            pincode: item.pincode || '',
+            phone: item.phone || userProfile?.phoneNumber || '',
+            phone2: item.phone2 || '',
+            selected: item.selected === true,
+            type: item.type || 'home'
+          }
+        ];
+      }
+
+      return [];
+    };
+
+    try {
+      let parsed = JSON.parse(addressStr);
+      let list = parseAddressItem(parsed);
+      
+      const seen = new Set();
+      const uniqueList = [];
+      list.forEach(addr => {
+        const uniqueKey = `${addr.name}_${addr.address}_${addr.pincode}`;
+        if (!seen.has(uniqueKey) && addr.address) {
+          seen.add(uniqueKey);
+          uniqueList.push(addr);
+        }
+      });
+
+      if (uniqueList.length > 0 && !uniqueList.some(a => a.selected)) {
+        uniqueList[0].selected = true;
+      }
+      return uniqueList;
     } catch (e) {
-      // Not a JSON array
+      // Fallback
     }
+
     return [
       {
         id: 'default',
@@ -614,8 +700,8 @@ const styles = StyleSheet.create({
     height: 48,
   },
   typeOptionActive: {
-    backgroundColor: '#e85c1c',
-    borderColor: '#e85c1c',
+    backgroundColor: '#d8bfd8',
+    borderColor: '#d8bfd8',
   },
   typeText: {
     fontSize: 13,
@@ -645,7 +731,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   formBtnSave: {
-    backgroundColor: '#e85c1c',
+    backgroundColor: '#d8bfd8',
   },
   formBtnSaveText: {
     color: '#ffffff',
@@ -658,9 +744,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#fff7ed',
+    backgroundColor: '#faf5fa',
     borderWidth: 1,
-    borderColor: '#fed7aa',
+    borderColor: '#ebe0eb',
     borderRadius: 12,
     padding: 14,
     marginBottom: 20,
@@ -671,7 +757,7 @@ const styles = StyleSheet.create({
   },
   addNewText: {
     fontSize: 14,
-    color: '#e85c1c',
+    color: '#d8bfd8',
   },
   savedAddressesTitle: {
     fontSize: 13,
@@ -721,16 +807,16 @@ const styles = StyleSheet.create({
     color: '#1e293b',
   },
   selectedBadge: {
-    backgroundColor: '#ffedd5',
+    backgroundColor: '#f3eaf3',
     borderWidth: 0.5,
-    borderColor: '#fdba74',
+    borderColor: '#e3d4e3',
     borderRadius: 4,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
   selectedBadgeText: {
     fontSize: 10,
-    color: '#e85c1c',
+    color: '#d8bfd8',
   },
   addressCardText: {
     fontSize: 12,

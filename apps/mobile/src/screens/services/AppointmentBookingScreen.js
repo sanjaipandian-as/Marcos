@@ -622,7 +622,7 @@ export default function AppointmentBookingScreen({ navigation }) {
               {errors.notes && <Text style={styles.errorText}>{errors.notes}</Text>}
 
               <TouchableOpacity style={[styles.submitBtn, { backgroundColor: theme.brand[500] }]} onPress={handleBooking} disabled={submitting}>
-                {submitting ? <ActivityIndicator color="#ffffff" /> : <Text style={[styles.submitBtnText, { color: '#ffffff', fontFamily: fonts.bold }]}>CONFIRM BOOKING</Text>}
+                {submitting ? <ActivityIndicator color="#3D2E3D" /> : <Text style={[styles.submitBtnText, { color: '#3D2E3D', fontFamily: fonts.bold }]}>CONFIRM BOOKING</Text>}
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -700,9 +700,9 @@ export default function AppointmentBookingScreen({ navigation }) {
                 disabled={submitting}
               >
                 {submitting ? (
-                  <ActivityIndicator color="#ffffff" />
+                  <ActivityIndicator color="#3D2E3D" />
                 ) : (
-                  <Text style={[styles.submitBtnText, { color: '#ffffff', fontFamily: fonts.bold }]}>
+                  <Text style={[styles.submitBtnText, { color: '#3D2E3D', fontFamily: fonts.bold }]}>
                     CONFIRM RESCHEDULE
                   </Text>
                 )}
@@ -743,7 +743,7 @@ const styles = StyleSheet.create({
   },
   bookingTypeToggle: { flexDirection: 'row', marginHorizontal: 24, marginTop: 14, backgroundColor: '#ffffff', borderRadius: 16, padding: 6 },
   toggleBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 12 },
-  activeToggle: { backgroundColor: '#e85c1c' },
+  activeToggle: { backgroundColor: '#d8bfd8' },
   toggleText: { fontSize: 13, color: '#767676' },
   activeToggleText: { color: '#ffffff' },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -803,7 +803,7 @@ const styles = StyleSheet.create({
   cardActionBtnTextPremium: {
     fontSize: 13,
   },
-  fab: { position: 'absolute', bottom: 30, right: 24, width: 60, height: 60, borderRadius: 30, backgroundColor: '#006241', alignItems: 'center', justifyContent: 'center', elevation: 8 },
+  fab: { position: 'absolute', bottom: 30, right: 24, width: 60, height: 60, borderRadius: 30, backgroundColor: '#d8bfd8', alignItems: 'center', justifyContent: 'center', elevation: 8 },
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalCard: { backgroundColor: '#ffffff', borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, paddingBottom: 0 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
@@ -814,11 +814,11 @@ const styles = StyleSheet.create({
   textInput: { backgroundColor: '#f8fafc', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0', fontSize: 15, color: '#1e293b', marginBottom: 16, textAlignVertical: 'top' },
   slotsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
   slot: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0' },
-  activeSlot: { backgroundColor: '#006241', borderColor: '#006241' },
+  activeSlot: { backgroundColor: '#d8bfd8', borderColor: '#d8bfd8' },
   slotText: { fontSize: 12, color: '#64748b' },
-  activeSlotText: { color: '#ffffff' },
-  submitBtn: { backgroundColor: '#006241', height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginTop: 10 },
-  submitBtnText: { color: '#ffffff', fontSize: 16 },
+  activeSlotText: { color: '#3D2E3D' },
+  submitBtn: { backgroundColor: '#d8bfd8', height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginTop: 10 },
+  submitBtnText: { color: '#3D2E3D', fontSize: 16 },
   errorText: { color: '#ef4444', fontSize: 12, marginTop: -12, marginBottom: 12, marginLeft: 4 },
   calendarOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 24 },
   calendarCard: { backgroundColor: '#ffffff', borderRadius: 24, padding: 20 },
@@ -830,11 +830,11 @@ const styles = StyleSheet.create({
   dayCell: { width: '14.28%', height: 45, alignItems: 'center', justifyContent: 'center' },
   dayText: { fontSize: 14 },
   closeCalendarBtn: { marginTop: 20, alignItems: 'center', padding: 12 },
-  closeCalendarBtnText: { color: '#006241' },
+  closeCalendarBtnText: { color: '#ad83ad' },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16, paddingBottom: 100 },
   emptyTitle: { fontSize: 18, color: '#64748b' },
-  mainBookBtn: { backgroundColor: '#006241', paddingHorizontal: 24, paddingVertical: 14, borderRadius: 16 },
-  mainBookBtnText: { color: '#ffffff', fontSize: 15 },
+  mainBookBtn: { backgroundColor: '#d8bfd8', paddingHorizontal: 24, paddingVertical: 14, borderRadius: 16 },
+  mainBookBtnText: { color: '#3D2E3D', fontSize: 15 },
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',

@@ -125,10 +125,10 @@ const LEAFLET_MAP_HTML = `
 
     function addStoreMarker(id, name, lat, lng, isSelected) {
       var markerSize = isSelected ? 42 : 34;
-      var bgColor = isSelected ? "#e85c1c" : "#ffffff";
-      var iconColor = isSelected ? "#ffffff" : "#e85c1c";
-      var shadowSpread = isSelected ? "0 4px 16px rgba(232,92,28,0.4)" : "0 2px 8px rgba(0,0,0,0.15)";
-      var borderColor = isSelected ? "#e85c1c" : "#f0f0f2";
+      var bgColor = isSelected ? "#d8bfd8" : "#ffffff";
+      var iconColor = isSelected ? "#ffffff" : "#d8bfd8";
+      var shadowSpread = isSelected ? "0 4px 16px rgba(216,191,216,0.4)" : "0 2px 8px rgba(0,0,0,0.15)";
+      var borderColor = isSelected ? "#d8bfd8" : "#f0f0f2";
       
       var icon = L.divIcon({
         className: 'store-marker' + (isSelected ? ' selected' : ''),
@@ -751,13 +751,13 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 12,
-    backgroundColor: 'rgba(232,92,28,0.9)',
+    backgroundColor: 'rgba(216,191,216,0.9)',
     alignItems: 'center',
     justifyContent: 'center',
     ...Platform.select({
       android: { elevation: 6 },
       ios: {
-        shadowColor: '#e85c1c',
+        shadowColor: '#d8bfd8',
         shadowOpacity: 0.35,
         shadowRadius: 8,
         shadowOffset: { width: 0, height: 3 },
@@ -871,7 +871,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       android: { elevation: 8 },
       ios: {
-        shadowColor: '#e85c1c',
+        shadowColor: '#d8bfd8',
         shadowOpacity: 0.25,
         shadowRadius: 16,
         shadowOffset: { width: 0, height: 6 },
