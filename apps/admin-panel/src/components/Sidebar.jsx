@@ -38,8 +38,6 @@ export default function Sidebar({
   setTheme,
   isSidebarOpen,
   setIsSidebarOpen,
-  apiMode,
-  setApiMode,
   onLogout
 }) {
   const [counts, setCounts] = React.useState({
@@ -112,7 +110,7 @@ export default function Sidebar({
       window.removeEventListener('ws_mock_alert', fetchCounts);
       clearInterval(interval);
     };
-  }, [apiMode, activeTab]);
+  }, [activeTab]);
 
   const menuGroups = [
     {
@@ -189,12 +187,6 @@ export default function Sidebar({
     }
   ];
 
-  const toggleApiMode = () => {
-    const nextMode = apiMode === 'live' ? 'demo' : 'live';
-    api.setLiveMode(nextMode === 'live');
-    setApiMode(nextMode);
-    window.location.reload();
-  };
 
   const user = api.getCurrentUser();
   const userRole = user ? user.role : 'CUSTOMER';
@@ -352,37 +344,6 @@ export default function Sidebar({
 
         {/* Configurations Controls Box at Sidebar Bottom */}
         <div className="p-4 border-t border-[#F0E5F0] bg-[#FDFBFD] space-y-4 shrink-0">
-          {/* Fallback Mode Toggle */}
-          <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-[#F0E5F0] shadow-sm">
-            <div className="flex items-center gap-2">
-              {apiMode === 'live' ? (
-                <Globe className="w-4 h-4 text-emerald-600 animate-pulse" />
-              ) : (
-                <Database className="w-4 h-4 text-orange-600" />
-              )}
-              <div className="flex flex-col">
-                <span className="text-[11px] font-bold text-[#3D2E3D]">
-                  {apiMode === 'live' ? 'Live API Server' : 'Demo Mode'}
-                </span>
-                <span className="text-[9px] text-[#7A6B7A]">
-                  {apiMode === 'live' ? 'Port 5000 Active' : 'LocalStorage DB'}
-                </span>
-              </div>
-            </div>
-            <button
-              onClick={toggleApiMode}
-              className={`
-                w-10 h-6 rounded-full transition-colors relative flex items-center px-0.5
-                ${apiMode === 'live' ? 'bg-emerald-600' : 'bg-slate-300'}
-              `}
-            >
-              <span className={`
-                w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200
-                ${apiMode === 'live' ? 'translate-x-4' : 'translate-x-0'}
-              `} />
-            </button>
-          </div>
-
           {/* Logout Button */}
           <button
             onClick={onLogout}

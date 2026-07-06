@@ -10,7 +10,7 @@ import {
   Trash2,
   Clock
 } from 'lucide-react';
-import { MockDB } from '../utils/mockData';
+import api from '../utils/api';
 
 export default function LiveAlertsFeed({ isOpen, onClose, onAlertsRead }) {
   const [alerts, setAlerts] = useState([]);
@@ -19,21 +19,28 @@ export default function LiveAlertsFeed({ isOpen, onClose, onAlertsRead }) {
 
   useEffect(() => {
     // Load initial alerts from audit logs for presentation
-    const logs = MockDB.get('m_audit_logs').slice(0, 8);
-    const initialAlerts = logs.map(l => ({
-      id: l.id,
-      type: l.action.includes('ORDER') ? 'order' : (l.action.includes('APPOINTMENT') || l.action.includes('VISIT') ? 'appointment' : 'security'),
-      title: l.action.replace(/_/g, ' '),
-      message: l.details?.message || l.details || '',
-      time: new Date(l.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      date: new Date(l.createdAt).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' }),
-      timestamp: new Date(l.createdAt).getTime(),
-      details: l.details,
-      severity: l.severity || 'INFO',
-      ipAddress: l.ipAddress || '127.0.0.1',
-      userName: l.userName || 'System'
-    }));
-    setAlerts(initialAlerts);
+    async function loadLogs() {
+      try {
+        const logs = await api.getAuditLogs();
+        const initialAlerts = (logs || []).slice(0, 8).map(l => ({
+          id: l.id,
+          type: l.action.includes('ORDER') ? 'order' : (l.action.includes('APPOINTMENT') || l.action.includes('VISIT') ? 'appointment' : 'security'),
+          title: l.action.replace(/_/g, ' '),
+          message: l.details?.message || l.details || '',
+          time: new Date(l.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          date: new Date(l.createdAt).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' }),
+          timestamp: new Date(l.createdAt).getTime(),
+          details: l.details,
+          severity: l.severity || 'INFO',
+          ipAddress: l.ipAddress || '127.0.0.1',
+          userName: l.userName || 'System'
+        }));
+        setAlerts(initialAlerts);
+      } catch (err) {
+        console.error("Failed to load initial audit logs:", err);
+      }
+    }
+    loadLogs();
     setIsConnected(true);
 
     // Listen to custom window events for mock websocket alerts
@@ -131,9 +138,6 @@ export default function LiveAlertsFeed({ isOpen, onClose, onAlertsRead }) {
     };
 
     setAlerts(prev => [mockAlert, ...prev]);
-    
-    // Add to audit logs also
-    MockDB.addAuditLog(randomEvent.title.replace(/ /g, '_'), { message: randomEvent.message }, randomEvent.type === 'security' ? 'WARNING' : 'INFO');
   };
 
   const getAlertIcon = (type) => {

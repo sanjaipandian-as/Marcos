@@ -10,6 +10,8 @@
   ],
   "scripts": {
     "install:all": "npm install",
+    "build": "npm run build --workspace=apps/backend",
+    "start": "npm run start --workspace=apps/backend",
     "dev:backend": "npm run dev --workspace=apps/backend",
     "dev:admin": "npm run dev --workspace=apps/admin-panel",
     "dev:mobile": "npm run start --workspace=apps/mobile"

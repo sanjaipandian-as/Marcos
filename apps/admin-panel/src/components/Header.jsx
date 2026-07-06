@@ -35,7 +35,6 @@ export default function Header({
   setActiveTab,
   theme,
   setIsSidebarOpen,
-  apiMode,
   onToggleLiveFeed,
   hasUnreadAlerts,
   currentUser

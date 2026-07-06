@@ -39,8 +39,6 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLiveFeedOpen, setIsLiveFeedOpen] = useState(false);
   const [hasUnreadAlerts, setHasUnreadAlerts] = useState(false);
-  const [apiMode, setApiMode] = useState('demo');
-
   useEffect(() => {
     const user = api.getCurrentUser();
     if (user) {
@@ -57,10 +55,6 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
-    // Sync current API mode configuration
-    const mode = api.getLiveMode() ? 'live' : 'demo';
-    setApiMode(mode);
-
     // Setup listener for real-time WebSocket mockup alarms to flash the notification bell
     const handleMockAlert = () => {
       if (!isLiveFeedOpen) {
@@ -197,8 +191,6 @@ export default function App() {
         setTheme={setTheme}
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
-        apiMode={apiMode}
-        setApiMode={setApiMode}
         onLogout={handleLogout}
       />
 
@@ -212,7 +204,6 @@ export default function App() {
           theme={theme}
           isSidebarOpen={isSidebarOpen}
           setIsSidebarOpen={setIsSidebarOpen}
-          apiMode={apiMode}
           onToggleLiveFeed={() => setIsLiveFeedOpen(!isLiveFeedOpen)}
           hasUnreadAlerts={hasUnreadAlerts}
           currentUser={currentUser}
