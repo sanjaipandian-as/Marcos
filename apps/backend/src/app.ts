@@ -36,24 +36,33 @@ app.use('/api/v1/billing/webhook', express.raw({ type: 'application/json' }));
 app.use(helmet({
   crossOriginResourcePolicy: false, // Allow local uploads to be requested by different domains
 }));
-const allowedOrigins = env.ALLOWED_ORIGINS
-  ? env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+
+// Known production origins — always permitted regardless of env var
+const PRODUCTION_ORIGINS = [
+  'https://marcos-admin-panel.vercel.app',
+  'https://marcos.app',
+];
+
+// Merge with any extra origins supplied via ALLOWED_ORIGINS env var
+const extraOrigins = env.ALLOWED_ORIGINS
+  ? env.ALLOWED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
   : [];
+const allowedOrigins = [...new Set([...PRODUCTION_ORIGINS, ...extraOrigins])];
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps, postman, curl)
+    // Allow requests with no origin (mobile apps, Postman, curl, Render health checks)
     if (!origin) return callback(null, true);
-    // Allow any localhost origin in development
+    // Allow any localhost / 127.0.0.1 origin in development
     if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
       return callback(null, true);
     }
-    // Allow configured production origins
+    // Allow all known production origins
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-    // Reject other origins
-    return callback(new Error('Not allowed by CORS'));
+    // Reject everything else
+    return callback(new Error(`CORS: origin '${origin}' is not allowed`));
   },
   credentials: true,
 }));
