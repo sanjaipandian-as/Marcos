@@ -23,7 +23,6 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import api from '../utils/api';
-import { MockDB } from '../utils/mockData';
 
 export default function OripioFinView({ setActiveTab }) {
   const [recentOrders, setRecentOrders] = useState([]);
@@ -88,9 +87,8 @@ export default function OripioFinView({ setActiveTab }) {
 
   const handleMonthChange = (monthKey) => {
     setSelectedMonth(monthKey);
-    const ledger = MockDB.get('m_calendar_cashflow');
-
-    const data = ledger[monthKey] || { total: 300000, inflow: 30000, outflow: 7000, list: [40000, 45000, 35000, 50000, 48000, 42000] };
+    // Static fallback cashflow data since MockDB is removed
+    const data = { total: 300000, inflow: 30000, outflow: 7000, list: [40000, 45000, 35000, 50000, 48000, 42000] };
 
     setCashFlowData({
       total: data.total,
@@ -105,32 +103,6 @@ export default function OripioFinView({ setActiveTab }) {
         revenue: val
       })));
     }
-  };
-
-  const handleAddMoneySubmit = (e) => {
-    e.preventDefault();
-    const parsedAmount = parseFloat(addAmount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) return;
-
-    const updated = wallets.map((w, idx) => {
-      if (idx === selectedWalletIdx) {
-        return { ...w, balance: w.balance + parsedAmount };
-      }
-      return w;
-    });
-
-    setWallets(updated);
-    MockDB.set('m_wallets', updated);
-
-    const logMsg = `Added ₹${parsedAmount.toLocaleString()} to ${wallets[selectedWalletIdx].code} wallet.`;
-    MockDB.addAuditLog('WALLET_FUNDED', {
-      message: logMsg,
-      walletCode: wallets[selectedWalletIdx].code,
-      amount: parsedAmount
-    }, 'INFO');
-
-    setShowAddMoney(false);
-    setAddAmount('');
   };
 
   const CustomTooltip = ({ active, payload }) => {
