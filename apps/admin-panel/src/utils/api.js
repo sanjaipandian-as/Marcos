@@ -1,6 +1,6 @@
 
 // API Configuration
-const BASE_URL = 'http://marcos-xxza.onrender.com/api/v1';
+const BASE_URL = 'https://marcos-xxza.onrender.com/api/v1';
 
 class APIClient {
   constructor() {
