@@ -12,6 +12,8 @@ import api from '../utils/api';
 export default function ReferralManager() {
   const [customers, setCustomers] = useState([]);
   const [copiedId, setCopiedId] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     loadCustomers();
@@ -89,88 +91,121 @@ export default function ReferralManager() {
           <span className="text-[10px] text-slate-400 font-bold">Updated Live</span>
         </div>
 
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                <th className="py-3 px-4">Client Name</th>
-                <th className="py-3 px-4">Referral Code</th>
-                <th className="py-3 px-4">Referred By</th>
-                <th className="py-3 px-4 text-center">Referrals Count</th>
-                <th className="py-3 px-4 text-right">Referral Link</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50 text-xs">
-              {customers.map((c) => (
-                <tr key={c.id} className="hover:bg-slate-50/50 transition-colors">
-                  <td className="py-3 px-4 font-bold text-slate-800">{c.fullName}</td>
-                  <td className="py-3 px-4 font-mono font-bold text-slate-650">{c.referralCode}</td>
-                  <td className="py-3 px-4 text-slate-500 font-medium">{getReferredBy(c.referredById)}</td>
-                  <td className="py-3 px-4 text-center font-bold text-slate-700">{getReferralsCount(c.id)}</td>
-                  <td className="py-3 px-4 text-right">
-                    <button
-                      onClick={() => handleCopyLink(c.referralCode, c.id)}
-                      className="inline-flex items-center gap-1 py-1 px-3 border border-slate-200 hover:bg-slate-50 rounded-xl text-slate-505 text-[10px] font-bold transition-all focus:outline-none"
-                    >
-                      {copiedId === c.id ? (
-                        <>
-                          <Check className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>Copied!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3.5 h-3.5" />
-                          <span>Copy link</span>
-                        </>
-                      )}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {(() => {
+          const totalPages = Math.ceil(customers.length / itemsPerPage);
+          const startIndex = (currentPage - 1) * itemsPerPage;
+          const paginatedCustomers = customers.slice(startIndex, startIndex + itemsPerPage);
 
-        <div className="md:hidden space-y-3">
-          {customers.map((c) => (
-            <div key={c.id} className="bg-slate-50/50 border border-slate-100 rounded-2xl p-4 space-y-3 hover:bg-slate-50 transition-colors">
-              <div className="flex justify-between items-center">
-                <span className="font-bold text-slate-800">{c.fullName}</span>
-                <span className="font-mono font-bold text-slate-600 text-[11px] bg-white border border-slate-150 px-2 py-0.5 rounded">
-                  {c.referralCode}
-                </span>
+          return (
+            <>
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <th className="py-3 px-4">Client Name</th>
+                      <th className="py-3 px-4">Referral Code</th>
+                      <th className="py-3 px-4">Referred By</th>
+                      <th className="py-3 px-4 text-center">Referrals Count</th>
+                      <th className="py-3 px-4 text-right">Referral Link</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50 text-xs">
+                    {paginatedCustomers.map((c) => (
+                      <tr key={c.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="py-3 px-4 font-bold text-slate-800">{c.fullName}</td>
+                        <td className="py-3 px-4 font-mono font-bold text-slate-650">{c.referralCode}</td>
+                        <td className="py-3 px-4 text-slate-500 font-medium">{getReferredBy(c.referredById)}</td>
+                        <td className="py-3 px-4 text-center font-bold text-slate-700">{getReferralsCount(c.id)}</td>
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            onClick={() => handleCopyLink(c.referralCode, c.id)}
+                            className="inline-flex items-center gap-1 py-1 px-3 border border-slate-200 hover:bg-slate-50 rounded-xl text-slate-505 text-[10px] font-bold transition-all focus:outline-none"
+                          >
+                            {copiedId === c.id ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>Copied!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3.5 h-3.5" />
+                                <span>Copy link</span>
+                              </>
+                            )}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <div className="flex justify-between items-center text-xs">
-                <div>
-                  <p className="text-slate-400 font-medium">Referred By</p>
-                  <p className="text-slate-705 font-semibold">{getReferredBy(c.referredById)}</p>
+
+              <div className="md:hidden space-y-3">
+                {paginatedCustomers.map((c) => (
+                  <div key={c.id} className="bg-slate-50/50 border border-slate-100 rounded-2xl p-4 space-y-3 hover:bg-slate-50 transition-colors">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-slate-800">{c.fullName}</span>
+                      <span className="font-mono font-bold text-slate-600 text-[11px] bg-white border border-slate-150 px-2 py-0.5 rounded">
+                        {c.referralCode}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <div>
+                        <p className="text-slate-400 font-medium">Referred By</p>
+                        <p className="text-slate-705 font-semibold">{getReferredBy(c.referredById)}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-slate-400 font-medium">Referrals Count</p>
+                        <p className="text-slate-705 font-bold">{getReferralsCount(c.id)}</p>
+                      </div>
+                    </div>
+                    <div className="pt-2 border-t border-slate-100 flex justify-end">
+                      <button
+                        onClick={() => handleCopyLink(c.referralCode, c.id)}
+                        className="inline-flex items-center gap-1 py-1 px-3 border border-slate-200 hover:bg-slate-50 rounded-xl text-slate-505 text-[10px] font-bold transition-all focus:outline-none"
+                      >
+                        {copiedId === c.id ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Copy link</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {totalPages > 1 && (
+                <div className="flex justify-between items-center pt-4 border-t border-slate-100">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="text-xs font-bold text-slate-500 hover:text-brand-600 disabled:opacity-50 disabled:hover:text-slate-500"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-[10px] font-bold text-slate-400">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="text-xs font-bold text-slate-500 hover:text-brand-600 disabled:opacity-50 disabled:hover:text-slate-500"
+                  >
+                    Next
+                  </button>
                 </div>
-                <div className="text-right">
-                  <p className="text-slate-400 font-medium">Referrals Count</p>
-                  <p className="text-slate-705 font-bold">{getReferralsCount(c.id)}</p>
-                </div>
-              </div>
-              <div className="pt-2 border-t border-slate-100 flex justify-end">
-                <button
-                  onClick={() => handleCopyLink(c.referralCode, c.id)}
-                  className="inline-flex items-center gap-1 py-1 px-3 border border-slate-200 hover:bg-slate-50 rounded-xl text-slate-505 text-[10px] font-bold transition-all focus:outline-none"
-                >
-                  {copiedId === c.id ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Copied!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>Copy link</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+              )}
+            </>
+          );
+        })()}
+
       </div>
     </div>
   );

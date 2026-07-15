@@ -8,11 +8,11 @@ const zod_1 = require("zod");
 const crypto_1 = __importDefault(require("crypto"));
 const db_js_1 = __importDefault(require("../config/db.js"));
 const audit_js_1 = require("../utils/audit.js");
-const crypto_js_1 = require("../utils/crypto.js");
 const r2_service_js_1 = require("../services/r2.service.js");
 const cloudinary_service_js_1 = require("../services/cloudinary.service.js");
 const redis_js_1 = __importDefault(require("../config/redis.js"));
 const env_js_1 = __importDefault(require("../config/env.js"));
+const auth_service_js_1 = __importDefault(require("../services/auth.service.js"));
 exports.loyaltyAdjustSchema = zod_1.z.object({
     body: zod_1.z.object({
         userId: zod_1.z.string().uuid(),
@@ -36,7 +36,6 @@ exports.staffCreateSchema = zod_1.z.object({
         fullName: zod_1.z.string().min(1),
         email: zod_1.z.string().email(),
         phoneNumber: zod_1.z.string().min(1),
-        password: zod_1.z.string().min(6),
         role: zod_1.z.enum(['STAFF', 'ADMIN']),
     }),
 });
@@ -115,8 +114,7 @@ class AdminController {
             const selectedWeekStartStr = selectedWeekStart.toISOString().substring(0, 10);
             const cacheKey = `cache:admin:dashboard:${selectedWeekStartStr}`;
             const cached = await redis_js_1.default.get(cacheKey);
-            if (cached)
-                return res.status(200).json(JSON.parse(cached));
+            // if (cached) return res.status(200).json(JSON.parse(cached));
             const now = new Date();
             const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
             const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -229,34 +227,83 @@ class AdminController {
                 purchased: funnelMap.get('PURCHASE_COMPLETED') || 0,
             };
             // 6. City Intelligence
-            const allOrders = await db_js_1.default.order.findMany({
-                where: {
-                    status: { not: 'CANCELLED' },
-                    createdAt: { gte: new Date(now.getFullYear() - 1, 0, 1) }
-                },
-                select: { createdAt: true, payableAmount: true, userId: true, user: { select: { address: true } } }
+            const startOfPeriod = new Date(now.getFullYear() - 1, 0, 1);
+            const selectedWeekStartMs = selectedWeekStart.getTime();
+            const selectedWeekEndMs = selectedWeekStartMs + 7 * 24 * 60 * 60 * 1000;
+            const prevWeekStartMs = selectedWeekStartMs - 7 * 24 * 60 * 60 * 1000;
+            const prevWeekEndMs = selectedWeekStartMs;
+            const lyWeekStartMs = selectedWeekStartMs - 52 * 7 * 24 * 60 * 60 * 1000;
+            const lyWeekEndMs = lyWeekStartMs + 7 * 24 * 60 * 60 * 1000;
+            const [userOrderStats, guestOrderStats, peakHoursRaw, seasonalTrendRaw, weeklyComparisonRaw] = await Promise.all([
+                db_js_1.default.order.groupBy({
+                    by: ['userId'],
+                    where: { status: { not: 'CANCELLED' }, createdAt: { gte: startOfPeriod }, userId: { not: null } },
+                    _count: { id: true },
+                    _sum: { payableAmount: true }
+                }),
+                db_js_1.default.order.aggregate({
+                    where: { status: { not: 'CANCELLED' }, createdAt: { gte: startOfPeriod }, userId: null },
+                    _count: { id: true },
+                    _sum: { payableAmount: true }
+                }),
+                db_js_1.default.$queryRaw `
+          SELECT 
+            EXTRACT(ISODOW FROM "createdAt") as dow, 
+            EXTRACT(HOUR FROM "createdAt") as hour, 
+            COUNT(*)::int as count
+          FROM "Order"
+          WHERE "createdAt" >= ${startOfPeriod} AND "status" != 'CANCELLED'
+          GROUP BY dow, hour
+        `,
+                db_js_1.default.$queryRaw `
+          SELECT 
+            EXTRACT(YEAR FROM "createdAt") as year, 
+            EXTRACT(MONTH FROM "createdAt") as month, 
+            SUM("payableAmount") as revenue
+          FROM "Order"
+          WHERE "createdAt" >= ${startOfPeriod} AND "status" != 'CANCELLED'
+          GROUP BY year, month
+        `,
+                db_js_1.default.$queryRaw `
+          SELECT 
+            EXTRACT(ISODOW FROM "createdAt") as dow,
+            SUM(CASE WHEN "createdAt" >= ${new Date(selectedWeekStartMs)} AND "createdAt" < ${new Date(selectedWeekEndMs)} THEN "payableAmount" ELSE 0 END) as this_week,
+            SUM(CASE WHEN "createdAt" >= ${new Date(prevWeekStartMs)} AND "createdAt" < ${new Date(prevWeekEndMs)} THEN "payableAmount" ELSE 0 END) as last_week,
+            SUM(CASE WHEN "createdAt" >= ${new Date(lyWeekStartMs)} AND "createdAt" < ${new Date(lyWeekEndMs)} THEN "payableAmount" ELSE 0 END) as same_week_last_year
+          FROM "Order"
+          WHERE "status" != 'CANCELLED' 
+            AND (
+              ("createdAt" >= ${new Date(selectedWeekStartMs)} AND "createdAt" < ${new Date(selectedWeekEndMs)}) OR
+              ("createdAt" >= ${new Date(prevWeekStartMs)} AND "createdAt" < ${new Date(prevWeekEndMs)}) OR
+              ("createdAt" >= ${new Date(lyWeekStartMs)} AND "createdAt" < ${new Date(lyWeekEndMs)})
+            )
+          GROUP BY dow
+        `
+            ]);
+            const userIds = userOrderStats.map(u => u.userId);
+            const users = await db_js_1.default.user.findMany({
+                where: { id: { in: userIds } },
+                select: { id: true, address: true }
             });
+            const userAddressMap = new Map(users.map(u => [u.id, u.address]));
             const cityMap = new Map();
-            allOrders.forEach(o => {
+            userOrderStats.forEach(stat => {
+                const address = userAddressMap.get(stat.userId);
                 let city = 'Unknown';
-                if (o.user?.address) {
+                if (address) {
                     try {
-                        let parsed = JSON.parse(o.user.address);
-                        if (Array.isArray(parsed) && parsed.length > 0) {
-                            parsed = parsed[0]; // use the primary/first address in the array
-                        }
-                        if (parsed.city) {
+                        let parsed = JSON.parse(address);
+                        if (Array.isArray(parsed) && parsed.length > 0)
+                            parsed = parsed[0];
+                        if (parsed.city)
                             city = parsed.city;
-                        }
-                        else if (parsed.addressLine1) {
+                        else if (parsed.addressLine1)
                             city = parsed.city || 'Unknown';
-                        }
-                        else {
+                        else
                             city = 'Unknown';
-                        }
                     }
                     catch (e) {
-                        const parts = o.user.address.split(',').map(p => p.trim());
+                        const parts = address.split(',').map(p => p.trim());
                         if (parts.length >= 3)
                             city = parts[parts.length - 3];
                         else if (parts.length > 0)
@@ -266,11 +313,17 @@ class AdminController {
                 if (!cityMap.has(city))
                     cityMap.set(city, { orders: 0, customers: new Set(), revenue: 0 });
                 const c = cityMap.get(city);
-                c.orders++;
-                if (o.userId)
-                    c.customers.add(o.userId);
-                c.revenue += Number(o.payableAmount);
+                c.orders += stat._count.id;
+                c.customers.add(stat.userId);
+                c.revenue += Number(stat._sum.payableAmount || 0);
             });
+            if (guestOrderStats._count.id > 0) {
+                if (!cityMap.has('Unknown'))
+                    cityMap.set('Unknown', { orders: 0, customers: new Set(), revenue: 0 });
+                const c = cityMap.get('Unknown');
+                c.orders += guestOrderStats._count.id;
+                c.revenue += Number(guestOrderStats._sum.payableAmount || 0);
+            }
             const cityInsights = Array.from(cityMap.entries()).map(([city, data]) => ({
                 city,
                 orders: data.orders,
@@ -282,13 +335,12 @@ class AdminController {
             const aovByCity = [...cityInsights].sort((a, b) => b.aov - a.aov);
             // 7. Peak Order Hours
             const hoursMap = new Array(7).fill(0).map(() => new Array(24).fill(0));
-            allOrders.forEach(o => {
-                const d = new Date(o.createdAt);
-                let day = d.getUTCDay() - 1;
-                if (day === -1)
-                    day = 6;
-                const hour = d.getUTCHours();
-                hoursMap[day][hour]++;
+            peakHoursRaw.forEach(row => {
+                let dow = Number(row.dow) - 1;
+                if (dow === -1)
+                    dow = 6;
+                const hour = Number(row.hour);
+                hoursMap[dow][hour] = Number(row.count);
             });
             // 8. Stock Risk Alert
             const stockRisk = products
@@ -313,6 +365,16 @@ class AdminController {
                 lastYear: 0,
                 festival: i === 9 || i === 10
             }));
+            seasonalTrendRaw.forEach(row => {
+                const y = Number(row.year);
+                const m = Number(row.month) - 1;
+                if (m >= 0 && m <= 11) {
+                    if (y === currentYear)
+                        seasonalTrend[m].thisYear = Number(row.revenue);
+                    if (y === currentYear - 1)
+                        seasonalTrend[m].lastYear = Number(row.revenue);
+                }
+            });
             const dayOfWeekPattern = Array.from({ length: 7 }, (_, i) => ({
                 day: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i],
                 revenue: 0
@@ -323,41 +385,49 @@ class AdminController {
                 lastWeek: 0,
                 sameWeekLastYear: 0
             }));
-            const selectedWeekEnd = new Date(selectedWeekStart);
-            selectedWeekEnd.setUTCDate(selectedWeekEnd.getUTCDate() + 7);
-            const selectedWeekStartMs = selectedWeekStart.getTime();
-            const selectedWeekEndMs = selectedWeekEnd.getTime();
-            const prevWeekStartMs = selectedWeekStartMs - 7 * 24 * 60 * 60 * 1000;
-            const prevWeekEndMs = selectedWeekStartMs;
-            const lyWeekStartMs = selectedWeekStartMs - 364 * 24 * 60 * 60 * 1000;
-            const lyWeekEndMs = selectedWeekEndMs - 364 * 24 * 60 * 60 * 1000;
-            allOrders.forEach(o => {
-                const d = new Date(o.createdAt);
-                const y = d.getUTCFullYear();
-                const m = d.getUTCMonth();
-                const rev = Number(o.payableAmount || 0);
-                if (y === currentYear)
-                    seasonalTrend[m].thisYear += rev;
-                if (y === currentYear - 1)
-                    seasonalTrend[m].lastYear += rev;
-                let dow = d.getUTCDay() - 1;
-                if (dow === -1)
-                    dow = 6;
-                const orderTimeMs = d.getTime();
-                if (orderTimeMs >= selectedWeekStartMs && orderTimeMs < selectedWeekEndMs) {
-                    dayOfWeekPattern[dow].revenue += rev;
-                    weeklyComparison[dow].thisWeek += rev;
+            weeklyComparisonRaw.forEach(row => {
+                let dow = Number(row.dow) - 1;
+                if (dow >= 0 && dow <= 6) {
+                    weeklyComparison[dow].thisWeek = Number(row.this_week);
+                    weeklyComparison[dow].lastWeek = Number(row.last_week);
+                    weeklyComparison[dow].sameWeekLastYear = Number(row.same_week_last_year);
+                    dayOfWeekPattern[dow].revenue = Number(row.this_week);
                 }
-                else if (orderTimeMs >= prevWeekStartMs && orderTimeMs < prevWeekEndMs) {
-                    weeklyComparison[dow].lastWeek += rev;
-                }
-                else if (orderTimeMs >= lyWeekStartMs && orderTimeMs < lyWeekEndMs) {
-                    weeklyComparison[dow].sameWeekLastYear += rev;
-                }
+            });
+            const todayStart = new Date();
+            todayStart.setUTCHours(0, 0, 0, 0);
+            const todayEnd = new Date(todayStart);
+            todayEnd.setUTCDate(todayEnd.getUTCDate() + 1);
+            const tomorrowStart = new Date(todayEnd);
+            const tomorrowEnd = new Date(tomorrowStart);
+            tomorrowEnd.setUTCDate(tomorrowEnd.getUTCDate() + 1);
+            const todayOrdersCount = await db_js_1.default.order.count({
+                where: { createdAt: { gte: todayStart, lt: todayEnd }, status: { not: 'CANCELLED' } }
+            });
+            const todayDeliveriesCount = await db_js_1.default.order.count({
+                where: { status: 'DELIVERED', updatedAt: { gte: todayStart, lt: todayEnd } }
+            });
+            const tomorrowOrdersList = await db_js_1.default.order.findMany({
+                where: { quickOrderExpectedDate: { gte: tomorrowStart, lt: tomorrowEnd } },
+                include: { user: true },
+                take: 5
+            });
+            const tomorrowAppointmentsList = await db_js_1.default.appointment.findMany({
+                where: { date: { gte: tomorrowStart, lt: tomorrowEnd } },
+                include: { user: true },
+                take: 5
             });
             const responsePayload = {
                 success: true,
                 data: {
+                    todayStats: {
+                        orders: todayOrdersCount,
+                        deliveries: todayDeliveriesCount,
+                        tomorrowDetails: {
+                            orders: tomorrowOrdersList,
+                            appointments: tomorrowAppointmentsList
+                        }
+                    },
                     availableWeeks,
                     selectedWeekStart: selectedWeekStartStr,
                     timeBasedPatterns: {
@@ -383,6 +453,77 @@ class AdminController {
             };
             await redis_js_1.default.set(cacheKey, JSON.stringify(responsePayload), 'EX', 300);
             return res.status(200).json(responsePayload);
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    /**
+     * GET /admin/dashboard/date-stats?date=YYYY-MM-DD
+     * Returns order count, delivery count, and appointments for any given date.
+     * Defaults to today if no date is provided.
+     */
+    static async getDateStats(req, res, next) {
+        try {
+            const dateParam = req.query.date;
+            // Parse the requested date (local midnight IST → UTC range for the full day)
+            let dayStart;
+            if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+                dayStart = new Date(`${dateParam}T00:00:00.000Z`);
+            }
+            else {
+                dayStart = new Date();
+                dayStart.setUTCHours(0, 0, 0, 0);
+            }
+            const dayEnd = new Date(dayStart);
+            dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+            const nextDayStart = new Date(dayEnd);
+            const nextDayEnd = new Date(nextDayStart);
+            nextDayEnd.setUTCDate(nextDayEnd.getUTCDate() + 1);
+            const [ordersCount, deliveriesCount, ordersList, appointmentsList, nextDayOrders, nextDayAppts] = await Promise.all([
+                db_js_1.default.order.count({
+                    where: { createdAt: { gte: dayStart, lt: dayEnd }, status: { not: 'CANCELLED' } }
+                }),
+                db_js_1.default.order.count({
+                    where: { status: 'DELIVERED', updatedAt: { gte: dayStart, lt: dayEnd } }
+                }),
+                db_js_1.default.order.findMany({
+                    where: { createdAt: { gte: dayStart, lt: dayEnd }, status: { not: 'CANCELLED' } },
+                    include: { user: { select: { fullName: true } }, orderItems: { include: { product: { select: { name: true } } } } },
+                    orderBy: { createdAt: 'desc' },
+                    take: 10
+                }),
+                db_js_1.default.appointment.findMany({
+                    where: { date: { gte: dayStart, lt: dayEnd } },
+                    include: { user: { select: { fullName: true } } },
+                    orderBy: { date: 'asc' },
+                    take: 10
+                }),
+                db_js_1.default.order.findMany({
+                    where: { quickOrderExpectedDate: { gte: nextDayStart, lt: nextDayEnd } },
+                    include: { user: { select: { fullName: true } } },
+                    take: 5
+                }),
+                db_js_1.default.appointment.findMany({
+                    where: { date: { gte: nextDayStart, lt: nextDayEnd } },
+                    include: { user: { select: { fullName: true } } },
+                    take: 5
+                }),
+            ]);
+            return res.status(200).json({
+                success: true,
+                data: {
+                    date: dayStart.toISOString().substring(0, 10),
+                    orders: ordersCount,
+                    deliveries: deliveriesCount,
+                    ordersList,
+                    appointmentsList,
+                    nextDayDetails: {
+                        orders: nextDayOrders,
+                        appointments: nextDayAppts,
+                    }
+                }
+            });
         }
         catch (error) {
             next(error);
@@ -517,13 +658,16 @@ class AdminController {
             const sixMonthsAgo = new Date();
             sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
             // 1. Customer Growth Trend
-            const customers = await db_js_1.default.user.findMany({
-                where: {
-                    role: 'CUSTOMER',
-                    createdAt: { gte: sixMonthsAgo },
-                },
-                select: { createdAt: true },
-            });
+            // Use raw SQL to group by month and avoid fetching thousands of user records into Node memory
+            const growthData = await db_js_1.default.$queryRaw `
+        SELECT 
+          TO_CHAR("createdAt", 'Mon YY') as month,
+          COUNT(*) as count
+        FROM "User"
+        WHERE role = 'CUSTOMER' AND "createdAt" >= ${sixMonthsAgo}
+        GROUP BY TO_CHAR("createdAt", 'Mon YY'), DATE_TRUNC('month', "createdAt")
+        ORDER BY DATE_TRUNC('month', "createdAt") ASC
+      `;
             const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
             const growthMap = new Map();
             for (let i = 5; i >= 0; i--) {
@@ -532,11 +676,12 @@ class AdminController {
                 const key = `${months[d.getMonth()]} ${d.getFullYear().toString().substring(2)}`;
                 growthMap.set(key, 0);
             }
-            customers.forEach((c) => {
-                const date = new Date(c.createdAt);
-                const key = `${months[date.getMonth()]} ${date.getFullYear().toString().substring(2)}`;
+            // Merge the SQL results into our zero-filled map to ensure all 6 months are present
+            growthData.forEach(row => {
+                const key = row.month; // e.g. "Jul 26"
                 if (growthMap.has(key)) {
-                    growthMap.set(key, growthMap.get(key) + 1);
+                    // prisma $queryRaw returns BigInt for count, so we cast to Number
+                    growthMap.set(key, Number(row.count));
                 }
             });
             const growthChart = Array.from(growthMap.entries()).map(([month, count]) => ({
@@ -861,7 +1006,7 @@ class AdminController {
      */
     static async createStaff(req, res, next) {
         const adminUser = req.user;
-        const { fullName, email, phoneNumber, password, role } = req.body;
+        const { fullName, email, phoneNumber, role } = req.body;
         try {
             const existingUser = await db_js_1.default.user.findFirst({
                 where: {
@@ -874,16 +1019,17 @@ class AdminController {
                     message: 'User with this email or phone number already exists.',
                 });
             }
-            const passwordHash = await (0, crypto_js_1.hashPassword)(password);
             const referralCode = `REF-${crypto_1.default.randomUUID().substring(0, 8).toUpperCase()}`;
             const newStaff = await db_js_1.default.user.create({
                 data: {
                     email,
                     phoneNumber,
-                    passwordHash,
                     fullName,
                     role: role,
                     referralCode,
+                    // @ts-ignore - IDE TS cache issue
+                    passwordHash: null,
+                    passwordSetByUser: false,
                 },
             });
             await (0, audit_js_1.createAuditLog)({
@@ -944,6 +1090,45 @@ class AdminController {
                 message: 'Team member updated successfully',
                 data: updated,
             });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    /**
+     * POST /admin/users/:id/force-password-reset
+     * Admin forces a staff member to reset their password
+     */
+    static async forceStaffPasswordReset(req, res, next) {
+        const adminUser = req.user;
+        const { id } = req.params;
+        try {
+            const staff = await db_js_1.default.user.findUnique({
+                where: { id },
+            });
+            if (!staff || staff.role === 'CUSTOMER') {
+                return res.status(404).json({ success: false, message: 'Staff member not found' });
+            }
+            // Prevent non-SuperAdmins from resetting a SuperAdmin
+            if (staff.role === 'SUPERADMIN' && adminUser.role !== 'SUPERADMIN') {
+                return res.status(403).json({ success: false, message: 'Insufficient privileges' });
+            }
+            await db_js_1.default.user.update({
+                where: { id },
+                // @ts-ignore - IDE TS cache issue
+                data: { passwordHash: null, passwordSetByUser: false },
+            });
+            await auth_service_js_1.default.revokeAllUserSessions(id);
+            await (0, audit_js_1.createAuditLog)({
+                userId: adminUser.id,
+                action: 'PASSWORD_RESET_FORCED',
+                ipAddress: req.ip,
+                details: {
+                    message: `Admin ${adminUser.fullName} forced a password reset for staff ${staff.email}`,
+                    targetUserId: id,
+                },
+            });
+            return res.status(200).json({ success: true, message: 'Staff member logged out and password reset forced.' });
         }
         catch (error) {
             next(error);

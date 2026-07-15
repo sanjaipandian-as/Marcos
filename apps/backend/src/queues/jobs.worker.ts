@@ -13,6 +13,10 @@ import { getIO } from '../socket/socket.handler.js';
 let worker: Worker;
 
 export function initWorker() {
+  if (process.env.NODE_ENV === 'development') {
+    logger.info('BullMQ Background Worker disabled in development to save Redis limits.');
+    return;
+  }
   worker = new Worker(
     QUEUE_NAME,
     async (job: Job) => {
@@ -192,13 +196,20 @@ export async function handleSendNotification(data: any) {
 
   for (const channel of channels) {
     if (channel === 'EMAIL' && templates.email) {
+      const invoiceUrl = templates.email.data?.invoiceUrl;
+      const invoiceNumber = templates.email.data?.invoiceNumber;
+      const attachments = invoiceUrl
+        ? [{ filename: `invoice-${invoiceNumber || 'details'}.pdf`, path: invoiceUrl }]
+        : undefined;
+
       await EmailService.sendEmail(
         recipientEmail,
-        `Your Invoice ${templates.email.data?.invoiceNumber || ''}`,
+        `Your Invoice ${invoiceNumber || ''}`,
         `Hello ${templates.email.data?.customerName || 'Customer'}, here is your invoice.`,
         undefined,
         templates.email.id,
-        templates.email.data
+        templates.email.data,
+        attachments
       );
     }
     

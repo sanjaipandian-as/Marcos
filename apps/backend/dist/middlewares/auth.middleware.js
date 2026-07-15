@@ -52,7 +52,13 @@ async function authenticate(req, res, next) {
         }
         else {
             // Cache miss or expired — check Redis
-            const isBlacklisted = await redis_js_1.default.get(`blacklist:${token}`);
+            let isBlacklisted = null;
+            try {
+                isBlacklisted = await redis_js_1.default.get(`blacklist:${token}`);
+            }
+            catch (redisErr) {
+                console.warn(`[Redis Warning] Failed to check blacklist for token: ${redisErr.message}. Failing open.`);
+            }
             // Cache the result
             blacklistCache.set(token, {
                 isBlacklisted: !!isBlacklisted,

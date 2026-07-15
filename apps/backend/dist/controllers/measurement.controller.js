@@ -176,8 +176,12 @@ class MeasurementController {
                 const prevValues = {};
                 const newValues = {};
                 Object.keys(updates).forEach((key) => {
-                    prevValues[key] = existingProfile[key];
-                    newValues[key] = updated[key];
+                    const prev = existingProfile[key];
+                    const curr = updated[key];
+                    if (prev !== undefined)
+                        prevValues[key] = prev;
+                    if (curr !== undefined)
+                        newValues[key] = curr;
                 });
                 // 3. Save to History
                 await tx.measurementHistory.create({
@@ -188,25 +192,23 @@ class MeasurementController {
                         newValues,
                     },
                 });
-                // 4. Save to AuditLog
-                await tx.auditLog.create({
-                    data: {
-                        userId: user.id,
-                        action: 'UPDATE_MEASUREMENT',
-                        ipAddress: req.ip,
-                        details: {
-                            message: `Staff member ${user.fullName} updated measurement profile '${existingProfile.profileName}' (Profile ID: ${id})`,
-                            profileId: id,
-                            profileName: existingProfile.profileName,
-                            changedBy: user.id,
-                            previousValues: prevValues,
-                            newValues,
-                        },
-                    },
-                });
-                return updated;
+                return { updated, prevValues, newValues };
             });
-            return res.status(200).json({ success: true, data: updatedProfile });
+            // 4. Save to AuditLog (outside tx)
+            await (0, audit_js_1.createAuditLog)({
+                userId: user.id,
+                action: 'UPDATE_MEASUREMENT',
+                ipAddress: req.ip,
+                details: {
+                    message: `Staff member ${user.fullName} updated measurement profile '${existingProfile.profileName}' (Profile ID: ${id})`,
+                    profileId: id,
+                    profileName: existingProfile.profileName,
+                    changedBy: user.id,
+                    previousValues: updatedProfile.prevValues,
+                    newValues: updatedProfile.newValues,
+                },
+            });
+            return res.status(200).json({ success: true, data: updatedProfile.updated });
         }
         catch (error) {
             next(error);

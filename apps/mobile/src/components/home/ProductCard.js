@@ -1,6 +1,7 @@
 import React from 'react';
+import WishlistIcon from '../common/WishlistIcon';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { Heart } from 'lucide-react-native';
+import {} from 'lucide-react-native';
 import { CustomCartAddIcon, CustomCartAddedIcon } from '../CartIcons';
 
 export default function ProductCard({
@@ -33,17 +34,7 @@ export default function ProductCard({
           source={{ uri: (item.images && item.images[0]) || 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=300&q=80' }}
           style={styles.productImage}
         />
-        <TouchableOpacity
-          style={[styles.favBtn, { backgroundColor: '#ffffff' }]}
-          onPress={() => toggleFavorite(item.id)}
-          activeOpacity={0.7}
-        >
-          <Heart
-            size={14}
-            color="#3D2E3D"
-            fill={isFav ? '#3D2E3D' : 'transparent'}
-          />
-        </TouchableOpacity>
+
         {item.hasFreeShipping && (
           <View style={[styles.freeShippingBadge, { backgroundColor: '#EDE0ED' }]}>
             <Text style={[styles.freeShippingText, { color: '#6B4B6B' }]}>Free Shipping</Text>
@@ -68,20 +59,16 @@ export default function ProductCard({
             ) : null}
           </View>
           <TouchableOpacity
-            style={[
-              styles.cartBtn,
-              inCart
-                ? { backgroundColor: '#3D2E3D', borderWidth: 1, borderColor: '#3D2E3D' }
-                : { backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#D8BFD8' }
-            ]}
-            onPress={() => handleAddToCart(item.id)}
-            activeOpacity={0.7}
+            style={styles.wishlistBtnBottom}
+            onPress={() => toggleFavorite(item.id)}
+            activeOpacity={0.6}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
-            {inCart ? (
-              <CustomCartAddedIcon color="#FDFBFD" size={18} />
-            ) : (
-              <CustomCartAddIcon color="#3D2E3D" size={18} />
-            )}
+            <WishlistIcon
+              size={22}
+              color={isFav ? '#ef4444' : '#94a3b8'}
+              fill={isFav ? '#ef4444' : 'transparent'}
+            />
           </TouchableOpacity>
         </View>
       </View>
@@ -106,21 +93,11 @@ const styles = StyleSheet.create({
     height: '100%',
     resizeMode: 'cover',
   },
-  favBtn: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#ffffff',
+  wishlistBtnBottom: {
+    padding: 4,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    marginLeft: 8,
   },
   freeShippingBadge: {
     position: 'absolute',

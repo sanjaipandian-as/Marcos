@@ -105,7 +105,7 @@ export default function CheckoutScreen({ route, navigation }) {
         setBookedSlotsCounts({});
       }
     } catch (err) {
-      console.error('Failed to load booked slots counts:', err);
+      console.warn('Failed to load booked slots counts:', err.message);
       setBookedSlotsCounts({});
     }
   };

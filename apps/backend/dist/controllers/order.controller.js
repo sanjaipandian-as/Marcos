@@ -21,6 +21,8 @@ exports.orderStatusUpdateSchema = zod_1.z.object({
         customizations: zod_1.z.string().optional().nullable(),
         tailorNotes: zod_1.z.string().optional().nullable(),
         measurementProfileId: zod_1.z.string().uuid().optional().nullable(),
+        advancePayment: zod_1.z.coerce.number().optional(),
+        deliveryDate: zod_1.z.string().optional().nullable(),
     }),
 });
 exports.orderCheckoutSchema = zod_1.z.object({
@@ -338,6 +340,23 @@ class OrderController {
             if (measurementProfileId !== undefined) {
                 updateData.measurementProfileId = measurementProfileId;
             }
+            if (req.body.advancePayment !== undefined) {
+                updateData.advancePayment = req.body.advancePayment;
+                updateData.balanceAmount = Math.max(0, Number(existing.payableAmount) - Number(req.body.advancePayment));
+            }
+            let deliveryDateChanged = false;
+            let newDeliveryDateFormatted = '';
+            if (req.body.deliveryDate !== undefined) {
+                const newDate = req.body.deliveryDate ? new Date(req.body.deliveryDate) : null;
+                const oldDate = existing.deliveryDate ? new Date(existing.deliveryDate) : null;
+                if (newDate?.getTime() !== oldDate?.getTime()) {
+                    updateData.deliveryDate = newDate;
+                    deliveryDateChanged = true;
+                    if (newDate) {
+                        newDeliveryDateFormatted = newDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+                    }
+                }
+            }
             // If status is CANCELLED and payment was COMPLETED, auto refund
             if (status === 'CANCELLED' && paymentStatus === undefined && existing.paymentStatus === 'COMPLETED') {
                 updateData.paymentStatus = 'REFUNDED';
@@ -364,6 +383,20 @@ class OrderController {
                     measurementProfile: true
                 }
             });
+            if (deliveryDateChanged && order.userId) {
+                await jobs_producer_js_1.default.queueNotification({
+                    userId: order.userId,
+                    channels: ['PUSH'],
+                    templates: {
+                        push: {
+                            title: 'Delivery Date Updated',
+                            body: newDeliveryDateFormatted
+                                ? `The delivery date for your order ${order.invoiceNumber} has been updated to ${newDeliveryDateFormatted}.`
+                                : `The delivery date for your order ${order.invoiceNumber} has been removed.`,
+                        },
+                    },
+                }).catch(err => console.error('Failed to queue delivery date update notification:', err));
+            }
             // Invalidate admin cache
             await redis_js_1.default.keys('cache:admin:*').then(keys => {
                 if (keys.length > 0)
@@ -525,38 +558,47 @@ class OrderController {
             }
             const order = await db_js_1.default.$transaction(async (tx) => {
                 let subtotal = 0;
+                // Pre-fetch all products to avoid N+1 reads
+                const productIds = items.map((i) => i.productId);
+                const products = await tx.product.findMany({
+                    where: { id: { in: productIds } },
+                });
+                const productMap = new Map(products.map((p) => [p.id, p]));
+                // 1. Verify inventory in-memory first using pre-fetched products
                 for (const item of items) {
-                    const product = await tx.product.findUnique({ where: { id: item.productId } });
+                    const product = productMap.get(item.productId);
                     if (!product) {
                         throw new Error(`Product ${item.productId} not found`);
                     }
-                    // Atomic conditional update to prevent concurrent double-booking race conditions
-                    const updateResult = await tx.product.updateMany({
-                        where: {
-                            id: item.productId,
-                            inventoryQty: { gte: item.quantity },
-                        },
-                        data: {
-                            inventoryQty: { decrement: item.quantity },
-                            salesCount: { increment: item.quantity },
-                        },
-                    });
-                    if (updateResult.count === 0) {
+                    if (product.inventoryQty < item.quantity) {
                         throw new Error(`Insufficient inventory for ${product.name}. Required: ${item.quantity}`);
                     }
-                    // Fetch the updated inventory value to set stock status
-                    const updatedProduct = await tx.product.findUnique({
-                        where: { id: item.productId },
-                        select: { inventoryQty: true },
-                    });
-                    if (updatedProduct) {
-                        await tx.product.update({
-                            where: { id: item.productId },
-                            data: {
-                                stockStatus: (0, product_controller_js_1.computeStockStatus)(updatedProduct.inventoryQty),
-                            },
-                        });
+                }
+                // 2. Perform bulk inventory deduction using a single raw SQL query
+                if (items.length > 0) {
+                    const values = [];
+                    for (const item of items) {
+                        const product = productMap.get(item.productId);
+                        const newInventoryQty = product.inventoryQty - item.quantity;
+                        const newStockStatus = (0, product_controller_js_1.computeStockStatus)(newInventoryQty);
+                        // Assuming uuid, int, and enum types
+                        values.push(`('${item.productId}'::uuid, ${item.quantity}::int, '${newStockStatus}'::"StockStatus")`);
                     }
+                    const query = `
+            UPDATE "Product" AS p
+            SET 
+              "inventoryQty" = p."inventoryQty" - v.qty,
+              "salesCount" = p."salesCount" + v.qty,
+              "stockStatus" = v.status
+            FROM (VALUES ${values.join(', ')}) AS v(id, qty, status)
+            WHERE p.id = v.id AND p."inventoryQty" >= v.qty
+          `;
+                    const updatedRows = await tx.$executeRawUnsafe(query);
+                    if (updatedRows !== items.length) {
+                        throw new Error('Concurrent inventory update failure. Insufficient stock during checkout.');
+                    }
+                }
+                for (const item of items) {
                     subtotal += Number(item.price) * item.quantity;
                 }
                 // Coupon Validation & Consumption
@@ -640,6 +682,7 @@ class OrderController {
                         paymentStatus: 'PENDING',
                         totalAmount,
                         taxAmount,
+                        gstPercentage: 18,
                         discountAmount,
                         payableAmount,
                         paymentMethod,
@@ -653,16 +696,14 @@ class OrderController {
                     },
                 });
                 // Insert Order Items
-                for (const item of items) {
-                    await tx.orderItem.create({
-                        data: {
-                            orderId: newOrder.id,
-                            productId: item.productId,
-                            quantity: item.quantity,
-                            price: item.price,
-                        },
-                    });
-                }
+                await tx.orderItem.createMany({
+                    data: items.map((item) => ({
+                        orderId: newOrder.id,
+                        productId: item.productId,
+                        quantity: item.quantity,
+                        price: item.price,
+                    }))
+                });
                 // Clear only checked-out items from the user's cart
                 const purchasedProductIds = items.map((item) => item.productId);
                 await tx.cartItem.deleteMany({

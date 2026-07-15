@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import WishlistIcon from '../../components/common/WishlistIcon';
 import {
   StyleSheet,
   Text,
@@ -18,7 +19,6 @@ import api from '../../utils/api';
 import {
   ChevronLeft,
   ShoppingBag,
-  Heart,
   Trash2,
   Minus,
   Plus,
@@ -198,7 +198,7 @@ export default function CartScreen({ navigation }) {
           My Cart
         </Text>
         <TouchableOpacity style={[styles.headerBtn, shadows.premium]} onPress={() => navigation.navigate('Wishlist')} activeOpacity={0.7}>
-          <Heart size={20} color="#1e1e1e" />
+          <WishlistIcon size={20} color="#1e1e1e" />
         </TouchableOpacity>
       </View>
 
@@ -213,7 +213,7 @@ export default function CartScreen({ navigation }) {
           </Text>
           <TouchableOpacity
             style={[styles.exploreBtn, { backgroundColor: theme.brand[500] }]}
-            onPress={() => navigation.navigate('Browse')}
+            onPress={() => navigation.navigate('MainTabs', { screen: 'Browse' })}
           >
             <Text style={[styles.exploreBtnText, { fontFamily: fonts.bold, color: '#3D2E3D' }]}>
               EXPLORE CATALOG

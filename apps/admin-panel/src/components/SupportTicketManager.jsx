@@ -13,6 +13,8 @@ import api from '../utils/api';
 export default function SupportTicketManager() {
   const [tickets, setTickets] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   
   const [selectedTicketId, setSelectedTicketId] = useState(null);
   const [ticketDetails, setTicketDetails] = useState(null);
@@ -21,12 +23,13 @@ export default function SupportTicketManager() {
 
   useEffect(() => {
     loadTickets();
-  }, []);
+  }, [page]);
 
   const loadTickets = async () => {
     try {
-      const list = await api.getSupportTickets();
+      const list = await api.getSupportTickets(page, 20);
       setTickets(list);
+      setTotalPages(list.pagination?.pages || 1);
     } catch (err) {
       console.error(err);
     }
@@ -139,6 +142,26 @@ export default function SupportTicketManager() {
               ))
             )}
           </div>
+          
+          {totalPages > 1 && (
+            <div className="flex justify-between items-center pt-4 border-t border-slate-100">
+              <button 
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-3 py-1 text-xs font-bold rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 transition-all text-slate-600"
+              >
+                Previous
+              </button>
+              <span className="text-[10px] uppercase tracking-wider text-slate-400 font-extrabold">Page {page} of {totalPages}</span>
+              <button 
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="px-3 py-1 text-xs font-bold rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 transition-all text-slate-600"
+              >
+                Next
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="lg:col-span-7">

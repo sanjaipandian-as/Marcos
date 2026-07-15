@@ -11,7 +11,7 @@ class EmailService {
     /**
      * Send an email. Falls back to console log if SMTP settings are not fully set or are placeholders.
      */
-    static async sendEmail(to, subject, text, html, templateId, templateData) {
+    static async sendEmail(to, subject, text, html, templateId, templateData, attachments) {
         const isMock = !env_js_1.default.SMTP_HOST ||
             !env_js_1.default.SMTP_PORT ||
             !env_js_1.default.SMTP_USER ||
@@ -19,7 +19,7 @@ class EmailService {
             env_js_1.default.SMTP_USER === 'smtp-user-placeholder';
         if (isMock) {
             logger_js_1.default.info(`[MOCK EMAIL] To: ${to} | Subject: ${subject} | Template: ${templateId || 'None'}`, {
-                metadata: { templateData, text, html },
+                metadata: { templateData, text, html, attachments },
             });
             return { success: true, mock: true };
         }
@@ -39,6 +39,7 @@ class EmailService {
                 subject,
                 text,
                 html: html || text,
+                attachments,
             });
             logger_js_1.default.info(`[EMAIL SENT] To: ${to} | Subject: ${subject} | MessageId: ${info.messageId}`);
             return { success: true, messageId: info.messageId };

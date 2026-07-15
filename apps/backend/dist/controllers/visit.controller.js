@@ -10,6 +10,7 @@ const client_1 = require("@prisma/client");
 const r2_service_js_1 = __importDefault(require("../services/r2.service.js"));
 const socket_handler_js_1 = require("../socket/socket.handler.js");
 const audit_js_1 = require("../utils/audit.js");
+const redis_js_1 = __importDefault(require("../config/redis.js"));
 exports.visitCreateSchema = zod_1.z.object({
     body: zod_1.z.object({
         preferredDate: zod_1.z.string().datetime(),
@@ -30,6 +31,7 @@ exports.visitUpdateSchema = zod_1.z.object({
         address: zod_1.z.string().min(1).optional(),
         requirements: zod_1.z.string().min(1).optional(),
         status: zod_1.z.enum(['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']).optional(),
+        orderId: zod_1.z.string().uuid().optional().nullable(),
     }),
 });
 class VisitController {
@@ -39,7 +41,8 @@ class VisitController {
     static async getVisits(req, res, next) {
         const user = req.user;
         const { page = 1, limit = 20 } = req.query;
-        const skip = (Number(page) - 1) * Number(limit);
+        const safeLimit = Math.min(Number(limit) || 20, 100);
+        const skip = (Number(page) - 1) * safeLimit;
         try {
             const where = {};
             if (user.role === client_1.Role.CUSTOMER) {
@@ -50,7 +53,7 @@ class VisitController {
                     where,
                     orderBy: { preferredDate: 'asc' },
                     skip,
-                    take: Number(limit),
+                    take: safeLimit,
                     include: {
                         customer: {
                             select: {
@@ -91,6 +94,30 @@ class VisitController {
         const user = req.user;
         const { preferredDate, address, requirements } = req.body;
         try {
+            if (user.role === client_1.Role.CUSTOMER) {
+                // Layer 1: Burst limit (1 request per 3 seconds per user)
+                const burstKey = `visit:burst:${user.id}`;
+                const burstLock = await redis_js_1.default.set(burstKey, 'locked', 'EX', 3, 'NX');
+                if (!burstLock) {
+                    return res.status(429).json({ success: false, message: 'Please wait a few seconds before making another visit request.' });
+                }
+                // Layer 2 & 3: Daily Quotas (User & IP)
+                const todayStr = new Date().toISOString().split('T')[0];
+                const dailyUserKey = `visit:daily:${user.id}:${todayStr}`;
+                const dailyIpKey = `visit:daily_ip:${req.ip}:${todayStr}`;
+                const userCount = await redis_js_1.default.incr(dailyUserKey);
+                const ipCount = await redis_js_1.default.incr(dailyIpKey);
+                if (userCount === 1)
+                    await redis_js_1.default.expire(dailyUserKey, 86400);
+                if (ipCount === 1)
+                    await redis_js_1.default.expire(dailyIpKey, 86400);
+                if (userCount > 20 || ipCount > 30) {
+                    return res.status(429).json({
+                        success: false,
+                        message: 'You have reached the daily store visit limit. Please try again tomorrow.',
+                    });
+                }
+            }
             const visit = await db_js_1.default.storeVisit.create({
                 data: {
                     customerId: user.id,
@@ -262,7 +289,7 @@ class VisitController {
     static async updateVisit(req, res, next) {
         const user = req.user;
         const { id } = req.params;
-        const { preferredDate, confirmedDate, address, requirements, status } = req.body;
+        const { preferredDate, confirmedDate, address, requirements, status, orderId } = req.body;
         try {
             const visit = await db_js_1.default.storeVisit.findUnique({
                 where: { id },
@@ -287,6 +314,7 @@ class VisitController {
                     ...(address && { address }),
                     ...(requirements && { requirements }),
                     ...(targetStatus && { status: targetStatus }),
+                    ...(orderId !== undefined && { orderId }),
                 },
             });
             // Broadcast WebSocket notification to Staff, Customer and Admins

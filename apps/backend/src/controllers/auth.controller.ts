@@ -7,6 +7,9 @@ import AuthService from '../services/auth.service.js';
 import SmsService from '../services/sms.service.js';
 import EmailService from '../services/email.service.js';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
+import env from '../config/env.js';
+import { validatePassword } from '../validators/password.validator.js';
 import { createAuditLog } from '../utils/audit.js';
 import logger from '../utils/logger.js';
 
@@ -34,6 +37,7 @@ export const registerSchema = z.object({
     phoneNumber: z.string(),
     password: z.string().min(6),
     fullName: z.string(),
+    registrationToken: z.string().min(1, "Registration token is required"),
     referredById: z.string().uuid().optional().nullable(),
     referredByCode: z.string().optional().nullable(),
     role: z.enum(['CUSTOMER', 'STAFF', 'ADMIN']).optional(),
@@ -45,6 +49,21 @@ export const loginSchema = z.object({
   body: z.object({
     email: z.string(), // Accepts both email or phone number
     password: z.string(),
+  }),
+});
+
+// Check Identifier Schema
+export const checkIdentifierSchema = z.object({
+  body: z.object({
+    identifier: z.string().min(1, "Identifier is required"), // Email or phone
+  }),
+});
+
+// Setup Password Schema
+export const setupPasswordSchema = z.object({
+  body: z.object({
+    verifyToken: z.string().min(1, "Verify token is required"),
+    newPassword: z.string().min(10, "Password must be at least 10 characters"),
   }),
 });
 
@@ -146,12 +165,24 @@ export class AuthController {
    */
   static async register(req: Request, res: Response, next: NextFunction) {
     try {
-      let { email, phoneNumber, password, fullName, referredById, referredByCode, role } = req.body;
+      let { email, phoneNumber, password, fullName, registrationToken, referredById, referredByCode, role } = req.body;
 
       const normalizedPhone = normalizePhoneNumber(phoneNumber);
       const cleanDigits = phoneNumber.replace(/[\s\-()]/g, '');
       const rawDigits = cleanDigits.startsWith('+91') ? cleanDigits.substring(3) : (cleanDigits.startsWith('91') ? cleanDigits.substring(2) : cleanDigits);
       const possiblePhoneNumbers = [phoneNumber, normalizedPhone, cleanDigits, rawDigits];
+
+      // Validate Registration Token
+      const storedTokenPhone = await redis.get(`registration_token:${normalizedPhone}`);
+      const storedTokenEmail = await redis.get(`registration_token:${email}`);
+
+      if (!storedTokenPhone && !storedTokenEmail) {
+        return res.status(401).json({ success: false, message: 'Registration token missing or expired. Please verify your OTP again.' });
+      }
+
+      if ((storedTokenPhone && storedTokenPhone !== registrationToken) && (storedTokenEmail && storedTokenEmail !== registrationToken)) {
+        return res.status(401).json({ success: false, message: 'Invalid registration token.' });
+      }
 
       // Check existence
       const existingUser = await prisma.user.findFirst({
@@ -251,6 +282,126 @@ export class AuthController {
   }
 
   /**
+   * POST /auth/login/check
+   * Amazon-style step 1: Check if identifier exists and if password setup is required
+   */
+  static async checkIdentifier(req: Request, res: Response, next: NextFunction) {
+    const { identifier } = req.body;
+    try {
+      const start = process.hrtime.bigint();
+      
+      let searchEmail = identifier;
+      if (identifier.includes('@')) {
+        searchEmail = identifier.toLowerCase();
+      }
+
+      let possiblePhoneNumbers = [identifier];
+      if (!identifier.includes('@')) {
+        const normalized = normalizePhoneNumber(identifier);
+        const clean = identifier.replace(/[\s\-()]/g, '');
+        const raw = clean.startsWith('+91') ? clean.substring(3) : (clean.startsWith('91') ? clean.substring(2) : clean);
+        possiblePhoneNumbers = [identifier, normalized, clean, raw];
+      }
+
+      const user = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { email: searchEmail },
+            { phoneNumber: { in: possiblePhoneNumbers } }
+          ]
+        }
+      });
+
+      // Constant-time-ish: always do a comparable amount of work
+      if (!user || !user.passwordHash) {
+        // Dummy bcrypt comparison
+        await verifyPassword("dummy_password", "$2b$10$C8.w1N/bY.W/F8e8uO/3k.U5EwKqZ6M3v/Zz1L6C.m3J0XwX7.F.m");
+      }
+
+      const state = !user
+        ? 'NOT_FOUND'
+        : !user.passwordHash
+        ? 'SETUP_REQUIRED'
+        : 'PASSWORD_REQUIRED';
+
+      const end = process.hrtime.bigint();
+      const elapsedMs = Number(end - start) / 1000000;
+      if (elapsedMs < 150) {
+        await new Promise(resolve => setTimeout(resolve, 150 - elapsedMs));
+      }
+
+      return res.status(200).json({ success: true, status: state });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /auth/setup-password
+   */
+  static async setupPassword(req: Request, res: Response, next: NextFunction) {
+    const { verifyToken, newPassword } = req.body;
+    const clientType = req.headers['x-client-type'] as string || 'web';
+
+    try {
+      // 1. Verify token
+      let decoded: any;
+      try {
+        decoded = jwt.verify(verifyToken, env.JWT_ACCESS_SECRET);
+        if (decoded.scope !== 'setup-password') throw new Error('Invalid token scope');
+      } catch (err) {
+        return res.status(401).json({ success: false, message: 'Invalid or expired verify token.' });
+      }
+
+      // 2. Find User
+      const user = await prisma.user.findUnique({
+        where: { id: decoded.sub }
+      });
+
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'User not found.' });
+      }
+
+      // 3. Validate new password
+      validatePassword(newPassword, { email: user.email, fullName: user.fullName });
+
+      // 4. Update Password
+      const passwordHash = await hashPassword(newPassword);
+      await prisma.user.update({
+        where: { id: user.id },
+        // @ts-ignore - IDE TS cache issue
+        data: { passwordHash, passwordSetByUser: true }
+      })
+
+      // 5. Generate Tokens
+      const payload = {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        fullName: user.fullName,
+      };
+
+      const accessToken = AuthService.generateAccessToken(payload);
+      const refreshToken = await AuthService.generateRefreshToken(user.id);
+
+      if (clientType === 'web' || user.role === 'ADMIN' || user.role === 'SUPERADMIN') {
+        res.cookie('refreshToken', refreshToken, {
+          path: '/',
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+          maxAge: 7 * 24 * 60 * 60 * 1000,
+        });
+        return res.status(200).json({ success: true, accessToken, user: payload, message: 'Password configured successfully' });
+      } else {
+        return res.status(200).json({ success: true, accessToken, refreshToken, user: payload, message: 'Password configured successfully' });
+      }
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * POST /auth/login
    */
   static async login(req: Request, res: Response, next: NextFunction) {
@@ -258,6 +409,11 @@ export class AuthController {
     const clientType = req.headers['x-client-type'] as string || 'web'; // Determine cookie vs body
 
     try {
+      let searchEmail = email;
+      if (email.includes('@')) {
+        searchEmail = email.toLowerCase();
+      }
+
       let possiblePhoneNumbers = [email];
       if (!email.includes('@')) {
         const normalized = normalizePhoneNumber(email);
@@ -266,10 +422,17 @@ export class AuthController {
         possiblePhoneNumbers = [email, normalized, clean, raw];
       }
 
+      // Check if IP or Email is temporarily blocked due to brute-force
+      const ipBlock = await redis.get(`block_login_ip:${req.ip}`);
+      const emailBlock = await redis.get(`block_login:${searchEmail}`);
+      if (ipBlock || emailBlock) {
+        return res.status(429).json({ success: false, message: 'Too many failed login attempts. Please try again later.' });
+      }
+
       const user = await prisma.user.findFirst({
         where: {
           OR: [
-            { email },
+            { email: searchEmail },
             { phoneNumber: { in: possiblePhoneNumbers } }
           ]
         }
@@ -277,6 +440,10 @@ export class AuthController {
       if (!user) {
         await AuthController.trackFailedLogin(email, req.ip || 'unknown');
         return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      }
+
+      if (!user.passwordHash) {
+        return res.status(403).json({ success: false, message: 'SETUP_REQUIRED', details: 'Please setup your password first.' });
       }
 
       const isPasswordValid = await verifyPassword(password, user.passwordHash);
@@ -338,28 +505,31 @@ export class AuthController {
     const countEmail = await redis.incr(keyEmail);
     const countIp = await redis.incr(keyIp);
 
-    if (countEmail === 1) await redis.expire(keyEmail, 60);
-    if (countIp === 1) await redis.expire(keyIp, 60);
-
-    await createAuditLog({
-      action: 'FAILED_LOGIN',
-      ipAddress: ip,
-      details: {
-        message: `Failed login attempt for identifier: ${email}`,
-        identifier: email,
-        timestamp: new Date().toISOString(),
-      },
-    });
+    if (countEmail === 1) await redis.expire(keyEmail, 300); // 5 minutes window
+    if (countIp === 1) await redis.expire(keyIp, 300);
 
     if (countEmail > 10 || countIp > 10) {
-      // Trigger warning into audit logs
+      // Block for 15 minutes
+      if (countEmail > 10) await redis.set(`block_login:${email}`, 'blocked', 'EX', 900);
+      if (countIp > 10) await redis.set(`block_login_ip:${ip}`, 'blocked', 'EX', 900);
+
       await createAuditLog({
         action: 'FAILED_LOGIN_ALERT',
         ipAddress: ip,
         details: {
-          message: `More than 10 failed login attempts triggered. Email: ${email}, IP: ${ip}`,
+          message: `More than 10 failed login attempts triggered. Blocked for 15 minutes. Email: ${email}, IP: ${ip}`,
           email,
           ip,
+        },
+      });
+    } else {
+      await createAuditLog({
+        action: 'FAILED_LOGIN',
+        ipAddress: ip,
+        details: {
+          message: `Failed login attempt for identifier: ${email}`,
+          identifier: email,
+          timestamp: new Date().toISOString(),
         },
       });
     }
@@ -373,6 +543,14 @@ export class AuthController {
     const identifier = phoneNumber ? normalizePhoneNumber(phoneNumber) : email;
 
     try {
+      // IP-based Rate Limit (max 10 OTP requests per hour per IP)
+      const ipKey = `otp_ip_count:${req.ip}`;
+      const ipCount = await redis.incr(ipKey);
+      if (ipCount === 1) await redis.expire(ipKey, 3600);
+      if (ipCount > 10) {
+        return res.status(429).json({ success: false, message: 'Too many OTP requests from this IP address. Please try again later.' });
+      }
+
       // 1. Check if the identifier is blocked (from failed verifications or hourly limit)
       const isBlocked = await redis.get(`cooldown:otp:${identifier}`);
       if (isBlocked) {
@@ -570,9 +748,15 @@ export class AuthController {
             message: 'Email or Phone Number already registered. Please login instead.',
           });
         }
+        
+        // Generate registration token to prevent bypass
+        const registrationToken = crypto.randomBytes(32).toString('hex');
+        await redis.set(`registration_token:${identifier}`, registrationToken, 'EX', 900); // 15 mins TTL
+
         return res.status(200).json({
           success: true,
           message: 'OTP verified successfully.',
+          registrationToken
         });
       }
 
@@ -581,6 +765,11 @@ export class AuthController {
           success: false,
           message: 'Verification complete, but no user profile matches this phone/email. Please register first.',
         });
+      }
+
+      if (purpose === 'setup-password') {
+        const verifyToken = jwt.sign({ sub: user.id, scope: 'setup-password' }, env.JWT_ACCESS_SECRET, { expiresIn: '5m' });
+        return res.status(200).json({ success: true, message: 'OTP verified successfully.', verifyToken });
       }
 
       const payload = {
@@ -746,11 +935,29 @@ export class AuthController {
     const { email, code } = req.body;
 
     try {
+      // Check cooldown block
+      const isBlocked = await redis.get(`cooldown:reset_otp:${email}`);
+      if (isBlocked) {
+        return res.status(429).json({ success: false, message: 'Identifier temporarily locked out. Try again later.' });
+      }
+
       const storedHash = await redis.get(`reset_otp:${email}`);
       const hashedIncoming = crypto.createHash('sha256').update(code).digest('hex');
 
       if (!storedHash || storedHash !== hashedIncoming) {
-        return res.status(400).json({ success: false, message: 'Invalid or expired reset code.' });
+        // Track failed reset attempts
+        const failKey = `reset_otp_fail:${email}`;
+        const attempts = await redis.incr(failKey);
+        
+        if (attempts === 1) await redis.expire(failKey, 900);
+
+        if (attempts >= 3) {
+          await redis.set(`cooldown:reset_otp:${email}`, 'blocked', 'EX', 900);
+          await redis.del(failKey);
+          return res.status(429).json({ success: false, message: 'Too many incorrect attempts. Locked out for 15 minutes.' });
+        }
+        
+        return res.status(400).json({ success: false, message: `Invalid or expired reset code. ${3 - attempts} attempts remaining.` });
       }
 
       return res.status(200).json({ success: true, message: 'Reset code verified successfully.' });
@@ -766,15 +973,33 @@ export class AuthController {
     const { email, code, newPassword } = req.body;
 
     try {
+      // Check cooldown block
+      const isBlocked = await redis.get(`cooldown:reset_otp:${email}`);
+      if (isBlocked) {
+        return res.status(429).json({ success: false, message: 'Identifier temporarily locked out. Try again later.' });
+      }
+
       const storedHash = await redis.get(`reset_otp:${email}`);
       const hashedIncoming = crypto.createHash('sha256').update(code).digest('hex');
 
       if (!storedHash || storedHash !== hashedIncoming) {
-        return res.status(400).json({ success: false, message: 'Invalid or expired reset code.' });
+        const failKey = `reset_otp_fail:${email}`;
+        const attempts = await redis.incr(failKey);
+        
+        if (attempts === 1) await redis.expire(failKey, 900);
+
+        if (attempts >= 3) {
+          await redis.set(`cooldown:reset_otp:${email}`, 'blocked', 'EX', 900);
+          await redis.del(failKey);
+          return res.status(429).json({ success: false, message: 'Too many incorrect attempts. Locked out for 15 minutes.' });
+        }
+
+        return res.status(400).json({ success: false, message: `Invalid or expired reset code. ${3 - attempts} attempts remaining.` });
       }
 
       // Successful verification - delete OTP and update password
       await redis.del(`reset_otp:${email}`);
+      await redis.del(`reset_otp_fail:${email}`);
       const passwordHash = await hashPassword(newPassword);
 
       await prisma.user.update({
@@ -854,11 +1079,13 @@ export class AuthController {
    * PUT /auth/profile
    */
   static async updateProfile(req: Request, res: Response, next: NextFunction) {
-    const { fullName, gender, address, fcmToken } = req.body;
-
     try {
-      const updatedUser = await prisma.user.update({
-        where: { id: req.user!.id },
+      const userId = req.user!.id;
+      const { fullName, gender, address, fcmToken } = req.body;
+
+      // Update user details
+      const user = await prisma.user.update({
+        where: { id: userId },
         data: {
           fullName,
           gender,
@@ -880,11 +1107,11 @@ export class AuthController {
       });
 
       await createAuditLog({
-        userId: req.user!.id,
-        action: 'USER_PROFILE_UPDATED',
+        userId,
+        action: 'PROFILE_UPDATED',
         ipAddress: req.ip,
         details: {
-          message: `User ${req.user!.fullName} updated their profile fields`,
+          message: 'User profile updated',
           updatedFields: { fullName, gender, address, fcmToken },
         },
       });
@@ -892,7 +1119,7 @@ export class AuthController {
       return res.status(200).json({
         success: true,
         message: 'Profile updated successfully.',
-        data: updatedUser,
+        data: user,
       });
     } catch (error) {
       next(error);
@@ -1123,6 +1350,10 @@ export class AuthController {
         return res.status(404).json({ success: false, message: 'User not found.' });
       }
 
+      if (!user.passwordHash) {
+        return res.status(403).json({ success: false, message: 'SETUP_REQUIRED', details: 'Please setup your password first.' });
+      }
+
       const isPasswordValid = await verifyPassword(password, user.passwordHash);
       if (!isPasswordValid) {
         return res.status(401).json({ success: false, message: 'Incorrect password.' });
@@ -1278,6 +1509,10 @@ export class AuthController {
       const user = await prisma.user.findUnique({ where: { id: userId } });
       if (!user) {
         return res.status(404).json({ success: false, message: 'User not found.' });
+      }
+
+      if (!user.passwordHash) {
+        return res.status(403).json({ success: false, message: 'SETUP_REQUIRED', details: 'Please setup your password first.' });
       }
 
       const isPasswordValid = await verifyPassword(password, user.passwordHash);

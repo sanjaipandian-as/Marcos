@@ -68,6 +68,34 @@ function getStatusLabelText(status) {
   }
 }
 
+function getCombinedStatusLabelText(order) {
+  if (order.status === 'CANCELLED') return 'Cancelled';
+  
+  let paymentLabel = 'Non-Paid';
+  if (order.paymentStatus === 'COMPLETED') {
+    paymentLabel = 'Fully Paid';
+  } else if (Number(order.advancePayment) > 0) {
+    paymentLabel = 'Advance Paid';
+  }
+
+  let orderLabel = getStatusLabelText(order.status);
+  if (order.status === 'PENDING') orderLabel = 'Ordered';
+  if (order.status === 'PAID') orderLabel = 'Measurement';
+  if (order.status === 'PROCESSING') orderLabel = 'Stitching';
+  if (order.status === 'SHIPPED') orderLabel = 'Completed';
+  if (order.status === 'OUT_FOR_DELIVERY') orderLabel = 'Out for Delivery';
+  if (order.status === 'DELIVERED') orderLabel = 'Delivered';
+
+  return `${paymentLabel} - ${orderLabel}`;
+}
+
+function getCombinedStatusStyle(order) {
+  if (order.status === 'CANCELLED') return { bg: '#fef2f2', text: '#ef4444' };
+  if (order.paymentStatus === 'COMPLETED') return { bg: '#ecfdf5', text: '#10b981' };
+  if (Number(order.advancePayment) > 0) return { bg: '#fffbeb', text: '#f59e0b' };
+  return { bg: '#f8fafc', text: '#64748b' };
+}
+
 function addDays(dateStr, days) {
   const d = new Date(dateStr);
   d.setDate(d.getDate() + days);
@@ -668,7 +696,7 @@ export default function OrderTrackingScreen({ route, navigation }) {
       {[
         { label: 'Subtotal', value: `₹${Number(order.totalAmount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` },
         { label: 'Discount', value: `-₹${Number(order.discountAmount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, color: '#10b981' },
-        { label: 'GST (18%)', value: `₹${Number(order.taxAmount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` },
+        { label: `GST (${order.gstPercentage !== undefined && order.gstPercentage !== null ? order.gstPercentage : 18}%)`, value: `₹${Number(order.taxAmount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` },
       ].map(row => (
         <View key={row.label} style={styles.priceRow}>
           <Text style={[styles.priceLabel, { fontFamily: fonts.regular, color: theme.text.secondary }]}>{row.label}</Text>
@@ -682,6 +710,22 @@ export default function OrderTrackingScreen({ route, navigation }) {
           ₹{Number(order.payableAmount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
         </Text>
       </View>
+      {Number(order.advancePayment) > 0 && (
+        <>
+          <View style={[styles.priceRow, { marginTop: 4 }]}>
+            <Text style={[styles.priceLabel, { fontFamily: fonts.regular, color: '#047857' }]}>Advance Paid</Text>
+            <Text style={[styles.priceValue, { fontFamily: fonts.semiBold, color: '#047857' }]}>
+              ₹{Number(order.advancePayment).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+            </Text>
+          </View>
+          <View style={styles.priceRow}>
+            <Text style={[styles.priceLabel, { fontFamily: fonts.bold, color: '#dc2626' }]}>Balance Due</Text>
+            <Text style={[styles.priceValue, { fontFamily: fonts.bold, color: '#dc2626' }]}>
+              ₹{Number(order.balanceAmount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+            </Text>
+          </View>
+        </>
+      )}
       <View style={[styles.payMethodBadge, { backgroundColor: order.paymentStatus === 'COMPLETED' ? '#dcfce7' : theme.bg.input }]}>
         <Text style={[styles.payMethodText, { fontFamily: fonts.medium, color: order.paymentStatus === 'COMPLETED' ? '#166534' : theme.text.secondary }]}>
           {order.paymentStatus === 'COMPLETED' 
@@ -1096,11 +1140,16 @@ export default function OrderTrackingScreen({ route, navigation }) {
             <Text style={[styles.metaDate, { fontFamily: fonts.regular, color: theme.text.muted }]}>
               Placed on {new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
             </Text>
+            {order.deliveryDate && (
+              <Text style={[styles.metaDate, { fontFamily: fonts.bold, color: theme.brand[500], marginTop: 4 }]}>
+                Expected Delivery: {new Date(order.deliveryDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+              </Text>
+            )}
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: isCancelled ? '#fef2f2' : theme.brand[50] }]}>
-            <Clock size={11} color={isCancelled ? '#ef4444' : theme.brand[500]} />
-            <Text style={[styles.statusBadgeText, { fontFamily: fonts.bold, color: isCancelled ? '#ef4444' : theme.brand[500] }]}>
-              {isCancelled ? 'CANCELLED' : getStatusLabelText(order.status)}
+          <View style={[styles.statusBadge, { backgroundColor: getCombinedStatusStyle(order).bg }]}>
+            <Clock size={11} color={getCombinedStatusStyle(order).text} />
+            <Text style={[styles.statusBadgeText, { fontFamily: fonts.bold, color: getCombinedStatusStyle(order).text }]}>
+              {getCombinedStatusLabelText(order)}
             </Text>
           </View>
         </View>

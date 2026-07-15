@@ -143,7 +143,7 @@ export default function AccountDetailsScreen({ navigation }) {
         }
       }
     } catch (err) {
-      console.error('Error fetching profile detail:', err);
+      console.warn('Profile fetch failed:', err.message);
     } finally {
       setLoading(false);
     }

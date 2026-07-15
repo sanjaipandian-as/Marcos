@@ -3,6 +3,8 @@ import {
   AuthController, 
   registerSchema, 
   loginSchema, 
+  checkIdentifierSchema,
+  setupPasswordSchema,
   otpSendSchema, 
   otpVerifySchema, 
   forgotPasswordSchema, 
@@ -17,12 +19,14 @@ import {
 import { VoucherPlanController } from '../controllers/voucherPlan.controller.js';
 import { validate } from '../middlewares/validate.middleware.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
-import { sensitiveRateLimiter } from '../middlewares/rateLimit.middleware.js';
+import { sensitiveRateLimiter, identifyIpLimiter, identifyTargetLimiter } from '../middlewares/rateLimit.middleware.js';
 
 const router = Router();
 
 router.post('/register', validate(registerSchema), AuthController.register);
+router.post('/login/check', identifyIpLimiter, identifyTargetLimiter, validate(checkIdentifierSchema), AuthController.checkIdentifier);
 router.post('/login', sensitiveRateLimiter, validate(loginSchema), AuthController.login);
+router.post('/setup-password', sensitiveRateLimiter, validate(setupPasswordSchema), AuthController.setupPassword);
 router.post('/otp/send', sensitiveRateLimiter, validate(otpSendSchema), AuthController.sendOtp);
 router.post('/otp/verify', sensitiveRateLimiter, validate(otpVerifySchema), AuthController.verifyOtp);
 router.post('/refresh', AuthController.refresh);

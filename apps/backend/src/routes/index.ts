@@ -36,7 +36,7 @@ router.use('/system', systemRoutes);
 // Public endpoints for mobile app
 router.get('/offers/active', OfferController.getActiveOffers);
 router.get('/stores', StoreLocationController.getPublicStores);
-router.get('/categories/:categoryId/subcategories', AdminCategoryController.listSubCategories);
+
 router.get('/promos/active', PromoContentController.getActivePromos);
 
 export default router;

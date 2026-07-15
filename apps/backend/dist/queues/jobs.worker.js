@@ -20,6 +20,10 @@ const jobs_producer_js_1 = __importDefault(require("./jobs.producer.js"));
 const socket_handler_js_1 = require("../socket/socket.handler.js");
 let worker;
 function initWorker() {
+    if (process.env.NODE_ENV === 'development') {
+        logger_js_1.default.info('BullMQ Background Worker disabled in development to save Redis limits.');
+        return;
+    }
     worker = new bullmq_1.Worker(queue_config_js_1.QUEUE_NAME, async (job) => {
         logger_js_1.default.info(`Starting job: ${job.name} (ID: ${job.id})`);
         switch (job.name) {
@@ -177,7 +181,12 @@ async function handleSendNotification(data) {
     const recipientPhone = user?.phoneNumber || '+1234567890';
     for (const channel of channels) {
         if (channel === 'EMAIL' && templates.email) {
-            await email_service_js_1.default.sendEmail(recipientEmail, `Your Invoice ${templates.email.data?.invoiceNumber || ''}`, `Hello ${templates.email.data?.customerName || 'Customer'}, here is your invoice.`, undefined, templates.email.id, templates.email.data);
+            const invoiceUrl = templates.email.data?.invoiceUrl;
+            const invoiceNumber = templates.email.data?.invoiceNumber;
+            const attachments = invoiceUrl
+                ? [{ filename: `invoice-${invoiceNumber || 'details'}.pdf`, path: invoiceUrl }]
+                : undefined;
+            await email_service_js_1.default.sendEmail(recipientEmail, `Your Invoice ${invoiceNumber || ''}`, `Hello ${templates.email.data?.customerName || 'Customer'}, here is your invoice.`, undefined, templates.email.id, templates.email.data, attachments);
         }
         if (channel === 'SMS' && templates.sms) {
             await sms_service_js_1.default.sendSms(recipientPhone, templates.sms);

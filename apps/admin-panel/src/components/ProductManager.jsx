@@ -32,7 +32,6 @@ export default function ProductManager() {
     price: '',
     materialInfo: '',
     categoryId: '',
-    subCategoryId: '',
     inventoryQty: '',
     targetGender: 'UNISEX',
     isTrending: false,
@@ -40,6 +39,29 @@ export default function ProductManager() {
     images: [''],
     bannerImage: ''
   });
+
+  
+  const findCategoryPath = (catId, cats = categories, currentPath = []) => {
+    for (const cat of cats) {
+      if (cat.id === catId) return [...currentPath, cat];
+      if (cat.subCategories && cat.subCategories.length > 0) {
+        const path = findCategoryPath(catId, cat.subCategories, [...currentPath, cat]);
+        if (path) return path;
+      }
+    }
+    return null;
+  };
+
+  const flattenCategories = (cats, depth = 0, result = []) => {
+    cats.forEach(c => {
+      result.push({ ...c, depth });
+      if (c.subCategories && c.subCategories.length > 0) {
+        flattenCategories(c.subCategories, depth + 1, result);
+      }
+    });
+    return result;
+  };
+  const flatCategories = flattenCategories(categories);
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -102,8 +124,8 @@ export default function ProductManager() {
   const loadData = async () => {
     try {
       let categorySlug = '';
-      if (selectedCategory !== 'ALL' && categories.length > 0) {
-        const cat = categories.find(c => c.id === selectedCategory);
+      if (selectedCategory !== 'ALL' && flatCategories.length > 0) {
+        const cat = flatCategories.find(c => c.id === selectedCategory);
         if (cat) categorySlug = cat.slug;
       }
       
@@ -133,8 +155,7 @@ export default function ProductManager() {
       description: '',
       price: '',
       materialInfo: '',
-      categoryId: categories[0]?.id || '',
-      subCategoryId: '',
+      categoryId: flatCategories.length > 0 ? flatCategories[0].id : '',
       inventoryQty: '10',
       targetGender: 'UNISEX',
       isTrending: false,
@@ -154,7 +175,6 @@ export default function ProductManager() {
       price: String(product.price),
       materialInfo: product.materialInfo || '',
       categoryId: product.categoryId,
-      subCategoryId: product.subCategoryId || '',
       inventoryQty: String(product.inventoryQty),
       targetGender: product.targetGender || 'UNISEX',
       isTrending: product.isTrending,
@@ -182,7 +202,6 @@ export default function ProductManager() {
       price: Number(formData.price),
       materialInfo: formData.materialInfo,
       categoryId: formData.categoryId,
-      subCategoryId: formData.subCategoryId || null,
       inventoryQty: Number(formData.inventoryQty),
       targetGender: formData.targetGender,
       isTrending: formData.isTrending,
@@ -226,7 +245,7 @@ export default function ProductManager() {
   };
 
   const getCategoryName = (catId) => {
-    return categories.find(c => c.id === catId)?.name || 'Unknown';
+    return flatCategories.find(c => c.id === catId)?.name || 'Unknown';
   };
 
   const handleSearchChange = (e) => {
@@ -257,33 +276,71 @@ export default function ProductManager() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="relative">
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={handleSearchChange}
-            placeholder="Search products..."
-            className="w-full pl-9 pr-4 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors"
-          />
-          <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+      <div className="bg-slate-50/50 border border-slate-200/60 rounded-3xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Left Side: Search & Dynamic Categories */}
+        <div className="flex flex-1 flex-col md:flex-row md:items-center gap-3">
+          {/* Search Box */}
+          <div className="relative min-w-[200px] md:max-w-xs w-full">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={handleSearchChange}
+              placeholder="Search products..."
+              className="w-full pl-9 pr-4 py-2.5 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors"
+            />
+            <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+          </div>
+
+          {/* Dynamic Cascading Filter Dropdowns */}
+          {(() => {
+            const currentPath = selectedCategory !== 'ALL' ? (findCategoryPath(selectedCategory) || []) : [];
+
+            // Build levels: level 0 = root categories, level 1 = children of path[0], etc.
+            const levels = [{ list: categories, selected: currentPath[0] || null, parentId: null }];
+            for (let i = 0; i < currentPath.length; i++) {
+              const children = currentPath[i].subCategories || [];
+              if (children.length > 0) {
+                levels.push({ list: children, selected: currentPath[i + 1] || null, parentId: currentPath[i].id });
+              }
+            }
+
+            return (
+              <div className="flex flex-wrap gap-2 items-center w-full md:w-auto">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1 hidden lg:inline">Category:</span>
+                {levels.map((level, idx) => (
+                  <select
+                    key={level.parentId || 'root'}
+                    value={level.selected?.id || (idx === 0 ? 'ALL' : '')}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (idx === 0 && val === 'ALL') {
+                        setSelectedCategory('ALL');
+                      } else if (val) {
+                        setSelectedCategory(val);
+                      } else {
+                        // User chose the "All Sub" placeholder — go back to parent level
+                        const parentCat = currentPath[idx - 1];
+                        setSelectedCategory(parentCat ? parentCat.id : 'ALL');
+                      }
+                      setCurrentPage(1);
+                    }}
+                    className="min-w-[130px] max-w-[200px] text-xs border border-slate-200 rounded-xl py-2 px-3 bg-white text-slate-650 focus:outline-none focus:border-brand-500 transition-colors font-bold shadow-sm"
+                  >
+                    {idx === 0 && <option value="ALL">All Categories</option>}
+                    {idx > 0 && <option value="">-- All {idx === 1 ? 'Sub' : 'Sub'.repeat(idx)} --</option>}
+                    {level.list.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                ))}
+              </div>
+            );
+          })()}
         </div>
 
-        <div>
-          <select
-            value={selectedCategory}
-            onChange={handleCategoryChange}
-            className="w-full text-xs border border-slate-200 rounded-xl py-2 px-3 bg-white text-slate-650 focus:outline-none focus:border-brand-500 transition-colors font-bold"
-          >
-            <option value="ALL">All Categories</option>
-            {categories.map(cat => (
-              <option key={cat.id} value={cat.id}>{cat.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex items-center justify-center sm:justify-start gap-2 px-4 py-2 bg-amber-50 border border-amber-100 rounded-xl text-amber-800 text-[11px] font-bold">
-          <AlertTriangle className="w-4.5 h-4.5 shrink-0" />
+        {/* Right Side: Total Products Badge */}
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-800 text-[11px] font-bold self-start md:self-auto">
+          <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
           <span>
             {totalItems} Total Products
           </span>
@@ -468,31 +525,53 @@ export default function ProductManager() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase block">Category *</label>
-                  <select
-                    value={formData.categoryId}
-                    onChange={e => setFormData({ ...formData, categoryId: e.target.value, subCategoryId: '' })}
-                    className="w-full text-xs border border-slate-200 rounded-xl py-2 px-3 bg-white focus:outline-none focus:border-brand-500 font-semibold"
-                  >
-                    {categories.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase block">Sub-Category</label>
-                  <select
-                    value={formData.subCategoryId}
-                    onChange={e => setFormData({ ...formData, subCategoryId: e.target.value })}
-                    className="w-full text-xs border border-slate-200 rounded-xl py-2 px-3 bg-white focus:outline-none focus:border-brand-500 font-semibold"
-                  >
-                    <option value="">None</option>
-                    {(categories.find(c => c.id === formData.categoryId)?.subCategories || []).map(sc => (
-                      <option key={sc.id} value={sc.id}>{sc.name}</option>
-                    ))}
-                  </select>
+                  
+                  <div className="flex flex-col gap-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase block">Category Selection *</label>
+                    {(() => {
+                      const currentPath = findCategoryPath(formData.categoryId) || [];
+
+                      // Build levels: level 0 = root categories, then children of each selected level
+                      const levels = [{ list: categories, selected: currentPath[0] || null, parentId: null }];
+                      for (let i = 0; i < currentPath.length; i++) {
+                        const children = currentPath[i].subCategories || [];
+                        if (children.length > 0) {
+                          levels.push({ list: children, selected: currentPath[i + 1] || null, parentId: currentPath[i].id });
+                        }
+                      }
+
+                      return (
+                        <div className="flex flex-col gap-2">
+                          {levels.map((level, idx) => (
+                            <select
+                              key={level.parentId || 'root'}
+                              value={level.selected?.id || (idx === 0 ? '' : '')}
+                              onChange={e => {
+                                const val = e.target.value;
+                                if (val) {
+                                  setFormData({ ...formData, categoryId: val });
+                                } else if (idx > 0) {
+                                  // User chose placeholder — go back to parent
+                                  const parentCat = currentPath[idx - 1];
+                                  setFormData({ ...formData, categoryId: parentCat ? parentCat.id : '' });
+                                }
+                              }}
+                              className="w-full text-xs border border-slate-200 rounded-xl py-2 px-3 bg-white focus:outline-none focus:border-brand-500 font-semibold"
+                            >
+                              {idx === 0 && <option value="" disabled>Select Main Category</option>}
+                              {idx > 0 && <option value="">{`-- Select Level ${idx + 1} --`}</option>}
+                              {level.list.map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                              ))}
+                            </select>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
                 </div>
               </div>
 

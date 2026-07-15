@@ -13,8 +13,8 @@ import {
   UserPlus,
   Mail,
   Phone,
-  Lock,
-  User
+  User,
+  Key
 } from 'lucide-react';
 import api from '../utils/api';
 
@@ -25,13 +25,11 @@ export default function AppCustomerManager() {
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [copiedField, setCopiedField] = useState('');
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
     phoneNumber: '',
-    password: '',
     gender: '',
     address: ''
   });
@@ -51,10 +49,9 @@ export default function AppCustomerManager() {
 
   const handleOpenAdd = () => {
     setEditingCustomer(null);
-    setFormData({ fullName: '', email: '', phoneNumber: '', password: '', gender: '', address: '' });
+    setFormData({ fullName: '', email: '', phoneNumber: '', gender: '', address: '' });
     setError('');
     setSuccess('');
-    setShowPassword(false);
     setIsModalOpen(true);
   };
 
@@ -64,13 +61,11 @@ export default function AppCustomerManager() {
       fullName: customer.fullName || '',
       email: customer.email || '',
       phoneNumber: customer.phoneNumber || '',
-      password: '',
       gender: customer.gender || '',
       address: customer.address || ''
     });
     setError('');
     setSuccess('');
-    setShowPassword(false);
     setIsModalOpen(true);
   };
 
@@ -83,18 +78,9 @@ export default function AppCustomerManager() {
       setError('Full name, email, and phone number are required.');
       return;
     }
-    if (!editingCustomer && !formData.password) {
-      setError('Password is required for new customers.');
-      return;
-    }
-    if (formData.password && formData.password.length < 6) {
-      setError('Password must be at least 6 characters.');
-      return;
-    }
 
     try {
       const payload = { ...formData };
-      if (editingCustomer && !payload.password) delete payload.password;
 
       if (editingCustomer) {
         await api.updateAppCustomer(editingCustomer.id, payload);
@@ -107,6 +93,16 @@ export default function AppCustomerManager() {
       loadCustomers();
     } catch (err) {
       setError(err.message || 'Operation failed.');
+    }
+  };
+
+  const handleForcePasswordReset = async (id) => {
+    if (!window.confirm('Force this customer to reset their password? They will be logged out immediately.')) return;
+    try {
+      await api.forcePasswordReset(id);
+      alert('Password reset forced successfully.');
+    } catch (err) {
+      alert(err.message || 'Action failed.');
     }
   };
 
@@ -237,6 +233,13 @@ export default function AppCustomerManager() {
                     {copiedField === c.id ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
                   <button
+                    onClick={() => handleForcePasswordReset(c.id)}
+                    className="p-1.5 border border-slate-200 rounded-lg hover:bg-orange-50 text-slate-500 transition-colors"
+                    title="Force Password Reset"
+                  >
+                    <Key className="w-3.5 h-3.5" />
+                  </button>
+                  <button
                     onClick={() => handleOpenEdit(c)}
                     className="p-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-500 transition-colors"
                     title="Edit Customer"
@@ -328,29 +331,6 @@ export default function AppCustomerManager() {
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase block">
-                  Password {editingCustomer ? '(leave blank to keep current)' : '*'}
-                </label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={formData.password}
-                    onChange={e => setFormData({ ...formData, password: e.target.value })}
-                    placeholder={editingCustomer ? '••••••••' : 'Minimum 6 characters'}
-                    className="w-full text-xs border border-slate-200 rounded-xl py-2.5 pl-9 pr-10 focus:outline-none focus:border-brand-500"
-                    {...(!editingCustomer ? { required: true } : {})}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
@@ -382,7 +362,7 @@ export default function AppCustomerManager() {
                 <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl">
                   <p className="text-[10px] text-blue-700 font-bold flex items-center gap-1.5">
                     <Smartphone className="w-3.5 h-3.5" />
-                    This customer will be able to login to the mobile app using email & password.
+                    This customer will set up their password when they first login to the app.
                   </p>
                 </div>
               )}

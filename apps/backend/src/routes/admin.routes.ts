@@ -9,7 +9,7 @@ import {
   systemSettingsUpdateSchema
 } from '../controllers/admin.controller.js';
 import { AdminProductController, productCreateSchema, productUpdateSchema, trendingToggleSchema } from '../controllers/adminProduct.controller.js';
-import { AdminCategoryController, categoryCreateSchema, categoryUpdateSchema, categoriesReorderSchema, subCategoryCreateSchema, subCategoryUpdateSchema } from '../controllers/adminCategory.controller.js';
+import { AdminCategoryController, categoryCreateSchema, categoryUpdateSchema, categoriesReorderSchema } from '../controllers/adminCategory.controller.js';
 import { AdminCustomerController, appCustomerCreateSchema, appCustomerUpdateSchema } from '../controllers/adminCustomer.controller.js';
 import { OfferController, offerCreateSchema, offerUpdateSchema } from '../controllers/offer.controller.js';
 import { StoreLocationController, storeLocationCreateSchema, storeLocationUpdateSchema } from '../controllers/storeLocation.controller.js';
@@ -39,6 +39,7 @@ router.post('/upload-video', authorize(Role.ADMIN, Role.SUPERADMIN), upload.sing
 const restrictToAdmin = authorize(Role.ADMIN, Role.SUPERADMIN);
 
 router.get('/dashboard', restrictToAdmin, AdminController.getDashboard);
+router.get('/dashboard/date-stats', restrictToAdmin, AdminController.getDateStats);
 router.post('/loyalty/adjust', restrictToAdmin, validate(loyaltyAdjustSchema), AdminController.adjustPoints);
 router.get('/loyalty/transactions', restrictToAdmin, AdminController.listPointTransactions);
 router.get('/reports', restrictToAdmin, AdminController.getExtendedReports);
@@ -60,20 +61,19 @@ router.put('/categories/reorder', restrictToAdmin, validate(categoriesReorderSch
 router.put('/categories/:id', restrictToAdmin, validate(categoryUpdateSchema), AdminCategoryController.updateCategory);
 router.delete('/categories/:id', restrictToAdmin, AdminCategoryController.deleteCategory);
 
-// Sub-Category Management CRUD
-router.post('/categories/:categoryId/subcategories', restrictToAdmin, validate(subCategoryCreateSchema), AdminCategoryController.createSubCategory);
-router.put('/subcategories/:id', restrictToAdmin, validate(subCategoryUpdateSchema), AdminCategoryController.updateSubCategory);
-router.delete('/subcategories/:id', restrictToAdmin, AdminCategoryController.deleteSubCategory);
+
 
 // App Customer Management (Admin-created customers for the mobile app)
 router.post('/customers', restrictToAdmin, validate(appCustomerCreateSchema), AdminCustomerController.createCustomer);
 router.put('/customers/:id', restrictToAdmin, validate(appCustomerUpdateSchema), AdminCustomerController.updateCustomer);
+router.post('/customers/:id/force-password-reset', restrictToAdmin, AdminCustomerController.forcePasswordReset);
 router.delete('/customers/:id', restrictToAdmin, AdminCustomerController.deleteCustomer);
 
 // Staff management (Read-only staff list allowed for STAFF; CRUD restricted to ADMIN/SUPERADMIN)
 router.get('/users', authorize(Role.ADMIN, Role.SUPERADMIN, Role.STAFF), AdminController.listStaff);
 router.post('/users', restrictToAdmin, validate(staffCreateSchema), AdminController.createStaff);
 router.put('/users/:id', restrictToAdmin, validate(userUpdateSchema), AdminController.updateStaff);
+router.post('/users/:id/force-password-reset', restrictToAdmin, AdminController.forceStaffPasswordReset);
 
 // Role management (Restricted to SUPERADMIN)
 router.put('/users/:id/role', authorize(Role.SUPERADMIN), validate(userRoleUpdateSchema), AdminController.updateUserRole);

@@ -75,3 +75,24 @@ export const sensitiveRateLimiter = rateLimiter({
     return identifier;
   },
 });
+
+export const identifyIpLimiter = rateLimiter({
+  windowMs: 60 * 1000,
+  max: 10,
+  prefix: 'identify-ip',
+  keyGenerator: (req) => req.ip || 'unknown-ip',
+});
+
+export const identifyTargetLimiter = rateLimiter({
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+  prefix: 'identify-target',
+  keyGenerator: (req) => {
+    let identifier = req.body.identifier || 'unknown';
+    // Use simple normalization if available
+    if (identifier.includes('@')) {
+      identifier = identifier.toLowerCase().trim();
+    }
+    return identifier;
+  }
+});

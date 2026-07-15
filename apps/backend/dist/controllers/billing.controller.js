@@ -26,9 +26,14 @@ exports.invoiceCreateSchema = zod_1.z.object({
         paymentMethod: zod_1.z.enum(['CASH', 'CARD', 'ONLINE']),
         isOfflineSales: zod_1.z.boolean().default(true),
         status: zod_1.z.enum(['PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED']).optional(),
+        paymentStatus: zod_1.z.enum(['PENDING', 'COMPLETED', 'FAILED', 'REFUNDED']).optional(),
+        advancePayment: zod_1.z.coerce.number().nonnegative().optional(),
+        gstPercentage: zod_1.z.coerce.number().nonnegative().optional(),
         isQuickOrder: zod_1.z.boolean().optional(),
         quickOrderReason: zod_1.z.string().optional(),
         quickOrderExpectedDate: zod_1.z.string().optional(),
+        measurementProfileIds: zod_1.z.array(zod_1.z.string()).optional(),
+        deliveryDate: zod_1.z.string().min(1, "Delivery date is required"),
     }).refine(data => !data.isQuickOrder || (data.quickOrderReason && data.quickOrderReason.trim().length > 0), {
         message: "Reason is required for quick orders",
         path: ["quickOrderReason"]
@@ -40,7 +45,7 @@ class BillingController {
      * Creates an Order, adjusts inventory, and queues BullMQ background tasks.
      */
     static async createInvoice(req, res, next) {
-        const { userId, customerName, items, discountAmount, paymentMethod, isOfflineSales, status, isQuickOrder, quickOrderReason, quickOrderExpectedDate } = req.body;
+        const { userId, customerName, items, discountAmount, paymentMethod, isOfflineSales, status, paymentStatus, advancePayment, gstPercentage, isQuickOrder, quickOrderReason, quickOrderExpectedDate, measurementProfileIds, deliveryDate } = req.body;
         try {
             // 1. Process inventory adjust and Order insertion inside a database transaction
             const order = await db_js_1.default.$transaction(async (tx) => {
@@ -80,29 +85,37 @@ class BillingController {
                     subtotal += Number(item.price) * item.quantity;
                 }
                 // Calculations
-                const taxRate = 0.18; // 18% GST/VAT default
+                const finalGstPercentage = gstPercentage !== undefined ? Number(gstPercentage) : 0;
+                const taxRate = finalGstPercentage / 100;
                 const taxAmount = (subtotal - discountAmount) * taxRate;
                 const totalAmount = subtotal;
                 const payableAmount = (subtotal - discountAmount) + taxAmount;
+                const advancePaymentValue = advancePayment ? Number(advancePayment) : 0;
+                const balanceAmount = payableAmount - advancePaymentValue;
                 const invoiceNumber = `INV-${Date.now()}-${crypto_1.default.randomUUID().substring(0, 8).toUpperCase()}`;
                 // Create Order
                 const newOrder = await tx.order.create({
                     data: {
                         userId,
                         status: status || 'PAID', // use provided status or default to PAID
-                        paymentStatus: 'COMPLETED',
+                        paymentStatus: paymentStatus || 'COMPLETED',
                         totalAmount,
                         taxAmount,
+                        gstPercentage: finalGstPercentage,
                         discountAmount,
                         payableAmount,
                         paymentMethod,
                         isOfflineSales,
                         invoiceNumber,
+                        advancePayment: advancePaymentValue,
+                        balanceAmount: Math.max(0, balanceAmount),
                         gatewayResponse: customerName ? { guestCustomerName: customerName } : undefined,
                         isQuickOrder: isQuickOrder || false,
                         quickOrderReason: isQuickOrder ? quickOrderReason : null,
                         quickOrderExpectedDate: isQuickOrder && quickOrderExpectedDate ? new Date(quickOrderExpectedDate) : null,
                         quickOrderStatus: isQuickOrder ? 'PENDING' : null,
+                        measurementProfileIds: measurementProfileIds && measurementProfileIds.length > 0 ? measurementProfileIds : undefined,
+                        deliveryDate: deliveryDate ? new Date(deliveryDate) : undefined,
                     },
                     include: {
                         orderItems: true,

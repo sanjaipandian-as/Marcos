@@ -44,7 +44,7 @@ export default function WelcomeScreen({ navigation }) {
         <View style={[styles.bottomCard, shadows.premium]}>
           <TouchableOpacity 
             style={[styles.btn, { backgroundColor: theme.brand[500] }]}
-            onPress={() => navigation.navigate('Login')}
+            onPress={() => navigation.navigate('LoginIdentifier')}
             activeOpacity={0.8}
           >
             <Text style={[styles.btnText, { color: '#3D2E3D', fontFamily: fonts.bold }]}>

@@ -5,13 +5,13 @@ import { createAuditLog } from '../utils/audit.js';
 import redis from '../config/redis.js';
 import { hashPassword } from '../utils/crypto.js';
 import crypto from 'crypto';
+import AuthService from '../services/auth.service.js';
 
 export const appCustomerCreateSchema = z.object({
   body: z.object({
     fullName: z.string().min(1),
     email: z.string().email(),
     phoneNumber: z.string().min(10),
-    password: z.string().min(6),
     gender: z.string().optional().nullable(),
     address: z.string().optional().nullable(),
   }),
@@ -22,10 +22,9 @@ export const appCustomerUpdateSchema = z.object({
     fullName: z.string().min(1).optional(),
     email: z.string().email().optional(),
     phoneNumber: z.string().min(10).optional(),
-    password: z.string().min(6).optional(),
     gender: z.string().optional().nullable(),
     address: z.string().optional().nullable(),
-  }),
+  }).strict(),
 });
 
 export class AdminCustomerController {
@@ -35,7 +34,7 @@ export class AdminCustomerController {
    * Admin creates an app customer account
    */
   static async createCustomer(req: Request, res: Response, next: NextFunction) {
-    const { fullName, email, phoneNumber, password, gender, address } = req.body;
+    const { fullName, email, phoneNumber, gender, address } = req.body;
 
     try {
       // Normalize phone
@@ -58,7 +57,6 @@ export class AdminCustomerController {
         return res.status(409).json({ success: false, message: 'Email or Phone Number already registered' });
       }
 
-      const passwordHash = await hashPassword(password);
       const referralCode = `REF-${crypto.randomUUID().substring(0, 8).toUpperCase()}`;
 
       const customer = await prisma.user.create({
@@ -66,11 +64,13 @@ export class AdminCustomerController {
           fullName,
           email,
           phoneNumber: normalizedPhone,
-          passwordHash,
           referralCode,
           role: 'CUSTOMER',
           gender,
           address,
+          // @ts-ignore - IDE TS cache issue
+          passwordHash: null,
+          passwordSetByUser: false,
         },
       });
 
@@ -109,7 +109,7 @@ export class AdminCustomerController {
    */
   static async updateCustomer(req: Request, res: Response, next: NextFunction) {
     const { id } = req.params;
-    const { fullName, email, phoneNumber, password, gender, address } = req.body;
+    const { fullName, email, phoneNumber, gender, address } = req.body;
 
     try {
       const existing = await prisma.user.findUnique({ where: { id } });
@@ -126,9 +126,6 @@ export class AdminCustomerController {
           normalizedPhone = `+91${normalizedPhone}`;
         }
         updateData.phoneNumber = normalizedPhone;
-      }
-      if (password) {
-        updateData.passwordHash = await hashPassword(password);
       }
       if (gender !== undefined) updateData.gender = gender;
       if (address !== undefined) updateData.address = address;
@@ -301,6 +298,45 @@ export class AdminCustomerController {
       });
 
       return res.status(200).json({ success: true, message: 'Customer account deleted successfully' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /admin/customers/:id/force-password-reset
+   * Admin forces a user to reset their password
+   */
+  static async forcePasswordReset(req: Request, res: Response, next: NextFunction) {
+    const { id } = req.params;
+    try {
+      const customer = await prisma.user.findUnique({
+        where: { id },
+      });
+
+      if (!customer) {
+        return res.status(404).json({ success: false, message: 'Customer not found' });
+      }
+
+      await prisma.user.update({
+        where: { id },
+        // @ts-ignore - IDE TS cache issue
+        data: { passwordHash: null, passwordSetByUser: false },
+      });
+
+      await AuthService.revokeAllUserSessions(id);
+
+      await createAuditLog({
+        userId: req.user!.id,
+        action: 'PASSWORD_RESET_FORCED',
+        ipAddress: req.ip,
+        details: {
+          message: `Admin ${req.user!.fullName} forced a password reset for customer ${customer.email}`,
+          customerId: id,
+        },
+      });
+
+      return res.status(200).json({ success: true, message: 'User logged out and password reset forced.' });
     } catch (error) {
       next(error);
     }

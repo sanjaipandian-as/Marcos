@@ -30,7 +30,8 @@ export default function EzMartView({ theme }) {
     indiaActiveUsers: [],
     productTraffic: [],
     revenueChart: [],
-    conversionRates: []
+    conversionRates: [],
+    todayStats: { orders: 0, deliveries: 0, tomorrowDetails: { orders: [], appointments: [] } }
   });
 
   useEffect(() => {
@@ -45,7 +46,8 @@ export default function EzMartView({ theme }) {
           indiaActiveUsers: dashboard.indiaActiveUsers || [],
           productTraffic: dashboard.productTraffic || [],
           revenueChart: dashboard.revenueChart || [],
-          conversionRates: dashboard.conversionRates || []
+          conversionRates: dashboard.conversionRates || [],
+          todayStats: dashboard.todayStats || { orders: 0, deliveries: 0, tomorrowDetails: { orders: [], appointments: [] } }
         });
       } catch (err) {
         console.error('Failed to load dashboard report stats:', err);
@@ -123,6 +125,34 @@ export default function EzMartView({ theme }) {
 
   return (
     <div className="space-y-6">
+      {/* Today Stats & Tomorrow Details - Always visible */}
+      <div className="bg-gradient-to-r from-brand-50 to-blue-50 p-6 rounded-3xl border border-brand-100 shadow-sm flex flex-col md:flex-row gap-6 justify-between items-start md:items-center">
+        <div className="flex gap-8">
+          <div>
+            <p className="text-xs text-brand-600 font-bold uppercase tracking-wider mb-1">Today's Orders</p>
+            <p className="text-3xl font-extrabold text-[#3D2E3D]">{reportData.todayStats.orders}</p>
+          </div>
+          <div className="w-px bg-brand-200/50 hidden md:block"></div>
+          <div>
+            <p className="text-xs text-blue-600 font-bold uppercase tracking-wider mb-1">Today's Deliveries</p>
+            <p className="text-3xl font-extrabold text-[#3D2E3D]">{reportData.todayStats.deliveries}</p>
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-2xl border border-white/40 shadow-sm w-full md:w-auto min-w-[280px]">
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Tomorrow's Schedule</p>
+          <div className="space-y-2">
+            <div className="flex justify-between items-center text-xs">
+              <span className="font-semibold text-slate-600">Expected Orders</span>
+              <span className="font-bold text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full">{(reportData.todayStats.tomorrowDetails?.orders || []).length}</span>
+            </div>
+            <div className="flex justify-between items-center text-xs">
+              <span className="font-semibold text-slate-600">Appointments</span>
+              <span className="font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">{(reportData.todayStats.tomorrowDetails?.appointments || []).length}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* 3 Metric Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Total Sales (Revenue) - Green Accent */}

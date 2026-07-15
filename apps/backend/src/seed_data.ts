@@ -8,7 +8,7 @@ async function main() {
   await prisma.cartItem.deleteMany({});
   await prisma.favorite.deleteMany({});
   await prisma.product.deleteMany({});
-  await prisma.subCategory.deleteMany({});
+
   await prisma.category.deleteMany({});
   await prisma.banner.deleteMany({});
 
@@ -71,12 +71,12 @@ async function main() {
     subCategoryMap[catSlug] = {};
     const subList = subCategoriesData[catSlug];
     for (const sub of subList) {
-      const created = await prisma.subCategory.create({
+      const created = await prisma.category.create({
         data: {
           name: sub.name,
           slug: sub.slug,
           imageUrl: sub.imageUrl,
-          categoryId: parentCategory.id,
+          parentId: parentCategory.id,
           order: subList.indexOf(sub),
         }
       });
@@ -745,8 +745,7 @@ async function main() {
             materialInfo: item.materialInfo,
             images: item.images,
             bannerImage: item.bannerImage,
-            categoryId: parentCategory.id,
-            subCategoryId: parentSubCategory.id,
+            categoryId: parentSubCategory.id,
             inventoryQty: 50,
             stockStatus: 'IN_STOCK',
             isTrending: Math.random() < 0.3, // ~30% trending

@@ -20,7 +20,7 @@ function initSocket(server) {
     io = new socket_io_1.Server(server, {
         cors: {
             origin: env_js_1.default.NODE_ENV === 'production'
-                ? ['https://marcos-admin.vercel.app', 'https://marcos.app'] // Restrict to known origins in production
+                ? ['https://marcos-admin-panel.vercel.app', 'https://marcos.app'] // Restrict to known origins in production
                 : '*',
             methods: ['GET', 'POST'],
             credentials: true,

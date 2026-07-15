@@ -19,7 +19,6 @@ const category_routes_js_1 = __importDefault(require("./category.routes.js"));
 const system_routes_js_1 = __importDefault(require("./system.routes.js"));
 const offer_controller_js_1 = require("../controllers/offer.controller.js");
 const storeLocation_controller_js_1 = require("../controllers/storeLocation.controller.js");
-const adminCategory_controller_js_1 = require("../controllers/adminCategory.controller.js");
 const promoContent_controller_js_1 = require("../controllers/promoContent.controller.js");
 const router = (0, express_1.Router)();
 router.use('/auth', auth_routes_js_1.default);
@@ -38,6 +37,5 @@ router.use('/system', system_routes_js_1.default);
 // Public endpoints for mobile app
 router.get('/offers/active', offer_controller_js_1.OfferController.getActiveOffers);
 router.get('/stores', storeLocation_controller_js_1.StoreLocationController.getPublicStores);
-router.get('/categories/:categoryId/subcategories', adminCategory_controller_js_1.AdminCategoryController.listSubCategories);
 router.get('/promos/active', promoContent_controller_js_1.PromoContentController.getActivePromos);
 exports.default = router;

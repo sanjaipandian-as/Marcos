@@ -55,11 +55,27 @@ export default function OrderHistoryScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState('ALL');
   const [showFilterModal, setShowFilterModal] = useState(false);
 
-  const loadOrders = async () => {
+  // Pagination states
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const loadOrders = async (reset = false) => {
     try {
-      setLoading(true);
-      const res = await api.get('/orders');
-      if (res.success) setOrders(res.data || []);
+      if (reset) {
+        setPage(1);
+        setHasMore(true);
+      }
+      if (orders.length === 0) {
+        setLoading(true);
+      }
+      
+      const res = await api.get('/orders?limit=20&page=1');
+      if (res.success) {
+        setOrders(res.data || []);
+        setHasMore((res.data || []).length >= 20);
+        if (reset) setPage(1);
+      }
     } catch (err) {
       console.error('Error fetching orders:', err);
     } finally {
@@ -67,10 +83,35 @@ export default function OrderHistoryScreen({ navigation }) {
     }
   };
 
+  const loadMoreOrders = async () => {
+    if (loadingMore || !hasMore) return;
+    
+    try {
+      setLoadingMore(true);
+      const nextPage = page + 1;
+      const res = await api.get(`/orders?limit=20&page=${nextPage}`);
+      if (res.success && res.data?.length > 0) {
+        setOrders(prev => {
+          const existingIds = new Set(prev.map(o => o.id));
+          const newOrders = res.data.filter(o => !existingIds.has(o.id));
+          return [...prev, ...newOrders];
+        });
+        setPage(nextPage);
+        setHasMore(res.data.length >= 20);
+      } else {
+        setHasMore(false);
+      }
+    } catch (err) {
+      console.error('Error fetching more orders:', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   // Effect 1: re-fetch order list on every screen focus (source of truth)
   useFocusEffect(
     useCallback(() => {
-      loadOrders();
+      loadOrders(true);
     }, [])
   );
 
@@ -448,10 +489,20 @@ export default function OrderHistoryScreen({ navigation }) {
           renderItem={renderOrderItem}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          onEndReached={loadMoreOrders}
+          onEndReachedThreshold={0.5}
           ListHeaderComponent={() => (
             <Text style={[styles.countLabel, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
               {filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'}
             </Text>
+          )}
+          ListFooterComponent={() => (
+            loadingMore ? (
+              <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={theme.brand[500]} />
+                <Text style={{ marginTop: 8, fontSize: 12, color: theme.text.muted }}>Loading more orders...</Text>
+              </View>
+            ) : null
           )}
         />
       )}

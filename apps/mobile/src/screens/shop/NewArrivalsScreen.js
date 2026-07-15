@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import WishlistIcon from '../../components/common/WishlistIcon';
 import { 
   StyleSheet, 
   Text, 
@@ -14,7 +15,7 @@ import {
 import { useTheme } from '../../styles/ThemeContext';
 import api from '../../utils/api';
 import { Alert } from 'react-native';
-import { ArrowLeft, Sparkles, ShoppingBag, ShoppingCart, Heart, SlidersHorizontal } from 'lucide-react-native';
+import { ArrowLeft, Sparkles, ShoppingBag, ShoppingCart, SlidersHorizontal } from 'lucide-react-native';
 import { CustomCartAddIcon, CustomCartAddedIcon } from '../../components/CartIcons';
 
 const { width } = Dimensions.get('window');
@@ -23,7 +24,7 @@ export default function NewArrivalsScreen({ navigation }) {
   const { theme, fonts, shadows } = useTheme();
   const [products, setProducts] = useState([]);
   const [favorites, setFavorites] = useState(new Set());
-  const [cartItems, setCartItems] = useState(new Set());
+
   const [loading, setLoading] = useState(true);
   const [selectedTab, setSelectedTab] = useState('All'); // 'All', 'Men', 'Women', 'Kids', 'Unisex'
   const [showCategories, setShowCategories] = useState(false);
@@ -31,10 +32,9 @@ export default function NewArrivalsScreen({ navigation }) {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [prodRes, favRes, cartRes] = await Promise.all([
+      const [prodRes, favRes] = await Promise.all([
         api.get('/products'),
-        api.get('/products/favorites').catch(() => ({ success: false, data: [] })),
-        api.get('/products/cart').catch(() => ({ success: false, data: [] }))
+        api.get('/products/favorites').catch(() => ({ success: false, data: [] }))
       ]);
 
       if (prodRes.success) {
@@ -45,9 +45,7 @@ export default function NewArrivalsScreen({ navigation }) {
       if (favRes.success && favRes.data) {
         setFavorites(new Set(favRes.data.map(item => item.productId)));
       }
-      if (cartRes.success && cartRes.data) {
-        setCartItems(new Set(cartRes.data.map(item => item.productId)));
-      }
+
     } catch (err) {
       console.error('Error loading new arrivals data:', err);
     } finally {
@@ -85,31 +83,11 @@ export default function NewArrivalsScreen({ navigation }) {
     }
   };
 
-  const handleAddToCart = async (productId) => {
-    try {
-      const inCart = cartItems.has(productId);
-      if (!inCart) {
-        const res = await api.post('/products/cart', { productId, quantity: 1 });
-        if (res.success) {
-          setCartItems(prev => {
-            const next = new Set(prev);
-            next.add(productId);
-            return next;
-          });
-          Alert.alert('Success', 'Added to cart successfully!');
-        }
-      } else {
-        navigation.navigate('Cart');
-      }
-    } catch (err) {
-      const errorMsg = err?.message || 'Unable to add item to cart. Please try again.';
-      Alert.alert('Error', errorMsg);
-    }
-  };
+
 
   const renderProductItem = ({ item }) => {
     const isFav = favorites.has(item.id);
-    const inCart = cartItems.has(item.id);
+
     const originalPrice = item.price === "item.price" ? (item.originalPrice ? Number(item.originalPrice) : null) : (typeof product !== "undefined" && product.originalPrice ? Number(product.originalPrice) : (typeof item !== "undefined" && item.originalPrice ? Number(item.originalPrice) : null));
 
     return (
@@ -129,7 +107,7 @@ export default function NewArrivalsScreen({ navigation }) {
             onPress={() => toggleFavorite(item.id)}
             activeOpacity={0.7}
           >
-            <Heart 
+            <WishlistIcon 
               size={14} 
               color={isFav ? '#3D2E3D' : '#767676'} 
               fill={isFav ? '#3D2E3D' : 'transparent'} 
@@ -159,22 +137,7 @@ export default function NewArrivalsScreen({ navigation }) {
             ) : null}
             </View>
             
-            <TouchableOpacity 
-              style={[
-                styles.cartIconBtn,
-                inCart
-                  ? { backgroundColor: '#3D2E3D', borderWidth: 1, borderColor: '#3D2E3D' }
-                  : { backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#D8BFD8' }
-              ]} 
-              onPress={() => handleAddToCart(item.id)}
-              activeOpacity={0.7}
-            >
-              {inCart ? (
-                <CustomCartAddedIcon color="#FDFBFD" size={18} />
-              ) : (
-                <CustomCartAddIcon color="#3D2E3D" size={18} />
-              )}
-            </TouchableOpacity>
+
           </View>
         </View>
       </TouchableOpacity>

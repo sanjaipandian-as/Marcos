@@ -6,7 +6,15 @@ export class EmailService {
   /**
    * Send an email. Falls back to console log if SMTP settings are not fully set or are placeholders.
    */
-  static async sendEmail(to: string, subject: string, text: string, html?: string, templateId?: string, templateData?: any) {
+  static async sendEmail(
+    to: string,
+    subject: string,
+    text: string,
+    html?: string,
+    templateId?: string,
+    templateData?: any,
+    attachments?: Array<{ filename: string; path: string; contentType?: string }>
+  ) {
     const isMock = 
       !env.SMTP_HOST || 
       !env.SMTP_PORT || 
@@ -16,7 +24,7 @@ export class EmailService {
 
     if (isMock) {
       logger.info(`[MOCK EMAIL] To: ${to} | Subject: ${subject} | Template: ${templateId || 'None'}`, {
-        metadata: { templateData, text, html },
+        metadata: { templateData, text, html, attachments },
       });
       return { success: true, mock: true };
     }
@@ -38,6 +46,7 @@ export class EmailService {
         subject,
         text,
         html: html || text,
+        attachments,
       });
 
       logger.info(`[EMAIL SENT] To: ${to} | Subject: ${subject} | MessageId: ${info.messageId}`);

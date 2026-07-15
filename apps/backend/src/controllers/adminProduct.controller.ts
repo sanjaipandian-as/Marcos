@@ -14,7 +14,6 @@ export const productCreateSchema = z.object({
     images: z.array(z.string()).default([]),
     bannerImage: z.string().optional().nullable(),
     categoryId: z.string().uuid(),
-    subCategoryId: z.string().uuid().optional().nullable(),
     inventoryQty: z.coerce.number().int().nonnegative().default(0),
     targetGender: z.enum(['MEN', 'WOMEN', 'KIDS', 'UNISEX']).default('UNISEX'),
   }),
@@ -29,7 +28,6 @@ export const productUpdateSchema = z.object({
     images: z.array(z.string()).optional(),
     bannerImage: z.string().optional().nullable(),
     categoryId: z.string().uuid().optional(),
-    subCategoryId: z.string().uuid().optional().nullable(),
     inventoryQty: z.coerce.number().int().nonnegative().optional(),
     targetGender: z.enum(['MEN', 'WOMEN', 'KIDS', 'UNISEX']).optional(),
   }),
@@ -49,7 +47,7 @@ export class AdminProductController {
    * POST /admin/products
    */
   static async createProduct(req: Request, res: Response, next: NextFunction) {
-    const { name, description, price, materialInfo, images, bannerImage, categoryId, subCategoryId, inventoryQty, targetGender } = req.body;
+    const { name, description, price, materialInfo, images, bannerImage, categoryId, inventoryQty, targetGender } = req.body;
 
     try {
       // Verify category exists
@@ -69,7 +67,6 @@ export class AdminProductController {
           images,
           bannerImage,
           categoryId,
-          subCategoryId,
           inventoryQty,
           stockStatus,
           targetGender,
@@ -112,7 +109,7 @@ export class AdminProductController {
    */
   static async updateProduct(req: Request, res: Response, next: NextFunction) {
     const { id } = req.params;
-    const { name, description, price, materialInfo, images, bannerImage, categoryId, subCategoryId, inventoryQty, targetGender } = req.body;
+    const { name, description, price, materialInfo, images, bannerImage, categoryId, inventoryQty, targetGender } = req.body;
 
     try {
       const existingProduct = await prisma.product.findUnique({ where: { id } });
@@ -128,7 +125,6 @@ export class AdminProductController {
         images,
         bannerImage,
         categoryId,
-        subCategoryId,
         inventoryQty,
         targetGender,
       };

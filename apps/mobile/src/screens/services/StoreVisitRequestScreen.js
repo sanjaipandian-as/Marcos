@@ -15,6 +15,7 @@ import {
 import { useTheme } from '../../styles/ThemeContext';
 import { APP_CONFIG } from '../../config/app.config';
 import api from '../../utils/api';
+import { useAuth } from '../../contexts/AuthContext';
 import { MapPin, Calendar, Clipboard, CheckCircle2, User, Plus, X } from 'lucide-react-native';
 
 export default function StoreVisitRequestScreen({ navigation }) {
@@ -23,6 +24,7 @@ export default function StoreVisitRequestScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [requestModalVisible, setRequestModalVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const { requireAuth } = useAuth();
 
   // Form states
   const [dateStr, setDateStr] = useState('2026-06-20');
@@ -230,7 +232,7 @@ export default function StoreVisitRequestScreen({ navigation }) {
           </Text>
           <TouchableOpacity 
             style={[styles.bookBtn, { backgroundColor: theme.brand[500] }]}
-            onPress={() => setRequestModalVisible(true)}
+            onPress={() => requireAuth(() => setRequestModalVisible(true))}
           >
             <Text style={[styles.bookBtnText, { color: '#3D2E3D', fontFamily: fonts.bold }]}>
               Request Store Representative Visit
@@ -250,7 +252,7 @@ export default function StoreVisitRequestScreen({ navigation }) {
           {/* Floating Action Button */}
           <TouchableOpacity 
             style={[styles.fab, shadows.premium, { backgroundColor: theme.brand[500] }]}
-            onPress={() => setRequestModalVisible(true)}
+            onPress={() => requireAuth(() => setRequestModalVisible(true))}
           >
             <Plus size={24} color="#ffffff" />
           </TouchableOpacity>

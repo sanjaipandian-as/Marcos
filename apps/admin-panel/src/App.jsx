@@ -23,9 +23,11 @@ import SettingsManager from './components/SettingsManager';
 import Login from './components/Login';
 import OripioFinView from './components/OripioFinView';
 import EzMartView from './components/EzMartView';
+import MasterDashboard from './components/MasterDashboard';
 import AppCustomerManager from './components/AppCustomerManager';
 import StoreLocationManager from './components/StoreLocationManager';
 import PromoContentManager from './components/PromoContentManager';
+import BookingsAppointments from './components/BookingsAppointments';
 
 import api from './utils/api';
 
@@ -39,6 +41,21 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLiveFeedOpen, setIsLiveFeedOpen] = useState(false);
   const [hasUnreadAlerts, setHasUnreadAlerts] = useState(false);
+  const [mountedTabs, setMountedTabs] = useState(() => {
+    const initial = {};
+    let base = initialUser && initialUser.role === 'STAFF' ? 'orders' : 'dashboard';
+    if (base.startsWith('reports-')) base = 'reports';
+    if (base.startsWith('orders-') || base === 'orders') base = 'orders';
+    initial[base] = true;
+    return initial;
+  });
+
+  useEffect(() => {
+    let base = activeTab;
+    if (base.startsWith('reports-')) base = 'reports';
+    if (base.startsWith('orders-') || base === 'orders') base = 'orders';
+    setMountedTabs(prev => prev[base] ? prev : { ...prev, [base]: true });
+  }, [activeTab]);
   useEffect(() => {
     const user = api.getCurrentUser();
     if (user) {
@@ -69,7 +86,7 @@ export default function App() {
     if (!role) return false;
     if (role === 'SUPERADMIN' || role === 'ADMIN') return true;
     if (role === 'STAFF') {
-      const allowedTabs = ['orders', 'orders-bookings', 'orders-fittings', 'orders-visits', 'orders-quick', 'orders-print', 'products', 'categories', 'customers', 'app-customers', 'stores', 'support'];
+      const allowedTabs = ['orders', 'orders-bookings', 'orders-fittings', 'orders-visits', 'orders-quick', 'orders-print', 'products', 'categories', 'customers', 'app-customers', 'stores', 'support', 'bookings'];
       return allowedTabs.includes(tabId);
     }
     return false;
@@ -79,7 +96,7 @@ export default function App() {
     if (currentUser && !isTabAllowed(activeTab, currentUser.role)) {
       return (
         <div className="bg-white border border-slate-200 rounded-3xl p-8 text-center max-w-md mx-auto my-12 shadow-sm space-y-4">
-          <div className="w-16 h-16 bg-red-550/10 text-red-500 rounded-full flex items-center justify-center mx-auto">
+          <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto">
             <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
@@ -97,71 +114,139 @@ export default function App() {
         </div>
       );
     }
-    switch (activeTab) {
-      case 'dashboard':
-        return theme === 'oripiofin' ? <OripioFinView setActiveTab={setActiveTab} /> : <EzMartView setActiveTab={setActiveTab} />;
-      case 'reports':
-      case 'reports-customer':
-      case 'reports-orders':
-      case 'reports-revenue':
-      case 'reports-time':
-      case 'reports-sales':
-      case 'reports-promotions':
-      case 'reports-inventory':
-        return <AnalyticsDashboard currentTab={activeTab.startsWith('reports-') ? activeTab.replace('reports-', '') : 'customer'} />;
-      case 'checkout':
-        return <ManualCheckout />;
-      case 'orders':
-      case 'orders-bookings':
-      case 'orders-fittings':
-      case 'orders-visits':
-      case 'orders-quick':
-      case 'orders-print':
-        const tabMap = {
-          'orders-bookings': 'bookings',
-          'orders-fittings': 'fittings',
-          'orders-visits': 'visits',
-          'orders-quick': 'quick_orders',
-          'orders-print': 'print_schedule'
-        };
-        const initialTab = tabMap[activeTab] || 'bookings';
-        return <OrderManager initialTab={initialTab} />;
-      case 'products':
-        return <ProductManager />;
-      case 'categories':
-        return <CategoryManager />;
-      case 'customers':
-        return <CustomerManager />;
-      case 'app-customers':
-        return <AppCustomerManager />;
-      case 'stores':
-        return <StoreLocationManager />;
-      case 'loyalty':
-        return (
-          <div className="space-y-10">
-            <LoyaltyManager />
-            <ReferralManager />
+
+    const isBaseMatch = (base) => {
+      if (base === 'reports') return activeTab.startsWith('reports-') || activeTab === 'reports';
+      if (base === 'orders') return activeTab.startsWith('orders-') || activeTab === 'orders';
+      return activeTab === base;
+    };
+
+    return (
+      <>
+        {mountedTabs['dashboard'] && (
+          <div className={isBaseMatch('dashboard') ? 'block' : 'hidden'}>
+            <MasterDashboard setActiveTab={setActiveTab} isActive={isBaseMatch('dashboard')} />
           </div>
-        );
-      case 'banners':
-        return <BannerManager />;
-      case 'notifications':
-        return <NotificationManager />;
-      case 'coupons':
-        return <CouponManager />;
-      case 'offers':
-        return <OfferManager />;
-      case 'support':
-        return <SupportTicketManager />;
-      case 'promos':
-        return <PromoContentManager />;
-      case 'audits':
-        return <AuditLogViewer />;
-      case 'settings':
-        return <SettingsManager />;
-      default:
-        return theme === 'oripiofin' ? <OripioFinView setActiveTab={setActiveTab} /> : <EzMartView setActiveTab={setActiveTab} />;
-    }
+        )}
+        
+        {mountedTabs['reports'] && (
+          <div className={isBaseMatch('reports') ? 'block' : 'hidden'}>
+            <AnalyticsDashboard currentTab={activeTab.startsWith('reports-') ? activeTab.replace('reports-', '') : 'customer'} isActive={isBaseMatch('reports')} />
+          </div>
+        )}
+
+        {mountedTabs['checkout'] && (
+          <div className={isBaseMatch('checkout') ? 'block' : 'hidden'}>
+            <ManualCheckout isActive={isBaseMatch('checkout')} />
+          </div>
+        )}
+
+        {mountedTabs['bookings'] && (
+          <div className={isBaseMatch('bookings') ? 'block' : 'hidden'}>
+            <BookingsAppointments setActiveTab={setActiveTab} isActive={isBaseMatch('bookings')} />
+          </div>
+        )}
+
+        {mountedTabs['orders'] && (
+          <div className={isBaseMatch('orders') ? 'block' : 'hidden'}>
+            <OrderManager initialTab={{
+              'orders-bookings': 'bookings',
+              'orders-fittings': 'fittings',
+              'orders-visits': 'visits',
+              'orders-quick': 'quick_orders',
+              'orders-print': 'print_schedule'
+            }[activeTab] || 'bookings'} isActive={isBaseMatch('orders')} />
+          </div>
+        )}
+
+        {mountedTabs['products'] && (
+          <div className={isBaseMatch('products') ? 'block' : 'hidden'}>
+            <ProductManager isActive={isBaseMatch('products')} />
+          </div>
+        )}
+
+        {mountedTabs['categories'] && (
+          <div className={isBaseMatch('categories') ? 'block' : 'hidden'}>
+            <CategoryManager isActive={isBaseMatch('categories')} />
+          </div>
+        )}
+
+        {mountedTabs['customers'] && (
+          <div className={isBaseMatch('customers') ? 'block' : 'hidden'}>
+            <CustomerManager isActive={isBaseMatch('customers')} />
+          </div>
+        )}
+
+        {mountedTabs['app-customers'] && (
+          <div className={isBaseMatch('app-customers') ? 'block' : 'hidden'}>
+            <AppCustomerManager isActive={isBaseMatch('app-customers')} />
+          </div>
+        )}
+
+        {mountedTabs['stores'] && (
+          <div className={isBaseMatch('stores') ? 'block' : 'hidden'}>
+            <StoreLocationManager isActive={isBaseMatch('stores')} />
+          </div>
+        )}
+
+        {mountedTabs['loyalty'] && (
+          <div className={isBaseMatch('loyalty') ? 'block' : 'hidden'}>
+            <div className="space-y-10">
+              <LoyaltyManager isActive={isBaseMatch('loyalty')} />
+              <ReferralManager isActive={isBaseMatch('loyalty')} />
+            </div>
+          </div>
+        )}
+
+        {mountedTabs['banners'] && (
+          <div className={isBaseMatch('banners') ? 'block' : 'hidden'}>
+            <BannerManager isActive={isBaseMatch('banners')} />
+          </div>
+        )}
+
+        {mountedTabs['notifications'] && (
+          <div className={isBaseMatch('notifications') ? 'block' : 'hidden'}>
+            <NotificationManager isActive={isBaseMatch('notifications')} />
+          </div>
+        )}
+
+        {mountedTabs['coupons'] && (
+          <div className={isBaseMatch('coupons') ? 'block' : 'hidden'}>
+            <CouponManager isActive={isBaseMatch('coupons')} />
+          </div>
+        )}
+
+        {mountedTabs['offers'] && (
+          <div className={isBaseMatch('offers') ? 'block' : 'hidden'}>
+            <OfferManager isActive={isBaseMatch('offers')} />
+          </div>
+        )}
+
+        {mountedTabs['support'] && (
+          <div className={isBaseMatch('support') ? 'block' : 'hidden'}>
+            <SupportTicketManager isActive={isBaseMatch('support')} />
+          </div>
+        )}
+
+        {mountedTabs['promos'] && (
+          <div className={isBaseMatch('promos') ? 'block' : 'hidden'}>
+            <PromoContentManager isActive={isBaseMatch('promos')} />
+          </div>
+        )}
+
+        {mountedTabs['audits'] && (
+          <div className={isBaseMatch('audits') ? 'block' : 'hidden'}>
+            <AuditLogViewer isActive={isBaseMatch('audits')} />
+          </div>
+        )}
+
+        {mountedTabs['settings'] && (
+          <div className={isBaseMatch('settings') ? 'block' : 'hidden'}>
+            <SettingsManager isActive={isBaseMatch('settings')} />
+          </div>
+        )}
+      </>
+    );
   };
 
   const handleLogout = async () => {

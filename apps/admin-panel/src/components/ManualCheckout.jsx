@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  ShoppingCart, 
-  Search, 
-  Plus, 
-  Minus, 
-  Trash2, 
-  Tag, 
-  User, 
-  Check, 
+import {
+  ShoppingCart,
+  Search,
+  Plus,
+  Minus,
+  Trash2,
+  Tag,
+  User,
+  Check,
   CheckCircle,
   Mail,
   Printer,
@@ -21,9 +21,31 @@ export default function ManualCheckout() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
 
+  const findCategoryPath = (catId, cats = categories, currentPath = []) => {
+    for (const cat of cats) {
+      if (cat.id === catId) return [...currentPath, cat];
+      if (cat.subCategories && cat.subCategories.length > 0) {
+        const path = findCategoryPath(catId, cat.subCategories, [...currentPath, cat]);
+        if (path) return path;
+      }
+    }
+    return null;
+  };
+
+  const flattenCategories = (cats, depth = 0, result = []) => {
+    cats.forEach(c => {
+      result.push({ ...c, depth });
+      if (c.subCategories && c.subCategories.length > 0) {
+        flattenCategories(c.subCategories, depth + 1, result);
+      }
+    });
+    return result;
+  };
+  const flatCategories = flattenCategories(categories);
+
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  
+
   const [cart, setCart] = useState([]);
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [customerSearchResults, setCustomerSearchResults] = useState([]);
@@ -31,19 +53,72 @@ export default function ManualCheckout() {
   const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [orderStatus, setOrderStatus] = useState('DELIVERED');
+  const [paymentStatus, setPaymentStatus] = useState('COMPLETED');
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponError, setCouponError] = useState('');
   const [isQuickOrder, setIsQuickOrder] = useState(false);
   const [quickOrderReason, setQuickOrderReason] = useState('');
   const [quickOrderExpectedDate, setQuickOrderExpectedDate] = useState('');
+  const [advancePayment, setAdvancePayment] = useState('');
+  const [gstPercentage, setGstPercentage] = useState('18');
+  const [customerProfiles, setCustomerProfiles] = useState([]);
+  const [selectedProfileIds, setSelectedProfileIds] = useState([]);
+  const [deliveryDate, setDeliveryDate] = useState('');
+  const [prefillProductToCart, setPrefillProductToCart] = useState('');
 
   // Appointment State
   const [appointmentDate, setAppointmentDate] = useState(new Date().toISOString().split('T')[0]);
   const [appointmentTimeSlot, setAppointmentTimeSlot] = useState('');
   const [appointmentStaffId, setAppointmentStaffId] = useState('');
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [staffMembers, setStaffMembers] = useState([]);
   const [timeSlots, setTimeSlots] = useState([]);
+  const [checkoutApptId, setCheckoutApptId] = useState(null);
+
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    const apptId = query.get('appointmentId') || sessionStorage.getItem('checkout_appointment_id');
+    const userId = query.get('userId') || sessionStorage.getItem('checkout_user_id');
+    const productName = query.get('productName') || sessionStorage.getItem('checkout_product_name');
+    const deliveryDateVal = query.get('deliveryDate') || sessionStorage.getItem('checkout_delivery_date');
+
+    if (apptId) {
+      setCheckoutApptId(apptId);
+      setOrderStatus('PENDING');
+      sessionStorage.removeItem('checkout_appointment_id');
+      sessionStorage.removeItem('checkout_user_id');
+      sessionStorage.removeItem('checkout_product_name');
+      sessionStorage.removeItem('checkout_delivery_date');
+
+      if (userId) {
+        api.getCustomerDetails(userId).then(res => {
+          if (res && res.user) {
+            setSelectedCustomer(res.user);
+            setCustomerSearchTerm(res.user.fullName);
+          }
+        }).catch(err => console.error('Error fetching checkout customer:', err));
+      }
+
+      if (productName) {
+        setSearchTerm(productName);
+        setPrefillProductToCart(productName);
+      }
+
+      if (deliveryDateVal) {
+        try {
+          const d = new Date(deliveryDateVal);
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          setDeliveryDate(`${y}-${m}-${day}`);
+        } catch (e) {
+          console.error('Error parsing delivery date prefill:', e);
+        }
+      }
+    }
+  }, []);
 
   // Filter time slots dynamically
   const getFilteredTimeSlots = () => {
@@ -175,21 +250,33 @@ export default function ManualCheckout() {
     return () => clearTimeout(timer);
   }, [customerSearchTerm, selectedCustomer]);
 
+  useEffect(() => {
+    if (selectedCustomer) {
+      api.getMeasurements(selectedCustomer.id).then(res => {
+        const profiles = Array.isArray(res) ? res : (res.profiles || []);
+        setCustomerProfiles(profiles);
+      }).catch(err => console.error(err));
+    } else {
+      setCustomerProfiles([]);
+      setSelectedProfileIds([]);
+    }
+  }, [selectedCustomer]);
+
   const loadData = async () => {
     try {
       let categorySlug = '';
-      if (selectedCategory !== 'ALL' && categories.length > 0) {
-        const cat = categories.find(c => c.id === selectedCategory);
+      if (selectedCategory !== 'ALL' && flatCategories.length > 0) {
+        const cat = flatCategories.find(c => c.id === selectedCategory);
         if (cat) categorySlug = cat.slug;
       }
-      
+
       const res = await api.getProductsPaginated({
         page: currentPage,
         limit: 12,
         search: searchTerm,
         category: categorySlug
       });
-      
+
       if (res && res.success) {
         setProducts(res.data);
         setTotalPages(res.pagination.pages);
@@ -215,9 +302,9 @@ export default function ManualCheckout() {
           setError(`Cannot add more. Available stock for '${product.name}' is ${product.inventoryQty}`);
           return prev;
         }
-        return prev.map(item => 
-          item.productId === product.id 
-            ? { ...item, quantity: item.quantity + 1 } 
+        return prev.map(item =>
+          item.productId === product.id
+            ? { ...item, quantity: item.quantity + 1 }
             : item
         );
       }
@@ -230,6 +317,29 @@ export default function ManualCheckout() {
       }];
     });
   };
+
+  useEffect(() => {
+    if (prefillProductToCart && products.length > 0) {
+      const matched = products.find(p => p.name.toLowerCase().includes(prefillProductToCart.toLowerCase()) || prefillProductToCart.toLowerCase().includes(p.name.toLowerCase()));
+      if (matched) {
+        if (matched.inventoryQty > 0) {
+          setError('');
+          setCart(prev => {
+            const existing = prev.find(item => item.productId === matched.id);
+            if (existing) return prev;
+            return [...prev, {
+              productId: matched.id,
+              productName: matched.name,
+              price: matched.price,
+              quantity: 1,
+              maxStock: matched.inventoryQty
+            }];
+          });
+        }
+        setPrefillProductToCart('');
+      }
+    }
+  }, [products, prefillProductToCart]);
 
   const handleUpdateQty = (productId, delta) => {
     setError('');
@@ -245,12 +355,16 @@ export default function ManualCheckout() {
         setError(`Cannot add more. Available stock is ${item.maxStock}`);
         return prev;
       }
-      return prev.map(i => 
-        i.productId === productId 
-          ? { ...i, quantity: nextQty } 
-          : i
-      );
+      return prev.map(i => i.productId === productId ? { ...i, quantity: nextQty } : i);
     });
+  };
+
+  const handleUpdatePrice = (productId, price) => {
+    setCart(prev => prev.map(item => 
+      item.productId === productId 
+        ? { ...item, customPrice: price } 
+        : item
+    ));
   };
 
   const handleRemoveFromCart = (productId) => {
@@ -292,7 +406,10 @@ export default function ManualCheckout() {
   };
 
   const calculateTotals = () => {
-    const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const subtotal = cart.reduce((sum, item) => {
+      const activePrice = item.customPrice !== undefined && item.customPrice !== '' ? Number(item.customPrice) : item.price;
+      return sum + (activePrice * item.quantity);
+    }, 0);
     let discount = 0;
 
     if (appliedCoupon) {
@@ -306,12 +423,15 @@ export default function ManualCheckout() {
       }
     }
 
-    const taxRate = 0.18;
+    const parsedGst = (gstPercentage === '' || isNaN(Number(gstPercentage))) ? 0 : Number(gstPercentage);
+    const taxRate = parsedGst / 100;
     const taxableAmount = Math.max(0, subtotal - discount);
     const tax = Number((taxableAmount * taxRate).toFixed(2));
     const total = Number((taxableAmount + tax).toFixed(2));
+    const advance = Number(advancePayment) || 0;
+    const balance = Math.max(0, total - advance);
 
-    return { subtotal, discount, tax, total };
+    return { subtotal, discount, tax, total, advance, balance };
   };
 
   const handleCheckout = async () => {
@@ -332,24 +452,42 @@ export default function ManualCheckout() {
       setError('Please specify the expected date for the quick order.');
       return;
     }
+    if (!deliveryDate) {
+      setError('Please specify a Delivery Date for this order.');
+      return;
+    }
 
     try {
+      setIsSubmitting(true);
       const order = await api.checkoutOfflineSale({
         userId: selectedCustomer ? selectedCustomer.id : undefined,
         customerName: selectedCustomer ? selectedCustomer.fullName : customerSearchTerm.trim(),
-        items: cart.map(i => ({ productId: i.productId, quantity: i.quantity })),
+        items: cart.map(i => ({ 
+          productId: i.productId, 
+          quantity: i.quantity, 
+          customPrice: i.customPrice !== undefined && i.customPrice !== '' ? Number(i.customPrice) : undefined 
+        })),
         paymentMethod,
         couponCode: appliedCoupon?.code,
-        status: orderStatus,
+        status: checkoutApptId ? 'PENDING' : orderStatus,
+        paymentStatus: checkoutApptId ? 'PENDING' : paymentStatus,
         isQuickOrder,
         quickOrderReason: isQuickOrder ? quickOrderReason : undefined,
-        quickOrderExpectedDate: isQuickOrder ? quickOrderExpectedDate : undefined
+        quickOrderExpectedDate: isQuickOrder ? quickOrderExpectedDate : undefined,
+        advancePayment: Number(advancePayment) || 0,
+        gstPercentage: (gstPercentage === '' || isNaN(Number(gstPercentage))) ? 0 : Number(gstPercentage),
+        measurementProfileIds: selectedProfileIds.length > 0 ? selectedProfileIds : undefined,
+        deliveryDate: deliveryDate || undefined
       });
 
-      if (orderStatus === 'PAID') {
-        if (!appointmentTimeSlot) {
-          throw new Error('Please select an appointment time slot.');
-        }
+      if (checkoutApptId) {
+        await api.updateAppointment(checkoutApptId, { orderId: order.id, status: 'ORDERED' }).catch(err => {
+          console.error('Failed to link order to appointment:', err);
+        });
+        setCheckoutApptId(null);
+      }
+
+      if (orderStatus === 'PAID' && appointmentTimeSlot) {
         const appt = await api.createAppointment({
           userId: selectedCustomer ? selectedCustomer.id : undefined,
           date: new Date(appointmentDate).toISOString(),
@@ -374,19 +512,23 @@ export default function ManualCheckout() {
       setIsQuickOrder(false);
       setQuickOrderReason('');
       setQuickOrderExpectedDate('');
+      setAdvancePayment('');
+      setDeliveryDate('');
       loadData();
+      setIsSubmitting(false);
     } catch (err) {
       setError(err.message || 'Checkout failed.');
+      setIsSubmitting(false);
     }
   };
 
-  const { subtotal, discount, tax, total } = calculateTotals();
+  const { subtotal, discount, tax, total, advance, balance } = calculateTotals();
 
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
     setCurrentPage(1);
   };
-  
+
   const handleCategoryChange = (e) => {
     setSelectedCategory(e.target.value);
     setCurrentPage(1);
@@ -401,6 +543,18 @@ export default function ManualCheckout() {
         <p className="text-xs text-slate-500 font-medium">Record in-store customer sales, check stock, and compile invoices</p>
       </div>
 
+      {checkoutApptId && (
+        <div className="p-4 bg-brand-50 border border-brand-200 text-brand-800 rounded-2xl text-xs font-bold flex justify-between items-center">
+          <span>Checkout mode enabled for Booking Consultation ID: {checkoutApptId.slice(0, 8).toUpperCase()}</span>
+          <button
+            onClick={() => setCheckoutApptId(null)}
+            className="p-1 hover:bg-brand-100 rounded-lg text-brand-700 font-extrabold text-[10px]"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       {error && (
         <div className="p-4 bg-red-50 border border-red-100 text-red-700 rounded-2xl text-xs font-bold animate-pulse">
           {error}
@@ -412,7 +566,7 @@ export default function ManualCheckout() {
           <div className="bg-white border border-slate-200/60 rounded-3xl p-6 shadow-premium space-y-4">
             <div className="flex flex-col sm:flex-row gap-4 justify-between sm:items-center w-full">
               <span className="font-bold text-slate-800 text-sm">Product Selector</span>
-              
+
               <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                 <div className="relative w-full sm:w-auto">
                   <input
@@ -425,23 +579,56 @@ export default function ManualCheckout() {
                   <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
                 </div>
 
-                <select
-                  value={selectedCategory}
-                  onChange={handleCategoryChange}
-                  className="w-full sm:w-auto text-xs font-bold border border-slate-200 rounded-xl py-1.5 px-3 bg-white text-slate-600 focus:outline-none"
-                >
-                  <option value="ALL">All Catalog</option>
-                  {categories.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                {/* Cascading Filter Dropdowns — N-level dynamic */}
+                {(() => {
+                  const currentPath = selectedCategory !== 'ALL' ? (findCategoryPath(selectedCategory) || []) : [];
+
+                  // Build levels
+                  const levels = [{ list: categories, selected: currentPath[0] || null, parentId: null }];
+                  for (let i = 0; i < currentPath.length; i++) {
+                    const children = currentPath[i].subCategories || [];
+                    if (children.length > 0) {
+                      levels.push({ list: children, selected: currentPath[i + 1] || null, parentId: currentPath[i].id });
+                    }
+                  }
+
+                  return (
+                    <div className="flex gap-2 w-full sm:w-auto flex-wrap">
+                      {levels.map((level, idx) => (
+                        <select
+                          key={level.parentId || 'root'}
+                          value={level.selected?.id || (idx === 0 ? 'ALL' : '')}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (idx === 0 && val === 'ALL') {
+                              setSelectedCategory('ALL');
+                            } else if (val) {
+                              setSelectedCategory(val);
+                            } else {
+                              const parentCat = currentPath[idx - 1];
+                              setSelectedCategory(parentCat ? parentCat.id : 'ALL');
+                            }
+                            setCurrentPage(1);
+                          }}
+                          className="flex-1 text-xs font-bold border border-slate-200 rounded-xl py-1.5 px-3 bg-white text-slate-650 focus:outline-none"
+                        >
+                          {idx === 0 && <option value="ALL">All Catalog</option>}
+                          {idx > 0 && <option value="">-- All {idx === 1 ? 'Sub' : 'Sub'.repeat(idx)} --</option>}
+                          {level.list.map(c => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-1">
               {filteredProducts.map(p => (
-                <div 
-                  key={p.id} 
+                <div
+                  key={p.id}
                   className={`p-3.5 rounded-2xl border transition-all flex gap-3 items-center justify-between ${p.inventoryQty <= 0 ? 'bg-slate-50/50 border-slate-100 opacity-60' : 'bg-white border-slate-200/60 hover:border-slate-300'} min-w-0`}
                 >
                   <div className="flex gap-3 items-center min-w-0">
@@ -502,7 +689,9 @@ export default function ManualCheckout() {
               <div className="flex items-center justify-between bg-brand-50 border border-brand-200 rounded-xl px-4 py-2">
                 <div>
                   <p className="text-xs font-bold text-brand-800">{selectedCustomer.fullName}</p>
-                  <p className="text-[10px] text-brand-600">{selectedCustomer.email || selectedCustomer.phone}</p>
+                  <p className="text-[10px] text-brand-600">
+                    {selectedCustomer.email} {selectedCustomer.phoneNumber && `• ${selectedCustomer.phoneNumber}`}
+                  </p>
                 </div>
                 <button
                   onClick={() => {
@@ -538,11 +727,42 @@ export default function ManualCheckout() {
                         }}
                       >
                         <p className="font-bold text-slate-800">{user.fullName}</p>
-                        <p className="text-[10px] text-slate-500">{user.email} {user.phone && `• ${user.phone}`}</p>
+                        <p className="text-[10px] text-slate-500">{user.email} {user.phoneNumber && `• ${user.phoneNumber}`}</p>
                       </button>
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {customerProfiles.length > 0 && (
+              <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-2">Select Measurement Profiles</label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedProfileIds([])}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${selectedProfileIds.length === 0 ? 'bg-slate-200 text-slate-700' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-100'}`}
+                  >
+                    None
+                  </button>
+                  {customerProfiles.map(profile => (
+                    <button
+                      key={profile.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedProfileIds(prev =>
+                          prev.includes(profile.id)
+                            ? prev.filter(id => id !== profile.id)
+                            : [...prev, profile.id]
+                        )
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${selectedProfileIds.includes(profile.id) ? 'bg-brand-500 border-brand-600 text-white shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:border-brand-300'}`}
+                    >
+                      {profile.profileName || profile.name || 'Unnamed Profile'}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -555,19 +775,33 @@ export default function ManualCheckout() {
                 <div key={item.productId} className="flex justify-between items-center text-xs">
                   <div className="flex-1 min-w-0 pr-2">
                     <p className="font-bold text-slate-800 truncate">{item.productName}</p>
-                    <p className="text-[10px] text-slate-400">₹{item.price} x {item.quantity}</p>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <div className="relative group flex items-center">
+                        <span className="absolute left-2 text-[11px] font-bold text-slate-400 group-focus-within:text-brand-500 transition-colors">₹</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={item.customPrice !== undefined ? item.customPrice : item.price}
+                          onChange={(e) => handleUpdatePrice(item.productId, e.target.value)}
+                          className="w-20 pl-5 pr-2 py-1 text-[11px] font-bold text-slate-800 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-brand-300 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all cursor-text"
+                          title="Edit Unit Price"
+                        />
+                      </div>
+                      <span className="text-[11px] font-medium text-slate-400">x {item.quantity}</span>
+                    </div>
                   </div>
-                  
+
                   <div className="flex items-center gap-2.5 shrink-0">
                     <div className="flex items-center border border-slate-200 rounded-lg bg-slate-50">
-                      <button 
+                      <button
                         onClick={() => handleUpdateQty(item.productId, -1)}
                         className="p-1 hover:bg-slate-100 text-slate-500 rounded-l-lg"
                       >
                         <Minus className="w-3 h-3" />
                       </button>
                       <span className="px-2 font-bold text-slate-700 text-[11px]">{item.quantity}</span>
-                      <button 
+                      <button
                         onClick={() => handleUpdateQty(item.productId, 1)}
                         className="p-1 hover:bg-slate-100 text-slate-500 rounded-r-lg"
                       >
@@ -625,8 +859,8 @@ export default function ManualCheckout() {
                   onClick={() => setPaymentMethod(method)}
                   className={`
                     py-1.5 rounded-xl text-xs font-bold border transition-all focus:outline-none
-                    ${paymentMethod === method 
-                      ? 'bg-brand-500 border-brand-500 text-white shadow-sm' 
+                    ${paymentMethod === method
+                      ? 'bg-brand-500 border-brand-500 text-white shadow-sm'
                       : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}
                   `}
                 >
@@ -636,19 +870,34 @@ export default function ManualCheckout() {
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <span className="text-[10px] font-bold text-slate-400 uppercase block">Order Status</span>
-            <select
-              value={orderStatus}
-              onChange={(e) => setOrderStatus(e.target.value)}
-              className="w-full px-2.5 py-1.5 text-xs font-bold bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500"
-            >
-              <option value="PENDING">Pending (Order Placed)</option>
-              <option value="PAID">Paid (Measurement Session)</option>
-              <option value="PROCESSING">Processing (Order Stitching)</option>
-              <option value="SHIPPED">Shipped (Product Completed)</option>
-              <option value="DELIVERED">Delivered (Handed over)</option>
-            </select>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase block">Order Status</span>
+              <select
+                value={orderStatus}
+                onChange={(e) => setOrderStatus(e.target.value)}
+                className="w-full px-2.5 py-1.5 text-xs font-bold bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500"
+              >
+                <option value="PENDING">Pending (Order Placed)</option>
+                <option value="PAID">Measurement Session</option>
+                <option value="PROCESSING">Processing (Order Stitching)</option>
+                <option value="SHIPPED">Shipped (Product Completed)</option>
+                <option value="DELIVERED">Delivered (Handed over)</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase block">Payment Status</span>
+              <select
+                value={paymentStatus}
+                onChange={(e) => setPaymentStatus(e.target.value)}
+                className="w-full px-2.5 py-1.5 text-xs font-bold bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500"
+              >
+                <option value="PENDING">Pending / Non-Paid</option>
+                <option value="PARTIAL">Advance Paid</option>
+                <option value="COMPLETED">Fully Paid</option>
+              </select>
+            </div>
           </div>
 
           <div className="space-y-1.5 p-3 rounded-xl border border-brand-200 bg-brand-50/50">
@@ -699,7 +948,7 @@ export default function ManualCheckout() {
                 Book Measurement Session
               </h4>
               <p className="text-[10px] text-emerald-600/80 mb-2 font-medium">Bypass limits active: As an admin, you can book any slot, even if fully booked.</p>
-              
+
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-emerald-700 uppercase">Date</label>
@@ -747,21 +996,73 @@ export default function ManualCheckout() {
               <span>Coupon Discount</span>
               <span className="font-semibold text-red-500">-₹{discount.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-slate-500">
-              <span>Taxes (GST 18%)</span>
+            <div className="flex justify-between text-slate-500 items-center">
+              <span className="flex items-center gap-1.5">
+                Taxes (GST 
+                <input 
+                  type="number" 
+                  value={gstPercentage} 
+                  onChange={e => setGstPercentage(e.target.value)} 
+                  className="w-10 text-center text-xs font-semibold bg-slate-50 border border-slate-200 rounded py-0.5" 
+                  placeholder="0"
+                />
+                %)
+              </span>
               <span className="font-semibold text-slate-800">₹{tax.toFixed(2)}</span>
             </div>
             <div className="flex justify-between border-t border-slate-100 pt-2 text-sm font-extrabold text-slate-800">
               <span>Total Payable</span>
               <span>₹{total.toFixed(2)}</span>
             </div>
+            <div className="flex justify-between items-center border-t border-slate-100 pt-2">
+              <span className="font-semibold text-slate-600">Advance Payment</span>
+              <div className="w-24 relative">
+                <span className="absolute left-2 top-1.5 text-slate-400">₹</span>
+                <input
+                  type="number"
+                  min="0"
+                  max={total}
+                  value={advancePayment}
+                  onChange={e => setAdvancePayment(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full pl-6 pr-2 py-1.5 text-right text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-brand-500"
+                />
+              </div>
+            </div>
+            {advance > 0 && (
+              <div className="flex justify-between pt-1 text-sm font-extrabold text-brand-600">
+                <span>Balance Due</span>
+                <span>₹{balance.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between items-center border-t border-slate-100 pt-2">
+              <span className="font-semibold text-slate-600">Delivery Date *</span>
+              <div className="w-32 relative">
+                <input
+                  type="date"
+                  min={new Date().toISOString().split('T')[0]}
+                  value={deliveryDate}
+                  onChange={e => setDeliveryDate(e.target.value)}
+                  className="w-full px-2 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-brand-500 text-slate-700 font-medium cursor-pointer"
+                  title="Select future date"
+                />
+              </div>
+            </div>
           </div>
 
           <button
             onClick={handleCheckout}
-            className="w-full py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-extrabold text-xs shadow-premium shadow-brand-500/10 transition-all focus:outline-none"
+            disabled={isSubmitting}
+            className="w-full py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-extrabold text-xs shadow-premium shadow-brand-500/10 transition-all focus:outline-none flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
           >
-            Checkout & Print Invoice
+            {isSubmitting ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span>Processing...</span>
+              </>
+            ) : (
+              'Checkout & Print Invoice'
+            )}
           </button>
         </div>
       </div>
@@ -800,7 +1101,7 @@ export default function ManualCheckout() {
                   <p className="text-[10px] text-slate-400 uppercase font-bold">Payment Details</p>
                   <p className="font-semibold text-slate-700 mt-1">{completedOrder.paymentMethod} Payment</p>
                   <p className="text-slate-500">
-                    {new Date(completedOrder.createdAt).toLocaleDateString()} {new Date(completedOrder.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    {new Date(completedOrder.createdAt).toLocaleDateString()} {new Date(completedOrder.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>
                 </div>
               </div>
@@ -859,13 +1160,25 @@ export default function ManualCheckout() {
                   <span className="font-semibold text-red-500">-₹{Number(completedOrder.discountAmount || 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-slate-500">
-                  <span>Taxes (GST 18%)</span>
+                  <span>Taxes (GST {completedOrder.gstPercentage !== undefined && completedOrder.gstPercentage !== null ? completedOrder.gstPercentage : 18}%)</span>
                   <span className="font-semibold text-slate-800">₹{Number(completedOrder.taxAmount || 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between border-t border-slate-100 pt-2 text-sm font-extrabold text-slate-800">
                   <span>Payable</span>
                   <span>₹{Number(completedOrder.payableAmount || 0).toFixed(2)}</span>
                 </div>
+                {completedOrder.advancePayment !== undefined && (
+                  <>
+                    <div className="flex justify-between text-slate-500 pt-1">
+                      <span>Advance Paid</span>
+                      <span className="font-semibold text-emerald-600">₹{Number(completedOrder.advancePayment || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm font-extrabold text-brand-600 pt-1 border-t border-slate-100 mt-1">
+                      <span>Balance Due</span>
+                      <span>₹{Number(completedOrder.balanceAmount || 0).toFixed(2)}</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 

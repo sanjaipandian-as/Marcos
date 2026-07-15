@@ -58,8 +58,8 @@ class PdfService {
                     doc.fillColor('#4B5563')
                         .text(item.product.name, 60, currentY + 5)
                         .text(item.quantity.toString(), 300, currentY + 5, { width: 30, align: 'right' })
-                        .text(`$${Number(item.price).toFixed(2)}`, 380, currentY + 5, { width: 60, align: 'right' })
-                        .text(`$${(Number(item.price) * item.quantity).toFixed(2)}`, 480, currentY + 5, { width: 60, align: 'right' });
+                        .text(`Rs. ${Number(item.price).toFixed(2)}`, 380, currentY + 5, { width: 60, align: 'right' })
+                        .text(`Rs. ${(Number(item.price) * item.quantity).toFixed(2)}`, 480, currentY + 5, { width: 60, align: 'right' });
                     currentY += 25;
                     doc.strokeColor('#F3F4F6').lineWidth(0.5).moveTo(50, currentY).lineTo(550, currentY).stroke();
                 });
@@ -67,16 +67,31 @@ class PdfService {
                 const calcTop = currentY + 20;
                 doc.fontSize(10).fillColor('#1F2937')
                     .text('Subtotal:', 350, calcTop, { width: 100, align: 'left' })
-                    .text(`$${Number(order.totalAmount).toFixed(2)}`, 470, calcTop, { width: 70, align: 'right' });
+                    .text(`Rs. ${Number(order.totalAmount).toFixed(2)}`, 470, calcTop, { width: 70, align: 'right' });
                 doc.text('Tax Amount:', 350, calcTop + 15, { width: 100, align: 'left' })
-                    .text(`$${Number(order.taxAmount).toFixed(2)}`, 470, calcTop + 15, { width: 70, align: 'right' });
+                    .text(`Rs. ${Number(order.taxAmount).toFixed(2)}`, 470, calcTop + 15, { width: 70, align: 'right' });
                 doc.text('Discount Amount:', 350, calcTop + 30, { width: 100, align: 'left' })
-                    .text(`-$${Number(order.discountAmount).toFixed(2)}`, 470, calcTop + 30, { width: 70, align: 'right' });
+                    .text(`-Rs. ${Number(order.discountAmount).toFixed(2)}`, 470, calcTop + 30, { width: 70, align: 'right' });
                 // Final Payable
                 doc.strokeColor('#E5E7EB').lineWidth(1).moveTo(350, calcTop + 50).lineTo(540, calcTop + 50).stroke();
+                let currentCalcY = calcTop + 55;
                 doc.fontSize(12).fillColor('#111827').font('Helvetica-Bold')
-                    .text('Grand Total:', 350, calcTop + 55, { width: 100, align: 'left' })
-                    .text(`$${Number(order.payableAmount).toFixed(2)}`, 470, calcTop + 55, { width: 70, align: 'right' });
+                    .text('Grand Total:', 350, currentCalcY, { width: 100, align: 'left' })
+                    .text(`Rs. ${Number(order.payableAmount).toFixed(2)}`, 470, currentCalcY, { width: 70, align: 'right' });
+                doc.font('Helvetica');
+                currentCalcY += 20;
+                const advance = Number(order.advancePayment) || 0;
+                const total = Number(order.payableAmount) || 0;
+                const balance = Math.max(0, total - advance);
+                doc.fontSize(10).fillColor('#4B5563')
+                    .text('Advance Paid:', 350, currentCalcY, { width: 100, align: 'left' })
+                    .text(`Rs. ${advance.toFixed(2)}`, 470, currentCalcY, { width: 70, align: 'right' });
+                currentCalcY += 15;
+                doc.strokeColor('#E5E7EB').lineWidth(1).moveTo(350, currentCalcY).lineTo(540, currentCalcY).stroke();
+                currentCalcY += 5;
+                doc.fontSize(11).fillColor(balance > 0 ? '#DC2626' : '#059669').font('Helvetica-Bold')
+                    .text('Balance Due:', 350, currentCalcY, { width: 100, align: 'left' })
+                    .text(`Rs. ${balance.toFixed(2)}`, 470, currentCalcY, { width: 70, align: 'right' });
                 doc.font('Helvetica');
                 // 6. Footer
                 doc.fontSize(8).fillColor('#9CA3AF').text('Thank you for shopping with MARCOS Platform. For queries, email billing@marcosapp.com.', 50, 700, { align: 'center' });

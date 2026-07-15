@@ -11,6 +11,7 @@ import {
   Alert
 } from 'react-native';
 import { useTheme } from '../../styles/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
 import api from '../../utils/api';
 import {
   ChevronLeft,
@@ -25,14 +26,20 @@ import {
   Gift
 } from 'lucide-react-native';
 
-export default function ProfileScreen({ navigation, onLogout }) {
+export default function ProfileScreen({ navigation }) {
   const { theme, fonts, shadows } = useTheme();
+  const { user, logout, requireAuth } = useAuth();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchProfile() {
       try {
+        if (!user) {
+          setProfile(null);
+          setLoading(false);
+          return;
+        }
         if (!profile) {
           setLoading(true);
         }
@@ -41,7 +48,7 @@ export default function ProfileScreen({ navigation, onLogout }) {
           setProfile(res.data);
         }
       } catch (err) {
-        console.error('Error fetching profile:', err);
+        console.warn('Profile fetch failed (likely session expired):', err.message);
       } finally {
         setLoading(false);
       }
@@ -138,25 +145,51 @@ export default function ProfileScreen({ navigation, onLogout }) {
         
         {/* Profile Details Card */}
         <View style={[styles.profileCard, shadows.premium, { backgroundColor: theme.bg.card }]}>
-          <View style={styles.profileLeft}>
-            <View style={[styles.profileImageContainer, { backgroundColor: theme.brand[500] }]}>
-              <Image 
-                source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&q=80' }} 
-                style={styles.profileImage}
-              />
+          {user ? (
+            <>
+              <View style={styles.profileLeft}>
+                <View style={[styles.profileImageContainer, { backgroundColor: theme.brand[500] }]}>
+                  <Image 
+                    source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&q=80' }} 
+                    style={styles.profileImage}
+                  />
+                </View>
+                <View style={styles.profileMeta}>
+                  <Text style={[styles.profileName, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                    {profile?.fullName || user?.fullName || 'User Profile'}
+                  </Text>
+                  <Text style={[styles.profileEmail, { fontFamily: fonts.medium, color: theme.text.muted }]}>
+                    {getObfuscatedEmail(profile?.email || user?.email || '')}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity style={[styles.editBtn, { borderColor: theme.border }]} activeOpacity={0.7} onPress={() => requireAuth(() => navigation.navigate('AccountDetails'))}>
+                <Edit size={16} color={theme.text.primary} />
+              </TouchableOpacity>
+            </>
+          ) : (
+            <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%'}}>
+              <View style={styles.profileLeft}>
+                <View style={[styles.profileImageContainer, { backgroundColor: theme.border }]}>
+                  <User size={24} color="#64748b" />
+                </View>
+                <View style={styles.profileMeta}>
+                  <Text style={[styles.profileName, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                    Welcome Guest
+                  </Text>
+                  <Text style={[styles.profileEmail, { fontFamily: fonts.medium, color: theme.text.muted }]}>
+                    Login to access your account
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity 
+                style={[styles.editBtn, { borderColor: theme.brand[500], paddingHorizontal: 14, width: 'auto' }]} 
+                onPress={() => requireAuth()}
+              >
+                <Text style={{color: theme.brand[500], fontFamily: fonts.bold, fontSize: 13}}>Log In</Text>
+              </TouchableOpacity>
             </View>
-            <View style={styles.profileMeta}>
-              <Text style={[styles.profileName, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-                {profile?.fullName || 'Alex Richards'}
-              </Text>
-              <Text style={[styles.profileEmail, { fontFamily: fonts.medium, color: theme.text.muted }]}>
-                {getObfuscatedEmail(profile?.email || 'alex.richards@example.com')}
-              </Text>
-            </View>
-          </View>
-          <TouchableOpacity style={[styles.editBtn, { borderColor: theme.border }]} activeOpacity={0.7} onPress={() => navigation.navigate('AccountDetails')}>
-            <Edit size={16} color={theme.text.primary} />
-          </TouchableOpacity>
+          )}
         </View>
 
         {/* Settings List */}
@@ -167,7 +200,7 @@ export default function ProfileScreen({ navigation, onLogout }) {
           {/* My Orders - Special prominent card */}
           <TouchableOpacity
             style={[styles.ordersCard, { backgroundColor: theme.brand[500] }, shadows.premium]}
-            onPress={() => navigation.navigate('Orders')}
+            onPress={() => requireAuth(() => navigation.navigate('Orders'))}
             activeOpacity={0.85}
           >
             <View style={styles.ordersCardLeft}>
@@ -185,24 +218,24 @@ export default function ProfileScreen({ navigation, onLogout }) {
           {renderSettingItem(
             <User size={18} color="#1e1e1e" />,
             'Account Details',
-            () => navigation.navigate('AccountDetails')
+            () => requireAuth(() => navigation.navigate('AccountDetails'))
           )}
           {renderSettingItem(
             <Gift size={18} color="#1e1e1e" />,
             'Invite & Earn',
-            () => navigation.navigate('Loyalty')
+            () => requireAuth(() => navigation.navigate('Loyalty'))
           )}
           {renderSettingItem(
             <Bell size={18} color="#1e1e1e" />,
             'Notifications',
-            () => navigation.navigate('NotificationHistory')
+            () => requireAuth(() => navigation.navigate('NotificationHistory'))
           )}
           {renderSettingItem(
             <Shield size={18} color="#1e1e1e" />,
             'Privacy Policy',
             () => navigation.navigate('PrivacyPolicy')
           )}
-          {renderSettingItem(
+          {user && renderSettingItem(
             <LogOut size={18} color="#ef4444" />,
             'Log Out',
             () => {
@@ -211,7 +244,7 @@ export default function ProfileScreen({ navigation, onLogout }) {
                 'Are you sure you want to securely log out of MARCOS?',
                 [
                   { text: 'Cancel', style: 'cancel' },
-                  { text: 'Log Out', style: 'destructive', onPress: onLogout }
+                  { text: 'Log Out', style: 'destructive', onPress: logout }
                 ]
               );
             }

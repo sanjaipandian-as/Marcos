@@ -26,8 +26,9 @@ exports.appointmentUpdateSchema = zod_1.z.object({
     body: zod_1.z.object({
         date: zod_1.z.string().datetime().optional(),
         timeSlot: zod_1.z.string().min(1).optional(),
-        status: zod_1.z.enum(['PENDING', 'CONFIRMED', 'CANCELLED', 'RESCHEDULED']).optional(),
+        status: zod_1.z.enum(['PENDING', 'CONFIRMED', 'CANCELLED', 'RESCHEDULED', 'CONSULTED', 'ORDERED']).optional(),
         notes: zod_1.z.string().optional(),
+        orderId: zod_1.z.string().uuid().optional().nullable(),
     }),
 });
 class AppointmentController {
@@ -134,7 +135,33 @@ class AppointmentController {
             const settings = await db_js_1.default.systemSettings.findUnique({ where: { id: 'default' } });
             const maxSlots = settings?.maxBookingsPerSlot || 5;
             const bypassLimits = adminOverride && (user.role === client_1.Role.ADMIN || user.role === client_1.Role.SUPERADMIN || user.role === client_1.Role.STAFF);
+            let targetUserId = user.id;
+            if (user.role !== client_1.Role.CUSTOMER) {
+                targetUserId = userId || null;
+            }
             if (!bypassLimits) {
+                // Layer 1: Burst limit (1 request per 3 seconds per user)
+                const burstKey = `booking:burst:${targetUserId}`;
+                const burstLock = await redis_js_1.default.set(burstKey, 'locked', 'EX', 3, 'NX');
+                if (!burstLock) {
+                    return res.status(429).json({ success: false, message: 'Please wait a few seconds before making another booking request.' });
+                }
+                // Layer 2 & 3: Daily Quotas (User & IP)
+                const todayStr = new Date().toISOString().split('T')[0];
+                const dailyUserKey = `booking:daily:${targetUserId}:${todayStr}`;
+                const dailyIpKey = `booking:daily_ip:${req.ip}:${todayStr}`;
+                const userCount = await redis_js_1.default.incr(dailyUserKey);
+                const ipCount = await redis_js_1.default.incr(dailyIpKey);
+                if (userCount === 1)
+                    await redis_js_1.default.expire(dailyUserKey, 86400);
+                if (ipCount === 1)
+                    await redis_js_1.default.expire(dailyIpKey, 86400);
+                if (userCount > 20 || ipCount > 30) {
+                    return res.status(429).json({
+                        success: false,
+                        message: 'You have reached the daily booking limit. Please try again tomorrow.',
+                    });
+                }
                 // Acquire Redis lock
                 for (let attempt = 0; attempt < 5; attempt++) {
                     const resLock = await redis_js_1.default.set(lockKey, 'locked', 'PX', 3000, 'NX');
@@ -166,10 +193,6 @@ class AppointmentController {
                     success: false,
                     message: `The requested appointment slot is fully booked (maximum ${maxSlots} bookings). Please choose another time.`,
                 });
-            }
-            let targetUserId = user.id;
-            if (user.role !== client_1.Role.CUSTOMER) {
-                targetUserId = userId || null;
             }
             const appointment = await db_js_1.default.appointment.create({
                 data: {
@@ -213,7 +236,7 @@ class AppointmentController {
     static async updateAppointment(req, res, next) {
         const user = req.user;
         const { id } = req.params;
-        const { date, timeSlot, status, notes } = req.body;
+        const { date, timeSlot, status, notes, orderId } = req.body;
         let lockKey = null;
         let lockAcquired = false;
         try {
@@ -285,6 +308,7 @@ class AppointmentController {
                     ...(timeSlot && { timeSlot }),
                     ...(status && { status: status }),
                     ...(notes !== undefined && { notes }),
+                    ...(orderId !== undefined && { orderId }),
                 },
             });
             if (lockAcquired && lockKey) {

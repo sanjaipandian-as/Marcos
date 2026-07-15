@@ -3,9 +3,9 @@ import env from './env.js';
 
 let redis: Redis;
 
-if (env.NODE_ENV === 'test') {
-  // If we are in test mode, we might want to import and use ioredis-mock
-  // but to keep it simple, we check if the caller provided mock or use default
+if (env.NODE_ENV === 'test' || env.NODE_ENV === 'development') {
+  // If we are in test or dev mode, use ioredis-mock to save real Redis commands
+  // and prevent Upstash rate limiting issues.
   try {
     const RedisMock = require('ioredis-mock');
     redis = new RedisMock();

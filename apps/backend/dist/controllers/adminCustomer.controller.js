@@ -8,14 +8,13 @@ const zod_1 = require("zod");
 const db_js_1 = __importDefault(require("../config/db.js"));
 const audit_js_1 = require("../utils/audit.js");
 const redis_js_1 = __importDefault(require("../config/redis.js"));
-const crypto_js_1 = require("../utils/crypto.js");
 const crypto_1 = __importDefault(require("crypto"));
+const auth_service_js_1 = __importDefault(require("../services/auth.service.js"));
 exports.appCustomerCreateSchema = zod_1.z.object({
     body: zod_1.z.object({
         fullName: zod_1.z.string().min(1),
         email: zod_1.z.string().email(),
         phoneNumber: zod_1.z.string().min(10),
-        password: zod_1.z.string().min(6),
         gender: zod_1.z.string().optional().nullable(),
         address: zod_1.z.string().optional().nullable(),
     }),
@@ -25,10 +24,9 @@ exports.appCustomerUpdateSchema = zod_1.z.object({
         fullName: zod_1.z.string().min(1).optional(),
         email: zod_1.z.string().email().optional(),
         phoneNumber: zod_1.z.string().min(10).optional(),
-        password: zod_1.z.string().min(6).optional(),
         gender: zod_1.z.string().optional().nullable(),
         address: zod_1.z.string().optional().nullable(),
-    }),
+    }).strict(),
 });
 class AdminCustomerController {
     /**
@@ -36,7 +34,7 @@ class AdminCustomerController {
      * Admin creates an app customer account
      */
     static async createCustomer(req, res, next) {
-        const { fullName, email, phoneNumber, password, gender, address } = req.body;
+        const { fullName, email, phoneNumber, gender, address } = req.body;
         try {
             // Normalize phone
             let normalizedPhone = phoneNumber.replace(/[\s\-()]/g, '');
@@ -55,18 +53,19 @@ class AdminCustomerController {
             if (existing) {
                 return res.status(409).json({ success: false, message: 'Email or Phone Number already registered' });
             }
-            const passwordHash = await (0, crypto_js_1.hashPassword)(password);
             const referralCode = `REF-${crypto_1.default.randomUUID().substring(0, 8).toUpperCase()}`;
             const customer = await db_js_1.default.user.create({
                 data: {
                     fullName,
                     email,
                     phoneNumber: normalizedPhone,
-                    passwordHash,
                     referralCode,
                     role: 'CUSTOMER',
                     gender,
                     address,
+                    // @ts-ignore - IDE TS cache issue
+                    passwordHash: null,
+                    passwordSetByUser: false,
                 },
             });
             await (0, audit_js_1.createAuditLog)({
@@ -103,7 +102,7 @@ class AdminCustomerController {
      */
     static async updateCustomer(req, res, next) {
         const { id } = req.params;
-        const { fullName, email, phoneNumber, password, gender, address } = req.body;
+        const { fullName, email, phoneNumber, gender, address } = req.body;
         try {
             const existing = await db_js_1.default.user.findUnique({ where: { id } });
             if (!existing) {
@@ -120,9 +119,6 @@ class AdminCustomerController {
                     normalizedPhone = `+91${normalizedPhone}`;
                 }
                 updateData.phoneNumber = normalizedPhone;
-            }
-            if (password) {
-                updateData.passwordHash = await (0, crypto_js_1.hashPassword)(password);
             }
             if (gender !== undefined)
                 updateData.gender = gender;
@@ -282,6 +278,40 @@ class AdminCustomerController {
                 },
             });
             return res.status(200).json({ success: true, message: 'Customer account deleted successfully' });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    /**
+     * POST /admin/customers/:id/force-password-reset
+     * Admin forces a user to reset their password
+     */
+    static async forcePasswordReset(req, res, next) {
+        const { id } = req.params;
+        try {
+            const customer = await db_js_1.default.user.findUnique({
+                where: { id },
+            });
+            if (!customer) {
+                return res.status(404).json({ success: false, message: 'Customer not found' });
+            }
+            await db_js_1.default.user.update({
+                where: { id },
+                // @ts-ignore - IDE TS cache issue
+                data: { passwordHash: null, passwordSetByUser: false },
+            });
+            await auth_service_js_1.default.revokeAllUserSessions(id);
+            await (0, audit_js_1.createAuditLog)({
+                userId: req.user.id,
+                action: 'PASSWORD_RESET_FORCED',
+                ipAddress: req.ip,
+                details: {
+                    message: `Admin ${req.user.fullName} forced a password reset for customer ${customer.email}`,
+                    customerId: id,
+                },
+            });
+            return res.status(200).json({ success: true, message: 'User logged out and password reset forced.' });
         }
         catch (error) {
             next(error);

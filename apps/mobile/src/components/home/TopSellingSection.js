@@ -65,29 +65,6 @@ function TopSellingCard({ item, index, onShopPress, onAddToCart, inCart, theme, 
               ₹{Math.round(Number(item.price))}
             </Text>
           </View>
-
-          <TouchableOpacity
-            style={[
-              styles.actionBtn,
-              inCart
-                ? { backgroundColor: '#3D2E3D', borderWidth: 1, borderColor: '#3D2E3D' }
-                : { backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#D8BFD8' }
-            ]}
-            onPress={onAddToCart}
-            activeOpacity={0.8}
-          >
-            {inCart ? (
-              <>
-                <Text style={{ color: '#FDFBFD', fontFamily: fonts.semiBold, fontSize: 12, marginRight: 6 }}>View</Text>
-                <CustomCartAddedIcon color="#FDFBFD" size={16} />
-              </>
-            ) : (
-              <>
-                <Text style={{ color: '#3D2E3D', fontFamily: fonts.semiBold, fontSize: 12, marginRight: 6 }}>Add</Text>
-                <CustomCartAddIcon color="#3D2E3D" size={16} />
-              </>
-            )}
-          </TouchableOpacity>
         </View>
       </View>
     </TouchableOpacity>
@@ -101,9 +78,7 @@ export default function TopSellingSection({
   theme,
   fonts,
   shadows,
-  navigation,
-  cartItems,
-  handleAddToCart
+  navigation
 }) {
   if (!products || products.length === 0) return null;
 
@@ -136,18 +111,9 @@ export default function TopSellingSection({
           <View key={`chunk-${chunkIdx}`} style={{ width: screenWidth * 0.85, marginRight: 16, gap: 16 }}>
             {chunk.map((item, itemIdx) => {
               const absoluteIndex = chunkIdx * 2 + itemIdx;
-              const inCart = cartItems.has(item.id);
 
               const handleShopPress = () => {
                 navigation.navigate('ProductDetails', { productId: item.id });
-              };
-
-              const onAddToCart = () => {
-                if (inCart) {
-                  navigation.navigate('Cart');
-                } else {
-                  handleAddToCart(item.id);
-                }
               };
 
               return (
@@ -156,8 +122,6 @@ export default function TopSellingSection({
                   item={item}
                   index={absoluteIndex}
                   onShopPress={handleShopPress}
-                  onAddToCart={onAddToCart}
-                  inCart={inCart}
                   theme={theme}
                   fonts={fonts}
                   shadows={shadows}
