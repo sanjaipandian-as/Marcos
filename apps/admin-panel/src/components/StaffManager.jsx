@@ -9,7 +9,8 @@ import {
   X,
   Mail,
   Phone,
-  Edit
+  Edit,
+  Key
 } from 'lucide-react';
 import api from '../utils/api';
 
@@ -28,7 +29,6 @@ export default function StaffManager() {
     fullName: '',
     email: '',
     phoneNumber: '',
-    password: '',
     role: 'STAFF'
   });
 
@@ -77,7 +77,7 @@ export default function StaffManager() {
     setError('');
     setSuccess('');
 
-    if (!newStaff.fullName || !newStaff.email || !newStaff.phoneNumber || !newStaff.password) {
+    if (!newStaff.fullName || !newStaff.email || !newStaff.phoneNumber) {
       setError('Please fill in all fields.');
       return;
     }
@@ -87,7 +87,6 @@ export default function StaffManager() {
         fullName: newStaff.fullName.trim(),
         email: newStaff.email.trim(),
         phoneNumber: newStaff.phoneNumber.trim(),
-        password: newStaff.password,
         role: newStaff.role
       });
       setSuccess(`Team member '${newStaff.fullName}' created successfully!`);
@@ -96,12 +95,21 @@ export default function StaffManager() {
         fullName: '',
         email: '',
         phoneNumber: '',
-        password: '',
         role: 'STAFF'
       });
       loadStaff();
     } catch (err) {
       setError(err.message || 'Create team member failed.');
+    }
+  };
+
+  const handleForcePasswordReset = async (id) => {
+    if (!window.confirm('Force this staff member to reset their password? They will be logged out immediately.')) return;
+    try {
+      await api.forceStaffPasswordReset(id);
+      alert('Password reset forced successfully.');
+    } catch (err) {
+      alert(err.message || 'Action failed.');
     }
   };
 
@@ -200,18 +208,27 @@ export default function StaffManager() {
               <span className="text-[9px] text-slate-400 font-semibold">Joined: {new Date(s.createdAt).toLocaleDateString()}</span>
               
               {s.role !== 'SUPERADMIN' && (
-                <button
-                  onClick={() => {
-                    setTargetUser(s);
-                    setEditName(s.fullName);
-                    setSelectedRole(s.role);
-                    setError('');
-                  }}
-                  className="flex items-center gap-1 text-[10px] font-extrabold text-brand-650 hover:underline border border-slate-200 py-1 px-3.5 rounded-xl hover:bg-slate-50 transition-all shadow-sm"
-                >
-                  <Edit className="w-3 h-3" />
-                  <span>Edit Profile</span>
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleForcePasswordReset(s.id)}
+                    className="flex items-center gap-1 text-[10px] font-extrabold text-orange-650 hover:underline border border-slate-200 py-1 px-3.5 rounded-xl hover:bg-orange-50 transition-all shadow-sm"
+                    title="Force Password Reset"
+                  >
+                    <Key className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setTargetUser(s);
+                      setEditName(s.fullName);
+                      setSelectedRole(s.role);
+                      setError('');
+                    }}
+                    className="flex items-center gap-1 text-[10px] font-extrabold text-brand-650 hover:underline border border-slate-200 py-1 px-3.5 rounded-xl hover:bg-slate-50 transition-all shadow-sm"
+                  >
+                    <Edit className="w-3 h-3" />
+                    <span>Edit Profile</span>
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -275,17 +292,7 @@ export default function StaffManager() {
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-450 uppercase block">Password *</label>
-                <input
-                  type="password"
-                  value={newStaff.password}
-                  onChange={e => setNewStaff({ ...newStaff, password: e.target.value })}
-                  placeholder="At least 6 characters"
-                  className="w-full text-xs border border-slate-200 rounded-xl py-2.5 px-3 focus:outline-none focus:border-brand-500"
-                  required
-                />
-              </div>
+
 
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-slate-450 uppercase block">System Role</label>

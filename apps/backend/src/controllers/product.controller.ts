@@ -46,12 +46,27 @@ export function computeStockStatus(qty: number): StockStatus {
 
 export class ProductController {
   /**
+   * Helper to fetch and cache active offers
+   */
+  static async getActiveOffers() {
+    const cacheKey = 'cache:active_offers';
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+    const offers = await prisma.offer.findMany({ where: { isActive: true } });
+    await redis.set(cacheKey, JSON.stringify(offers), 'EX', 300); // 5 minutes
+    return offers;
+  }
+
+  /**
    * GET /products
    */
   static async getProducts(req: Request, res: Response, next: NextFunction) {
     const { page, limit, category, search, sortBy, sortOrder } = req.query as any;
-    const skip = (page - 1) * limit;
-    const cacheKey = `cache:products:${JSON.stringify(req.query)}`;
+    const safeLimit = Math.min(Number(limit) || 20, 1000); // clamp pagination limit
+    const skip = (Number(page) - 1) * safeLimit;
+    const cacheKey = `cache:products:page-${page}-limit-${safeLimit}-cat-${category || 'all'}-search-${search || 'none'}-sort-${sortBy}-${sortOrder}`;
 
     try {
       const cached = await redis.get(cacheKey);
@@ -60,7 +75,7 @@ export class ProductController {
       }
 
       const where: any = {};
-      
+
       if (category) {
         where.category = {
           slug: category,
@@ -74,30 +89,29 @@ export class ProductController {
         ];
       }
 
-      const [products, total, activeOffers] = await Promise.all([
+      const [products, total] = await Promise.all([
         prisma.product.findMany({
           where,
           orderBy: { [sortBy]: sortOrder },
           skip,
-          take: limit,
+          take: safeLimit,
           include: { category: true },
         }),
         prisma.product.count({ where }),
-        prisma.offer.findMany({
-          where: { isActive: true },
-        }),
       ]);
+      
+      const activeOffers: any[] = await ProductController.getActiveOffers();
 
       const freeShippingProductIds = new Set<string>();
       const freeShippingCategoryIds = new Set<string>();
       let storewideFreeShipping = false;
-      activeOffers.forEach(offer => {
+      activeOffers.forEach((offer: any) => {
         if (offer.isFreeShipping || offer.type === 'FREE_SHIPPING') {
           if (offer.applicableProductIds.length === 0 && offer.applicableCategoryIds.length === 0) {
             storewideFreeShipping = true;
           } else {
-            offer.applicableProductIds.forEach(id => freeShippingProductIds.add(id));
-            offer.applicableCategoryIds.forEach(id => freeShippingCategoryIds.add(id));
+            offer.applicableProductIds.forEach((id: string) => freeShippingProductIds.add(id));
+            offer.applicableCategoryIds.forEach((id: string) => freeShippingCategoryIds.add(id));
           }
         }
       });
@@ -133,15 +147,12 @@ export class ProductController {
     const { id } = req.params;
 
     try {
-      const [product, activeOffers] = await Promise.all([
-        prisma.product.findUnique({
-          where: { id },
-          include: { category: true },
-        }),
-        prisma.offer.findMany({
-          where: { isActive: true },
-        })
-      ]);
+      const product = await prisma.product.findUnique({
+        where: { id },
+        include: { category: true },
+      });
+      
+      const activeOffers: any[] = await ProductController.getActiveOffers();
 
       if (!product) {
         return res.status(404).json({ success: false, message: 'Product not found' });
@@ -193,26 +204,23 @@ export class ProductController {
     if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     try {
-      const [items, activeOffers] = await Promise.all([
-        prisma.cartItem.findMany({
-          where: { userId },
-          include: { product: true },
-        }),
-        prisma.offer.findMany({
-          where: { isActive: true },
-        })
-      ]);
+      const items = await prisma.cartItem.findMany({
+        where: { userId },
+        include: { product: true },
+      });
+      
+      const activeOffers: any[] = await ProductController.getActiveOffers();
 
       const freeShippingProductIds = new Set<string>();
       const freeShippingCategoryIds = new Set<string>();
       let storewideFreeShipping = false;
-      activeOffers.forEach(offer => {
+      activeOffers.forEach((offer: any) => {
         if (offer.isFreeShipping || offer.type === 'FREE_SHIPPING') {
           if (offer.applicableProductIds.length === 0 && offer.applicableCategoryIds.length === 0) {
             storewideFreeShipping = true;
           } else {
-            offer.applicableProductIds.forEach(id => freeShippingProductIds.add(id));
-            offer.applicableCategoryIds.forEach(id => freeShippingCategoryIds.add(id));
+            offer.applicableProductIds.forEach((id: string) => freeShippingProductIds.add(id));
+            offer.applicableCategoryIds.forEach((id: string) => freeShippingCategoryIds.add(id));
           }
         }
       });

@@ -13,11 +13,13 @@ import {
   Platform,
   Animated,
   Dimensions,
-  StatusBar
+  StatusBar,
+  Image
 } from 'react-native';
 import { useTheme } from '../../styles/ThemeContext';
 import { APP_CONFIG } from '../../config/app.config';
 import api from '../../utils/api';
+import { useAuth } from '../../contexts/AuthContext';
 import { 
   Calendar, 
   Clock, 
@@ -42,18 +44,27 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 const { width } = Dimensions.get('window');
 
-export default function AppointmentBookingScreen({ navigation }) {
+export default function AppointmentBookingScreen({ navigation, route }) {
   const { theme, fonts, shadows } = useTheme();
   const [appointments, setAppointments] = useState([]);
   const [visits, setVisits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [bookingModalVisible, setBookingModalVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [productImage, setProductImage] = useState('');
+  const { requireAuth, user } = useAuth();
   
   // Tab View Toggle: 'SERVICE' or 'VISIT'
   const [activeTab, setActiveTab] = useState('SERVICE');
-  
-  // Date Picker States
+
+  // Pagination states
+  const [apptsPage, setApptsPage] = useState(1);
+  const [visitsPage, setVisitsPage] = useState(1);
+  const [hasMoreAppts, setHasMoreAppts] = useState(true);
+  const [hasMoreVisits, setHasMoreVisits] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  // Calendar modal states
   const [showCalendarModal, setShowCalendarModal] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(null);
@@ -87,18 +98,21 @@ export default function AppointmentBookingScreen({ navigation }) {
   ];
 
   const fetchSettings = async () => {
+    // /system/settings/public is open to guests — safe to call always
     try {
       const res = await api.get('/system/settings/public');
       if (res.success && res.data) {
         setMaxBookingsPerSlot(res.data.maxBookingsPerSlot || 5);
       }
     } catch (err) {
-      console.error('Error fetching settings:', err);
+      console.warn('Error fetching settings:', err.message);
     }
   };
 
   const loadBookedSlots = async (targetDate) => {
     if (!targetDate) return;
+    // This endpoint requires auth — skip for guests
+    if (!user) return;
     try {
       const yearVal = targetDate.getFullYear();
       const monthVal = String(targetDate.getMonth() + 1).padStart(2, '0');
@@ -111,7 +125,7 @@ export default function AppointmentBookingScreen({ navigation }) {
         setBookedSlotsCounts({});
       }
     } catch (err) {
-      console.error('Failed to load booked slots counts:', err);
+      console.warn('Failed to load booked slots counts:', err.message);
       setBookedSlotsCounts({});
     }
   };
@@ -119,6 +133,24 @@ export default function AppointmentBookingScreen({ navigation }) {
   useEffect(() => {
     fetchSettings();
   }, []);
+
+  useEffect(() => {
+    if (route?.params?.autoOpenModal) {
+      setActiveTab('SERVICE');
+      setBookingModalVisible(true);
+      if (route.params.prefillProduct) {
+        setProductDetails(route.params.prefillProduct);
+      }
+      if (route.params.prefillCategory) {
+        setApptCategory(route.params.prefillCategory);
+      }
+      if (route.params.prefillProductImage) {
+        setProductImage(route.params.prefillProductImage);
+      }
+      // Clear route parameters so it doesn't auto-open again on revisit
+      navigation.setParams({ autoOpenModal: false, prefillProduct: undefined, prefillCategory: undefined, prefillProductImage: undefined });
+    }
+  }, [route?.params]);
 
   useEffect(() => {
     if (selectedDate) {
@@ -140,30 +172,84 @@ export default function AppointmentBookingScreen({ navigation }) {
     });
   };
 
-  const loadData = async () => {
+  const loadData = async (reset = false) => {
+    // Bookings list is auth-only — skip silently for guests
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     try {
+      if (reset) {
+        setApptsPage(1);
+        setVisitsPage(1);
+        setHasMoreAppts(true);
+        setHasMoreVisits(true);
+      }
+      
       if (appointments.length === 0 && visits.length === 0) {
         setLoading(true);
       }
       const [apptsRes, visitsRes] = await Promise.all([
-        api.get('/appointments'),
-        api.get('/visits')
+        api.get('/appointments?limit=20&page=1'),
+        api.get('/visits?limit=20&page=1')
       ]);
-      if (apptsRes.success) setAppointments(apptsRes.data);
-      if (visitsRes.success) setVisits(visitsRes.data);
+      
+      if (apptsRes.success) {
+        setAppointments(apptsRes.data);
+        setHasMoreAppts(apptsRes.data.length >= 20);
+        if (reset) setApptsPage(1);
+      }
+      if (visitsRes.success) {
+        setVisits(visitsRes.data);
+        setHasMoreVisits(visitsRes.data.length >= 20);
+        if (reset) setVisitsPage(1);
+      }
     } catch (err) {
-      console.error('Error fetching bookings:', err);
+      console.warn('Error fetching bookings:', err.message);
     } finally {
       setLoading(false);
     }
   };
 
+  const loadMoreData = async () => {
+    if (loadingMore) return;
+    
+    try {
+      setLoadingMore(true);
+      if (activeTab === 'SERVICE' && hasMoreAppts) {
+        const nextPage = apptsPage + 1;
+        const res = await api.get(`/appointments?limit=20&page=${nextPage}`);
+        if (res.success && res.data?.length > 0) {
+          setAppointments(prev => [...prev, ...res.data]);
+          setApptsPage(nextPage);
+          setHasMoreAppts(res.data.length >= 20);
+        } else {
+          setHasMoreAppts(false);
+        }
+      } else if (activeTab === 'VISIT' && hasMoreVisits) {
+        const nextPage = visitsPage + 1;
+        const res = await api.get(`/visits?limit=20&page=${nextPage}`);
+        if (res.success && res.data?.length > 0) {
+          setVisits(prev => [...prev, ...res.data]);
+          setVisitsPage(nextPage);
+          setHasMoreVisits(res.data.length >= 20);
+        } else {
+          setHasMoreVisits(false);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching more bookings:', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-      loadData();
+      loadData(true);
     });
     return unsubscribe;
-  }, [navigation, appointments, visits]);
+  }, [navigation]);
 
   const validateForm = () => {
     const newErrors = {};
@@ -181,8 +267,9 @@ export default function AppointmentBookingScreen({ navigation }) {
   };
 
   const handleBooking = async () => {
-    if (!validateForm()) return;
-    setSubmitting(true);
+    requireAuth(async () => {
+      if (!validateForm()) return;
+      setSubmitting(true);
     try {
       // Use UTC date construction to avoid timezone-related off-by-one date issues.
       // getFullYear/getMonth/getDate return LOCAL calendar values (which match what
@@ -199,7 +286,7 @@ export default function AppointmentBookingScreen({ navigation }) {
           timeSlot,
           productType: productDetails,
           type: 'CONSULTATION',
-          notes: `Category: ${apptCategory}\n${notes}`,
+          notes: `Category: ${apptCategory}\nProductImage: ${productImage || ''}\n${notes}`,
         });
       } else {
         res = await api.post('/visits', {
@@ -213,13 +300,14 @@ export default function AppointmentBookingScreen({ navigation }) {
         Alert.alert('Success', `${activeTab === 'SERVICE' ? 'Service' : 'Home Visit'} booked successfully.`);
         setBookingModalVisible(false);
         resetForm();
-        loadData();
+        loadData(true);
       }
     } catch (err) {
       Alert.alert('Error', err.message || 'Booking failed.');
     } finally {
       setSubmitting(false);
     }
+    });
   };
 
   const resetForm = () => {
@@ -227,6 +315,7 @@ export default function AppointmentBookingScreen({ navigation }) {
     setApptCategory('');
     setTimeSlot('');
     setProductDetails('');
+    setProductImage('');
     setNotes('');
     setAddress('');
     setErrors({});
@@ -271,7 +360,7 @@ export default function AppointmentBookingScreen({ navigation }) {
               const res = await api.put(endpoint, { status: 'CANCELLED' });
               if (res.success) {
                 Alert.alert('Success', 'Booking cancelled successfully.');
-                loadData();
+                loadData(true);
               } else {
                 Alert.alert('Error', res.message || 'Failed to cancel booking.');
               }
@@ -287,17 +376,18 @@ export default function AppointmentBookingScreen({ navigation }) {
   };
 
   const submitReschedule = async () => {
-    if (!rescheduleDate) {
-      setErrors({ rescheduleDate: 'Date is required' });
-      return;
-    }
-    const isVisit = !!reschedulingItem.address;
-    if (!isVisit && !rescheduleTimeSlot) {
-      setErrors({ rescheduleTimeSlot: 'Time slot is required' });
-      return;
-    }
-    
-    setSubmitting(true);
+    requireAuth(async () => {
+      if (!rescheduleDate) {
+        setErrors({ rescheduleDate: 'Date is required' });
+        return;
+      }
+      const isVisit = !!reschedulingItem.address;
+      if (!isVisit && !rescheduleTimeSlot) {
+        setErrors({ rescheduleTimeSlot: 'Time slot is required' });
+        return;
+      }
+      
+      setSubmitting(true);
     try {
       const yearVal = rescheduleDate.getFullYear();
       const monthVal = String(rescheduleDate.getMonth() + 1).padStart(2, '0');
@@ -313,7 +403,7 @@ export default function AppointmentBookingScreen({ navigation }) {
       if (res.success) {
         Alert.alert('Success', 'Booking rescheduled successfully.');
         setRescheduleModalVisible(false);
-        loadData();
+        loadData(true);
       } else {
         Alert.alert('Error', res.message || 'Failed to reschedule.');
       }
@@ -322,6 +412,7 @@ export default function AppointmentBookingScreen({ navigation }) {
     } finally {
       setSubmitting(false);
     }
+    });
   };
 
   const renderCalendarModal = () => {
@@ -460,6 +551,21 @@ export default function AppointmentBookingScreen({ navigation }) {
                  </Text>
                )}
             </View>
+
+            {(() => {
+              if (isVisit || !item.notes) return null;
+              const imgMatch = item.notes.match(/ProductImage:\s*([^\n]+)/);
+              if (imgMatch && imgMatch[1]) {
+                return (
+                  <Image 
+                    source={{ uri: imgMatch[1].trim() }} 
+                    style={{ width: 56, height: 56, borderRadius: 12, backgroundColor: '#f1f5f9' }} 
+                    resizeMode="cover"
+                  />
+                );
+              }
+              return null;
+            })()}
             
             <View style={styles.detailsBlock}>
               <View style={styles.infoRowPremium}>
@@ -581,6 +687,16 @@ export default function AppointmentBookingScreen({ navigation }) {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listPadding}
           showsVerticalScrollIndicator={false}
+          onEndReached={loadMoreData}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={() => (
+            loadingMore ? (
+              <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={theme.brand[500]} />
+                <Text style={{ marginTop: 8, fontSize: 12, color: theme.text.muted }}>Loading more...</Text>
+              </View>
+            ) : null
+          )}
         />
       )}
 
@@ -602,8 +718,23 @@ export default function AppointmentBookingScreen({ navigation }) {
 
               {activeTab === 'SERVICE' ? (
                 <>
-                  <TextInput style={[styles.textInput, { backgroundColor: theme.bg.input, borderColor: theme.border, color: theme.text.primary }]} placeholder="Category (e.g. Wedding)" placeholderTextColor={theme.text.muted} value={apptCategory} onChangeText={setApptCategory} />
-                  {errors.category && <Text style={styles.errorText}>{errors.category}</Text>}
+                  {productImage ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: theme.bg.input, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: theme.border, marginBottom: 12 }}>
+                      <Image source={{ uri: productImage }} style={{ width: 50, height: 50, borderRadius: 10 }} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: theme.text.primary }} numberOfLines={1}>{productDetails}</Text>
+                        <Text style={{ fontFamily: fonts.medium, fontSize: 11, color: theme.text.secondary }}>{apptCategory}</Text>
+                      </View>
+                      <TouchableOpacity onPress={() => { setProductImage(''); setProductDetails(''); setApptCategory(''); }}>
+                        <X size={18} color={theme.text.muted} />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <>
+                      <TextInput style={[styles.textInput, { backgroundColor: theme.bg.input, borderColor: theme.border, color: theme.text.primary }]} placeholder="Category (e.g. Wedding)" placeholderTextColor={theme.text.muted} value={apptCategory} onChangeText={setApptCategory} />
+                      {errors.category && <Text style={styles.errorText}>{errors.category}</Text>}
+                    </>
+                  )}
                   <View style={styles.slotsRow}>
                     {getFilteredAvailableSlots(selectedDate).map(s => (
                       <TouchableOpacity key={s} style={[styles.slot, { borderColor: theme.border }, timeSlot === s && { backgroundColor: theme.brand[500], borderColor: theme.brand[500] }]} onPress={() => setTimeSlot(s)}>
@@ -611,7 +742,9 @@ export default function AppointmentBookingScreen({ navigation }) {
                       </TouchableOpacity>
                     ))}
                   </View>
-                  <TextInput style={[styles.textInput, { backgroundColor: theme.bg.input, borderColor: theme.border, color: theme.text.primary }]} placeholder="Product Details" placeholderTextColor={theme.text.muted} value={productDetails} onChangeText={setProductDetails} />
+                  {!productImage && (
+                    <TextInput style={[styles.textInput, { backgroundColor: theme.bg.input, borderColor: theme.border, color: theme.text.primary }]} placeholder="Product Details" placeholderTextColor={theme.text.muted} value={productDetails} onChangeText={setProductDetails} />
+                  )}
                 </>
               ) : (
                 <TextInput style={[styles.textInput, { height: 80, backgroundColor: theme.bg.input, borderColor: theme.border, color: theme.text.primary }]} placeholder="Full Address" placeholderTextColor={theme.text.muted} multiline value={address} onChangeText={setAddress} />

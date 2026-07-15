@@ -28,6 +28,7 @@ export default function OripioFinView({ setActiveTab }) {
   const [recentOrders, setRecentOrders] = useState([]);
   const [chartData, setChartData] = useState([]);
   const [revenueStats, setRevenueStats] = useState({ totalRevenue: 0, orderCount: 0 });
+  const [todayStats, setTodayStats] = useState({ orders: 0, deliveries: 0, tomorrowDetails: { orders: [], appointments: [] } });
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
 
@@ -70,6 +71,7 @@ export default function OripioFinView({ setActiveTab }) {
         totalRevenue: report.totalRevenue,
         orderCount: report.orderCount
       });
+      setTodayStats(report.todayStats || { orders: 0, deliveries: 0, tomorrowDetails: { orders: [], appointments: [] } });
       setMetrics([
         { id: 'm-1', code: 'Total Revenue', symbol: '₹', balance: report.totalRevenue || 0, desc: 'Overall Platform Earnings', flag: '💰' },
         { id: 'm-2', code: 'Total Orders', symbol: '', balance: report.orderCount || 0, desc: 'Successful Transactions', flag: '📦' },
@@ -133,6 +135,34 @@ export default function OripioFinView({ setActiveTab }) {
         <div>
           <h2 className="text-2xl font-semibold text-[#3D2E3D] tracking-tight">Marcos dashboard</h2>
           <p className="text-sm text-[#7A6B7A] font-medium font-sans">Real-time statistics, balance overview, and invoices</p>
+        </div>
+      </div>
+
+      {/* Today Stats & Tomorrow Details - Always visible */}
+      <div className="bg-gradient-to-r from-brand-50 to-blue-50 p-6 rounded-3xl border border-brand-100 shadow-sm flex flex-col md:flex-row gap-6 justify-between items-start md:items-center">
+        <div className="flex gap-8">
+          <div>
+            <p className="text-xs text-brand-600 font-bold uppercase tracking-wider mb-1">Today's Orders</p>
+            <p className="text-3xl font-extrabold text-[#3D2E3D]">{todayStats.orders}</p>
+          </div>
+          <div className="w-px bg-brand-200/50 hidden md:block"></div>
+          <div>
+            <p className="text-xs text-blue-600 font-bold uppercase tracking-wider mb-1">Today's Deliveries</p>
+            <p className="text-3xl font-extrabold text-[#3D2E3D]">{todayStats.deliveries}</p>
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-2xl border border-white/40 shadow-sm w-full md:w-auto min-w-[280px]">
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Tomorrow's Schedule</p>
+          <div className="space-y-2">
+            <div className="flex justify-between items-center text-xs">
+              <span className="font-semibold text-slate-600">Expected Orders</span>
+              <span className="font-bold text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full">{(todayStats.tomorrowDetails?.orders || []).length}</span>
+            </div>
+            <div className="flex justify-between items-center text-xs">
+              <span className="font-semibold text-slate-600">Appointments</span>
+              <span className="font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">{(todayStats.tomorrowDetails?.appointments || []).length}</span>
+            </div>
+          </div>
         </div>
       </div>
 

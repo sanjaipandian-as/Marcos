@@ -279,7 +279,7 @@ function parseUserAddress(user) {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export default function OrderManager({ initialTab = 'bookings' }) {
+export default function OrderManager({ initialTab = 'bookings', isActive }) {
   const [orders, setOrders] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [visits, setVisits] = useState([]);
@@ -337,6 +337,7 @@ export default function OrderManager({ initialTab = 'bookings' }) {
   // Advanced filters
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [dateFilterType, setDateFilterType] = useState('ORDER_DATE');
   const [paymentFilter, setPaymentFilter] = useState('ALL');
   const [typeFilter, setTypeFilter] = useState('ALL');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -357,6 +358,8 @@ export default function OrderManager({ initialTab = 'bookings' }) {
   const [editCustomerAddress, setEditCustomerAddress] = useState('');
   const [editOrderStatus, setEditOrderStatus] = useState('');
   const [editPaymentStatus, setEditPaymentStatus] = useState('');
+  const [editAdvancePayment, setEditAdvancePayment] = useState('');
+  const [editDeliveryDate, setEditDeliveryDate] = useState('');
   const [editFabricType, setEditFabricType] = useState('');
   const [editCustomizations, setEditCustomizations] = useState('');
   const [editTailorNotes, setEditTailorNotes] = useState('');
@@ -401,6 +404,8 @@ export default function OrderManager({ initialTab = 'bookings' }) {
       setEditCustomerAddress(addrText);
       setEditOrderStatus(selectedOrder.status || 'PENDING');
       setEditPaymentStatus(selectedOrder.paymentStatus || 'PENDING');
+      setEditAdvancePayment(selectedOrder.advancePayment || 0);
+      setEditDeliveryDate(selectedOrder.deliveryDate ? selectedOrder.deliveryDate.split('T')[0] : '');
       
       const firstItem = selectedOrder.items?.[0];
       setEditFabricType(selectedOrder.fabricType || firstItem?.fabricType || selectedOrder.product?.materialInfo || '');
@@ -852,7 +857,17 @@ export default function OrderManager({ initialTab = 'bookings' }) {
           <div style="text-align: right; font-size: 13px;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
               <span style="color: #666;">Subtotal:</span>
-              <span style="font-weight: 600;">₹${Number(order.payableAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              <span style="font-weight: 600;">₹${Number(order.totalAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            </div>
+            ${Number(order.discountAmount) > 0 ? `
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px; color: #ea580c;">
+              <span>Discount:</span>
+              <span style="font-weight: 600;">-₹${Number(order.discountAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            </div>
+            ` : ''}
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+              <span style="color: #666;">GST (${order.gstPercentage !== undefined && order.gstPercentage !== null ? order.gstPercentage : 18}%):</span>
+              <span style="font-weight: 600;">₹${Number(order.taxAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
             </div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
               <span style="color: #666;">Shipping & Custom Sizing Charge:</span>
@@ -862,6 +877,16 @@ export default function OrderManager({ initialTab = 'bookings' }) {
               <span>Total Payable:</span>
               <span>₹${Number(order.payableAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
             </div>
+            ${Number(order.advancePayment) > 0 ? `
+            <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee;">
+              <span style="color: #16a34a; font-weight: 600;">Advance Paid:</span>
+              <span style="color: #16a34a; font-weight: 600;">₹${Number(order.advancePayment).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 16px; font-weight: 800; color: #3b82f6;">
+              <span>Balance Due:</span>
+              <span>₹${Number(order.balanceAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            </div>
+            ` : ''}
           </div>
         </div>
 
@@ -904,7 +929,13 @@ export default function OrderManager({ initialTab = 'bookings' }) {
     loadOrders();
   }, []);
 
-  const loadOrders = async () => {
+  useEffect(() => {
+    if (isActive) {
+      loadOrders(true);
+    }
+  }, [isActive]);
+
+  const loadOrders = async (quiet = false) => {
     try {
       const [list, appList, visitList, staff, measurementsList] = await Promise.all([
         api.getOrders().catch(() => []),
@@ -1448,11 +1479,11 @@ export default function OrderManager({ initialTab = 'bookings' }) {
     let matchesDateFrom = true;
     let matchesDateTo = true;
     if (dateFrom) {
-      const d = new Date(order.createdAt).getTime();
+      const d = dateFilterType === 'DELIVERY_DATE' && order.deliveryDate ? new Date(order.deliveryDate).getTime() : new Date(order.createdAt).getTime();
       matchesDateFrom = d >= new Date(dateFrom).getTime();
     }
     if (dateTo) {
-      const d = new Date(order.createdAt).getTime();
+      const d = dateFilterType === 'DELIVERY_DATE' && order.deliveryDate ? new Date(order.deliveryDate).getTime() : new Date(order.createdAt).getTime();
       matchesDateTo = d <= new Date(dateTo).setHours(23, 59, 59, 999);
     }
     const matchesPayment = paymentFilter === 'ALL' || order.paymentMethod === paymentFilter || (paymentFilter === 'PAID' && order.paymentStatus === 'PAID');
@@ -1472,11 +1503,11 @@ export default function OrderManager({ initialTab = 'bookings' }) {
     let matchesDateFrom = true;
     let matchesDateTo = true;
     if (dateFrom) {
-      const d = new Date(order.createdAt).getTime();
+      const d = dateFilterType === 'DELIVERY_DATE' && order.deliveryDate ? new Date(order.deliveryDate).getTime() : new Date(order.createdAt).getTime();
       matchesDateFrom = d >= new Date(dateFrom).getTime();
     }
     if (dateTo) {
-      const d = new Date(order.createdAt).getTime();
+      const d = dateFilterType === 'DELIVERY_DATE' && order.deliveryDate ? new Date(order.deliveryDate).getTime() : new Date(order.createdAt).getTime();
       matchesDateTo = d <= new Date(dateTo).setHours(23, 59, 59, 999);
     }
     const matchesPayment = paymentFilter === 'ALL' || order.paymentMethod === paymentFilter || (paymentFilter === 'PAID' && order.paymentStatus === 'PAID');
@@ -1539,6 +1570,91 @@ export default function OrderManager({ initialTab = 'bookings' }) {
     return getStageConfig(status).label;
   };
 
+  const getTimelines = (order) => {
+    const orderDate = new Date(order.createdAt);
+    const orderDateStr = orderDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    
+    let deliveryDateStr = 'Not Set';
+    let daysRemainingText = '';
+    let daysColor = 'text-slate-500';
+
+    if (order.deliveryDate) {
+      const deliveryDate = new Date(order.deliveryDate);
+      deliveryDateStr = deliveryDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const targetDate = new Date(deliveryDate);
+      targetDate.setHours(0, 0, 0, 0);
+      
+      const diffTime = targetDate.getTime() - today.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (order.status === 'DELIVERED') {
+        daysRemainingText = 'Delivered';
+        daysColor = 'text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded';
+      } else if (order.status === 'CANCELLED') {
+        daysRemainingText = 'Cancelled';
+        daysColor = 'text-slate-500 bg-slate-100 px-2 py-0.5 rounded';
+      } else if (diffDays < 0) {
+        daysRemainingText = `${Math.abs(diffDays)} Days Overdue`;
+        daysColor = 'text-red-600 bg-red-50 px-2 py-0.5 rounded font-bold';
+      } else if (diffDays === 0) {
+        daysRemainingText = 'Due Today';
+        daysColor = 'text-amber-600 bg-amber-50 px-2 py-0.5 rounded font-bold';
+      } else {
+        daysRemainingText = `${diffDays} Days Left`;
+        daysColor = 'text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-bold';
+      }
+    }
+
+    return { orderDateStr, deliveryDateStr, daysRemainingText, daysColor };
+  };
+
+  const getCombinedStatusLabel = (order) => {
+    if (order.status === 'CANCELLED') return 'Cancelled';
+    
+    const advance = Number(order.advancePayment) || 0;
+    const total = Number(order.payableAmount) || Number(order.totalAmount) || 0;
+    
+    let paymentLabel = 'Non-Paid';
+    if (advance >= total && total > 0) {
+      paymentLabel = 'Fully Paid';
+    } else if (order.paymentStatus === 'COMPLETED' && total === 0) {
+      paymentLabel = 'Fully Paid'; 
+    } else if (advance > 0) {
+      paymentLabel = 'Advance Paid';
+    } else if (order.paymentStatus === 'COMPLETED' && !order.isOfflineSales) {
+      paymentLabel = 'Fully Paid'; // fallback for online orders
+    }
+
+    let orderLabel = getStageConfig(order.status).label;
+    if (order.status === 'PENDING') orderLabel = 'Ordered';
+    if (order.status === 'PAID') orderLabel = 'Measurement';
+    if (order.status === 'PROCESSING') orderLabel = 'Stitching';
+    if (order.status === 'SHIPPED') orderLabel = 'Completed';
+    if (order.status === 'OUT_FOR_DELIVERY') orderLabel = 'Out for Delivery';
+    if (order.status === 'DELIVERED') orderLabel = 'Delivered';
+
+    return `${paymentLabel} - ${orderLabel}`;
+  };
+
+  const getCombinedStatusStyle = (order) => {
+    if (order.status === 'CANCELLED') return 'bg-red-50 text-red-700 border-red-100';
+    
+    const advance = Number(order.advancePayment) || 0;
+    const total = Number(order.payableAmount) || Number(order.totalAmount) || 0;
+    
+    if (advance >= total && total > 0) {
+      return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+    } else if (order.paymentStatus === 'COMPLETED' && (!order.isOfflineSales || total === 0)) {
+      return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+    } else if (advance > 0) {
+      return 'bg-amber-50 text-amber-700 border-amber-100';
+    }
+    return 'bg-slate-50 text-slate-700 border-slate-100';
+  };
+
   const handleSaveOrderChanges = async () => {
     try {
       let finalProfileId = selectedProfileId;
@@ -1588,6 +1704,8 @@ export default function OrderManager({ initialTab = 'bookings' }) {
         customerName: editCustomerName,
         status: editOrderStatus,
         paymentStatus: editPaymentStatus,
+        advancePayment: Number(editAdvancePayment) || 0,
+        deliveryDate: editDeliveryDate || null,
         fabricType: editFabricType,
         customizations: editCustomizations,
         tailorNotes: editTailorNotes,
@@ -1849,6 +1967,17 @@ export default function OrderManager({ initialTab = 'bookings' }) {
     return (
       <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-wrap gap-4 items-end animate-slide-in mt-4 w-full">
         <div className="flex flex-col gap-1.5">
+          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Date Filter</label>
+          <select 
+            value={dateFilterType} 
+            onChange={e => setDateFilterType(e.target.value)}
+            className="px-3 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-brand-500 transition-colors"
+          >
+            <option value="ORDER_DATE">Order Date</option>
+            <option value="DELIVERY_DATE">Delivery Date</option>
+          </select>
+        </div>
+        <div className="flex flex-col gap-1.5">
           <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">From Date</label>
           <input 
             type="date" 
@@ -1897,7 +2026,7 @@ export default function OrderManager({ initialTab = 'bookings' }) {
         )}
         <div className="flex items-end">
           <button 
-            onClick={() => { setDateFrom(''); setDateTo(''); setPaymentFilter('ALL'); setTypeFilter('ALL'); }}
+            onClick={() => { setDateFrom(''); setDateTo(''); setDateFilterType('ORDER_DATE'); setPaymentFilter('ALL'); setTypeFilter('ALL'); }}
             className="px-4 py-2 text-xs font-bold text-red-500 hover:bg-red-50 rounded-xl transition-colors"
           >
             Clear Filters
@@ -2115,6 +2244,7 @@ export default function OrderManager({ initialTab = 'bookings' }) {
                   <tr className="bg-slate-50/50 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                     <th className="py-3 px-6">Invoice No.</th>
                     <th className="py-3 px-6">Customer Name</th>
+                    <th className="py-3 px-6">Timelines</th>
                     <th className="py-3 px-6">Sale Type</th>
                     <th className="py-3 px-6">Payment</th>
                     <th className="py-3 px-6">Payable</th>
@@ -2132,18 +2262,40 @@ export default function OrderManager({ initialTab = 'bookings' }) {
                       <tr key={order.id} className="hover:bg-slate-50/20 transition-colors">
                         <td className="py-4 px-6 font-extrabold text-slate-800">{order.invoiceNumber}</td>
                         <td className="py-4 px-6 text-slate-600 font-medium">{order.customerName}</td>
+                        <td className="py-4 px-6 text-xs space-y-1">
+                          {(() => {
+                            const tl = getTimelines(order);
+                            return (
+                              <>
+                                <div className="text-[10px] text-slate-500">Ordered: <span className="font-bold text-slate-800">{tl.orderDateStr}</span></div>
+                                <div className="text-[10px] text-slate-500">Delivery: <span className="font-bold text-slate-800">{tl.deliveryDateStr}</span></div>
+                                {tl.daysRemainingText && (
+                                  <div className={`inline-block mt-1 text-[10px] ${tl.daysColor}`}>{tl.daysRemainingText}</div>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </td>
                         <td className="py-4 px-6">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${order.isOfflineSales ? 'bg-amber-50 text-amber-800' : 'bg-blue-50 text-blue-800'}`}>
                             {order.isOfflineSales ? 'Offline' : 'Online App'}
                           </span>
                         </td>
                         <td className="py-4 px-6 font-semibold text-slate-500">{order.paymentMethod}</td>
-                        <td className="py-4 px-6 font-extrabold text-slate-800">
-                          ₹{Number(order.payableAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        <td className="py-4 px-6">
+                          <span className="font-extrabold text-slate-800 block">
+                            ₹{Number(order.payableAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </span>
+                          {Number(order.advancePayment) >= 0 && (
+                            <div className="text-[10px] mt-1 space-y-0.5">
+                              <div className="text-emerald-600 font-bold">Advance: ₹{Number(order.advancePayment).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                              <div className="text-brand-600 font-bold">Balance: ₹{Number(order.balanceAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                            </div>
+                          )}
                         </td>
                         <td className="py-4 px-6">
-                          <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold border ${getStatusStyle(order.status)}`}>
-                            {getStatusLabel(order.status)}
+                          <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold border ${getCombinedStatusStyle(order)}`}>
+                            {getCombinedStatusLabel(order)}
                           </span>
                         </td>
                         <td className="py-4 px-6 text-center">
@@ -2200,14 +2352,39 @@ export default function OrderManager({ initialTab = 'bookings' }) {
                     <p className="font-bold text-slate-800">{order.customerName}</p>
                     <p className="font-medium text-slate-400">{order.paymentMethod}</p>
                   </div>
+
+                  {(() => {
+                    const tl = getTimelines(order);
+                    return (
+                      <div className="bg-slate-50 rounded-xl p-2.5 flex justify-between items-center text-[10px]">
+                        <div>
+                          <p className="text-slate-500">Order: <span className="font-bold text-slate-800">{tl.orderDateStr}</span></p>
+                          <p className="text-slate-500">Delivery: <span className="font-bold text-slate-800">{tl.deliveryDateStr}</span></p>
+                        </div>
+                        {tl.daysRemainingText && (
+                          <div className={tl.daysColor}>{tl.daysRemainingText}</div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   <div className="flex justify-between items-center border-t border-slate-50 pt-3">
                     <div className="space-y-1">
-                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold border ${getStatusStyle(order.status)}`}>
-                        {getStatusLabel(order.status)}
+                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold border ${getCombinedStatusStyle(order)}`}>
+                        {getCombinedStatusLabel(order)}
                       </span>
-                      <p className="font-extrabold text-slate-800 text-sm">
-                        ₹{Number(order.payableAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </p>
+                      <div className="flex flex-col gap-0.5">
+                        <p className="font-extrabold text-slate-800 text-sm">
+                          ₹{Number(order.payableAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </p>
+                        {Number(order.advancePayment) >= 0 && (
+                          <div className="text-[10px] flex items-center gap-1.5 mt-0.5">
+                            <span className="text-emerald-600 font-bold">Advance: ₹{Number(order.advancePayment).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            <span className="text-slate-300">|</span>
+                            <span className="text-brand-600 font-bold">Balance: ₹{Number(order.balanceAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div className="flex gap-2">
                       <button
@@ -2282,75 +2459,118 @@ export default function OrderManager({ initialTab = 'bookings' }) {
             {renderAdvancedFilters()}
           </div>
 
-          {/* ── Studio Fittings List Grid ── */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {filteredAppointments.length === 0 ? (
-              <div className="md:col-span-2 text-center text-slate-400 py-16 font-semibold bg-white border border-slate-200/60 rounded-3xl shadow-premium">
-                No scheduled fittings found.
-              </div>
-            ) : (
-              filteredAppointments.map((app) => (
-                <div 
-                  key={app.id} 
-                  className="p-5 rounded-3xl border border-slate-200/60 bg-white hover:bg-slate-50/20 hover:border-slate-300 transition-all shadow-sm hover:shadow-premium flex flex-col justify-between space-y-4"
-                >
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-start gap-4">
-                      <div>
-                        <span className="text-base font-extrabold text-slate-800 block leading-tight">{app.userName}</span>
-                        <p className="text-xs text-slate-400 mt-1 font-semibold">Product Type: <span className="text-slate-600">{app.productType}</span></p>
-                      </div>
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border shrink-0 ${getApptStatusStyle(app.status)}`}>
-                        {app.status}
-                      </span>
+          {/* ── Studio Fittings Split Layout ── */}
+          {(() => {
+            const renderAppt = (app) => (
+              <div 
+                key={app.id} 
+                className="p-5 rounded-3xl border border-slate-200/60 bg-white hover:bg-slate-50/20 hover:border-slate-300 transition-all shadow-sm hover:shadow-premium flex flex-col justify-between space-y-4"
+              >
+                <div className="space-y-3">
+                  <div className="flex justify-between items-start gap-4">
+                    <div>
+                      <span className="text-base font-extrabold text-slate-800 block leading-tight">{app.userName}</span>
+                      <p className="text-xs text-slate-400 mt-1 font-semibold">Product Type: <span className="text-slate-600">{app.productType}</span></p>
                     </div>
-
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 font-semibold pt-1">
-                      <span className="flex items-center gap-1.5 bg-slate-100/80 px-2.5 py-1 rounded-lg">
-                        <Clock className="w-3.5 h-3.5 text-slate-400" />
-                        {formatBookingDateUTC(app.date, { weekday: 'short' })} at {app.timeSlot}
-                      </span>
-                      <span className="bg-brand-50 text-brand-700 py-1 px-2.5 rounded-lg uppercase text-[10px] tracking-wide border border-brand-100">
-                        {app.type?.replace(/_/g, ' ') || 'Studio Fitting'}
-                      </span>
-                    </div>
-
-                    {app.notes && (
-                      <div className="text-xs text-slate-600 bg-slate-50/50 border border-slate-100 rounded-xl p-3 leading-relaxed">
-                        <strong className="text-slate-700 block mb-1">Tailor Notes:</strong>
-                        {app.notes}
-                      </div>
-                    )}
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border shrink-0 ${getApptStatusStyle(app.status)}`}>
+                      {app.status}
+                    </span>
                   </div>
 
-                  <div className="flex justify-between items-center gap-2 pt-2 border-t border-slate-100/60">
-                    <button
-                      onClick={() => handleOpenAdminReschedule({ ...app, type: 'STUDIO' })}
-                      className="py-2 px-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-brand-600 text-xs font-bold transition-all shadow-sm"
-                    >
-                      Reschedule
-                    </button>
-                    {app.status === 'PENDING' && (
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleUpdateAppStatus(app.id, 'CONFIRMED')}
-                          className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-all"
-                        >
-                          Confirm Slot
-                        </button>
-                        <button
-                          onClick={() => handleUpdateAppStatus(app.id, 'CANCELLED')}
-                          className="py-2 px-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-400 text-xs font-bold transition-all"
-                        >
-                          Reject
-                        </button>
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 font-semibold pt-1">
+                    <span className="flex items-center gap-1.5 bg-slate-100/80 px-2.5 py-1 rounded-lg">
+                      <Clock className="w-3.5 h-3.5 text-slate-400" />
+                      {formatBookingDateUTC(app.date, { weekday: 'short' })} at {app.timeSlot}
+                    </span>
+                    <span className="bg-brand-50 text-brand-700 py-1 px-2.5 rounded-lg uppercase text-[10px] tracking-wide border border-brand-100">
+                      {app.type?.replace(/_/g, ' ') || 'Studio Fitting'}
+                    </span>
+                  </div>
+
+                  {app.notes && (
+                    <div className="text-xs text-slate-600 bg-slate-50/50 border border-slate-100 rounded-xl p-3 leading-relaxed">
+                      <strong className="text-slate-700 block mb-1">Tailor Notes:</strong>
+                      {app.notes}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-between items-center gap-2 pt-2 border-t border-slate-100/60">
+                  <button
+                    onClick={() => handleOpenAdminReschedule({ ...app, type: 'STUDIO' })}
+                    className="py-2 px-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-brand-600 text-xs font-bold transition-all shadow-sm"
+                  >
+                    Reschedule
+                  </button>
+                  {app.status === 'PENDING' && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleUpdateAppStatus(app.id, 'CONFIRMED')}
+                        className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-all"
+                      >
+                        Confirm Slot
+                      </button>
+                      <button
+                        onClick={() => handleUpdateAppStatus(app.id, 'CANCELLED')}
+                        className="py-2 px-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-400 text-xs font-bold transition-all"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+
+            // Sort appointments: newest / most recently booked on top
+            const sortedApps = [...filteredAppointments].reverse();
+
+            const today = new Date();
+            const todayApps = sortedApps.filter(app => {
+              const d = new Date(app.date);
+              return d.getDate() === today.getDate() && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
+            });
+            const otherApps = sortedApps.filter(app => {
+              const d = new Date(app.date);
+              return !(d.getDate() === today.getDate() && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear());
+            });
+
+            return (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                  <h3 className="font-extrabold text-slate-800 text-lg flex items-center gap-2">
+                    New Appointments
+                    <span className="bg-slate-100 text-slate-700 py-0.5 px-2 rounded-full text-xs">{otherApps.length}</span>
+                  </h3>
+                  <div className="flex flex-col gap-4">
+                    {otherApps.length === 0 ? (
+                      <div className="text-center text-slate-400 py-12 font-semibold bg-white border border-slate-200/60 rounded-3xl shadow-premium">
+                        No new appointments found.
                       </div>
+                    ) : (
+                      otherApps.map(renderAppt)
                     )}
                   </div>
                 </div>
-              ))
-            )}
-          </div>
+                
+                <div className="space-y-4">
+                  <h3 className="font-extrabold text-slate-800 text-lg flex items-center gap-2">
+                    Today's Appointments
+                    <span className="bg-brand-100 text-brand-700 py-0.5 px-2 rounded-full text-xs">{todayApps.length}</span>
+                  </h3>
+                  <div className="flex flex-col gap-4">
+                    {todayApps.length === 0 ? (
+                      <div className="text-center text-slate-400 py-12 font-semibold bg-white border border-slate-200/60 rounded-3xl shadow-premium">
+                        No fittings scheduled for today.
+                      </div>
+                    ) : (
+                      todayApps.map(renderAppt)
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </>
       )}
 
@@ -3008,8 +3228,8 @@ export default function OrderManager({ initialTab = 'bookings' }) {
                 </span>
                 <h3 className="font-black text-slate-800 text-lg tracking-tight mt-1 flex items-center gap-2">
                   <span>Manage Order {selectedOrder.invoiceNumber}</span>
-                  <span className={`text-xs px-2.5 py-0.5 rounded-full border ${getStatusStyle(selectedOrder.status)}`}>
-                    {getStatusLabel(selectedOrder.status)}
+                  <span className={`text-xs px-2.5 py-0.5 rounded-full border ${getCombinedStatusStyle(selectedOrder)}`}>
+                    {getCombinedStatusLabel(selectedOrder)}
                   </span>
                 </h3>
               </div>
@@ -3078,7 +3298,7 @@ export default function OrderManager({ initialTab = 'bookings' }) {
                     <h4 className="font-extrabold text-slate-800 text-sm border-b border-slate-50 pb-2">
                       Order Metadata
                     </h4>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div>
                         <span className="text-[10px] font-bold text-slate-400 uppercase block">Order ID</span>
                         <span className="text-xs font-bold text-slate-800 truncate block mt-1" title={selectedOrder.id}>
@@ -3096,6 +3316,15 @@ export default function OrderManager({ initialTab = 'bookings' }) {
                         <span className="text-xs font-semibold text-slate-800 block mt-1">
                           {new Date(selectedOrder.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                         </span>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Delivery Date</span>
+                        <input
+                          type="date"
+                          value={editDeliveryDate}
+                          onChange={e => setEditDeliveryDate(e.target.value)}
+                          className="w-full text-xs font-bold border border-slate-200/60 rounded-xl py-0.5 px-1.5 bg-white text-brand-600 focus:outline-none focus:border-brand-500 font-sans"
+                        />
                       </div>
                       <div className="space-y-1 col-span-2 md:col-span-1">
                         <label className="text-[10px] font-bold text-slate-400 uppercase">Order Status</label>
@@ -3126,12 +3355,7 @@ export default function OrderManager({ initialTab = 'bookings' }) {
                           <option value="REFUNDED">Refunded</option>
                         </select>
                       </div>
-                      <div>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Payment Method</span>
-                        <span className="text-xs font-extrabold text-slate-800 block mt-1.5">
-                          {selectedOrder.paymentMethod}
-                        </span>
-                      </div>
+                      {/* Payment Summary Moved to Right Column */}
                     </div>
                   </div>
 
@@ -3635,6 +3859,60 @@ export default function OrderManager({ initialTab = 'bookings' }) {
                         </div>
                       ))}
                     </div>
+                  </div>
+
+                  {/* Payment Summary */}
+                  <div className="bg-white border border-slate-200/60 rounded-3xl p-6 shadow-sm hover:shadow-premium transition-shadow space-y-4">
+                    <h4 className="font-extrabold text-slate-800 text-sm border-b border-slate-50 pb-2">
+                      Payment Summary <span className="text-xs text-slate-400 font-bold">({selectedOrder.paymentMethod})</span>
+                    </h4>
+                    <div className="space-y-2.5 text-xs">
+                      <div className="flex justify-between text-slate-600">
+                        <span className="font-bold uppercase text-[10px] tracking-wide">Subtotal</span>
+                        <span className="font-extrabold text-slate-700">₹{Number(selectedOrder.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      </div>
+                      {Number(selectedOrder.discountAmount) > 0 && (
+                        <div className="flex justify-between text-red-500">
+                          <span className="font-bold uppercase text-[10px] tracking-wide">Discount</span>
+                          <span className="font-extrabold">-₹{Number(selectedOrder.discountAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-slate-600">
+                        <span className="font-bold uppercase text-[10px] tracking-wide">GST ({selectedOrder.gstPercentage !== undefined && selectedOrder.gstPercentage !== null ? selectedOrder.gstPercentage : 18}%)</span>
+                        <span className="font-extrabold text-slate-700">₹{Number(selectedOrder.taxAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="flex justify-between pt-3 border-t border-slate-100 mt-1">
+                        <span className="text-slate-800 font-extrabold text-sm uppercase">Total Payable</span>
+                        <span className="text-brand-600 font-black text-lg">₹{Number(selectedOrder.payableAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
+                    {selectedOrder.advancePayment !== undefined && (
+                      <div className="mt-4 space-y-3 text-xs pt-4 border-t border-slate-200 border-dashed bg-slate-50 -mx-6 px-6 -mb-6 pb-6 rounded-b-3xl">
+                        <div className="flex justify-between items-center">
+                          <label className="text-emerald-700 font-bold uppercase text-[10px] tracking-wide">Advance Paid</label>
+                          <div className="flex items-center gap-2">
+                            <span className="text-emerald-600 font-bold">₹</span>
+                            <input
+                              type="number"
+                              value={editAdvancePayment}
+                              onChange={e => setEditAdvancePayment(e.target.value)}
+                              className="w-24 text-right text-emerald-700 font-black text-sm border border-emerald-200 rounded-lg py-1 px-2 focus:outline-none focus:border-emerald-500 bg-white shadow-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleSaveOrderChanges}
+                              className="bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold px-3 py-1.5 rounded-lg text-[10px] transition-colors"
+                            >
+                              Update
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-center pt-1">
+                          <span className="text-slate-700 font-bold uppercase text-[10px] tracking-wide">Balance Due</span>
+                          <span className="text-red-600 font-black text-sm">₹{Math.max(0, Number(selectedOrder.payableAmount) - Number(editAdvancePayment)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                 </div>

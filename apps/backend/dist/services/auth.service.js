@@ -35,10 +35,18 @@ class AuthService {
             revoked: false,
             expiresAt,
         };
-        // Save to Redis
-        await redis_js_1.default.set(`reftoken:${token}`, JSON.stringify(tokenData), 'EX', this.REFRESH_TOKEN_TTL);
-        await redis_js_1.default.sadd(`reffamily:${activeFamilyId}`, token);
-        await redis_js_1.default.expire(`reffamily:${activeFamilyId}`, this.REFRESH_TOKEN_TTL);
+        // Save to Redis gracefully
+        try {
+            await redis_js_1.default.set(`reftoken:${token}`, JSON.stringify(tokenData), 'EX', this.REFRESH_TOKEN_TTL);
+            await redis_js_1.default.sadd(`reffamily:${activeFamilyId}`, token);
+            await redis_js_1.default.expire(`reffamily:${activeFamilyId}`, this.REFRESH_TOKEN_TTL);
+            // Track all families for a user to allow global revocation
+            await redis_js_1.default.sadd(`user_families:${userId}`, activeFamilyId);
+            await redis_js_1.default.expire(`user_families:${userId}`, this.REFRESH_TOKEN_TTL);
+        }
+        catch (redisErr) {
+            console.warn(`[Redis Warning] Failed to save refresh token to Redis: ${redisErr.message}`);
+        }
         return token;
     }
     /**
@@ -53,15 +61,22 @@ class AuthService {
             throw new Error('Session expired. Please log in again.');
         }
         const data = JSON.parse(dataStr);
-        // Reuse detection (Breach!) — only when token EXISTS in Redis but is explicitly marked revoked.
-        // This means the same token was used TWICE (stolen token scenario).
-        if (data.revoked) {
-            await this.invalidateTokenFamily(data.familyId, data.userId);
-            throw new Error('Security Alert: Refresh token reuse detected. Revoking token family.');
+        try {
+            // Reuse detection (Breach!) — only when token EXISTS in Redis but is explicitly marked revoked.
+            // (If it doesn't exist, it's just expired naturally, so we don't trigger reuse detection).
+            if (data.revoked) {
+                await this.invalidateTokenFamily(data.familyId, data.userId);
+                throw new Error('Token reuse detected. Family revoked.');
+            }
+            // Mark old token as revoked in Redis
+            data.revoked = true;
+            await redis_js_1.default.set(`reftoken:${oldToken}`, JSON.stringify(data), 'EX', this.REFRESH_TOKEN_TTL);
         }
-        // Mark old token as revoked in Redis
-        data.revoked = true;
-        await redis_js_1.default.set(`reftoken:${oldToken}`, JSON.stringify(data), 'EX', this.REFRESH_TOKEN_TTL);
+        catch (redisErr) {
+            if (redisErr.message.includes('Token reuse detected'))
+                throw redisErr;
+            console.warn(`[Redis Warning] Failed to check/revoke old token in Redis: ${redisErr.message}`);
+        }
         // Fetch user details from Database
         const user = await db_js_1.default.user.findUnique({
             where: { id: data.userId },
@@ -92,14 +107,22 @@ class AuthService {
      * Revokes all refresh tokens in a given family.
      */
     static async invalidateTokenFamily(familyId, userId) {
-        const tokens = await redis_js_1.default.smembers(`reffamily:${familyId}`);
-        // Multi delete
-        const pipeline = redis_js_1.default.pipeline();
-        for (const token of tokens) {
-            pipeline.del(`reftoken:${token}`);
+        try {
+            const tokens = await redis_js_1.default.smembers(`reffamily:${familyId}`);
+            if (tokens.length === 0)
+                return;
+            const pipeline = redis_js_1.default.pipeline();
+            tokens.forEach(token => {
+                pipeline.del(`reftoken:${token}`);
+                // Add all active tokens to blacklist immediately
+                pipeline.set(`blacklist:${token}`, 'logged_out', 'EX', this.REFRESH_TOKEN_TTL);
+            });
+            pipeline.del(`reffamily:${familyId}`);
+            await pipeline.exec();
         }
-        pipeline.del(`reffamily:${familyId}`);
-        await pipeline.exec();
+        catch (redisErr) {
+            console.warn(`[Redis Warning] Failed to revoke token family: ${redisErr.message}`);
+        }
         // Log security breach to AuditLog
         await db_js_1.default.auditLog.create({
             data: {
@@ -132,27 +155,57 @@ class AuthService {
         // Decipher payload to find remaining TTL
         try {
             const decoded = jsonwebtoken_1.default.decode(token);
-            if (decoded && decoded.exp) {
-                const remainingTime = decoded.exp - Math.floor(Date.now() / 1000);
-                if (remainingTime > 0) {
-                    await redis_js_1.default.set(`blacklist:${token}`, 'logged_out', 'EX', remainingTime);
-                }
+            const remainingTime = decoded && decoded.exp ? decoded.exp - Math.floor(Date.now() / 1000) : 0;
+            if (remainingTime > 0) {
+                await redis_js_1.default.set(`blacklist:${token}`, 'logged_out', 'EX', remainingTime);
+            }
+            else {
+                await redis_js_1.default.set(`blacklist:${token}`, 'logged_out', 'EX', 900);
             }
         }
-        catch (err) {
-            // If token decoding fails, blacklist with 15 mins default
-            await redis_js_1.default.set(`blacklist:${token}`, 'logged_out', 'EX', 900);
+        catch (redisErr) {
+            console.warn(`[Redis Warning] Failed to blacklist access token: ${redisErr.message}`);
         }
     }
     /**
      * Log out refresh token
      */
     static async logoutRefreshToken(token) {
-        const dataStr = await redis_js_1.default.get(`reftoken:${token}`);
-        if (dataStr) {
-            const data = JSON.parse(dataStr);
-            await redis_js_1.default.del(`reftoken:${token}`);
-            await redis_js_1.default.srem(`reffamily:${data.familyId}`, token);
+        try {
+            const dataStr = await redis_js_1.default.get(`reftoken:${token}`);
+            if (dataStr) {
+                const data = JSON.parse(dataStr);
+                await redis_js_1.default.del(`reftoken:${token}`);
+                await redis_js_1.default.srem(`reffamily:${data.familyId}`, token);
+            }
+        }
+        catch (redisErr) {
+            console.warn(`[Redis Warning] Failed to revoke refresh token: ${redisErr.message}`);
+        }
+    }
+    /**
+     * Revoke all sessions for a specific user.
+     */
+    static async revokeAllUserSessions(userId) {
+        try {
+            const families = await redis_js_1.default.smembers(`user_families:${userId}`);
+            for (const familyId of families) {
+                // We do not want to trigger a breach alert on global logout, so we just invalidate tokens silently
+                const tokens = await redis_js_1.default.smembers(`reffamily:${familyId}`);
+                if (tokens.length > 0) {
+                    const pipeline = redis_js_1.default.pipeline();
+                    tokens.forEach(token => {
+                        pipeline.del(`reftoken:${token}`);
+                        pipeline.set(`blacklist:${token}`, 'logged_out', 'EX', this.REFRESH_TOKEN_TTL);
+                    });
+                    pipeline.del(`reffamily:${familyId}`);
+                    await pipeline.exec();
+                }
+            }
+            await redis_js_1.default.del(`user_families:${userId}`);
+        }
+        catch (redisErr) {
+            console.warn(`[Redis Warning] Failed to revoke all sessions for user ${userId}: ${redisErr.message}`);
         }
     }
 }

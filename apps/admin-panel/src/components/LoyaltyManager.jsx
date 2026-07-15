@@ -18,6 +18,8 @@ export default function LoyaltyManager() {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const [txPage, setTxPage] = useState(1);
+  const txPerPage = 10;
   
   // Selected user
   const [selectedCustId, setSelectedCustId] = useState('');
@@ -250,26 +252,57 @@ export default function LoyaltyManager() {
             <span>Adjustment Ledger History</span>
           </h3>
 
-          <div className="divide-y divide-slate-100 max-h-[400px] overflow-y-auto pr-1">
-            {transactions.length === 0 ? (
-              <p className="text-xs text-center text-slate-400 py-8">No point transactions found</p>
-            ) : (
-              transactions.map(tx => (
-                <div key={tx.id} className="py-3 flex justify-between items-center text-xs">
-                  <div>
-                    <span className="font-bold text-slate-800">{tx.userName}</span>
-                    <p className="text-[10px] text-slate-400 mt-0.5">{tx.reason}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className={`font-extrabold text-sm ${tx.points > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                      {tx.points > 0 ? `+${tx.points}` : tx.points}
-                    </span>
-                    <p className="text-[9px] text-slate-400">{new Date(tx.createdAt).toLocaleDateString()}</p>
-                  </div>
+          {(() => {
+            const totalTxPages = Math.ceil(transactions.length / txPerPage);
+            const startTxIndex = (txPage - 1) * txPerPage;
+            const paginatedTxs = transactions.slice(startTxIndex, startTxIndex + txPerPage);
+
+            return (
+              <>
+                <div className="divide-y divide-slate-100 max-h-[400px] overflow-y-auto pr-1">
+                  {paginatedTxs.length === 0 ? (
+                    <p className="text-xs text-center text-slate-400 py-8">No point transactions found</p>
+                  ) : (
+                    paginatedTxs.map(tx => (
+                      <div key={tx.id} className="py-3 flex justify-between items-center text-xs">
+                        <div>
+                          <span className="font-bold text-slate-800">{tx.userName}</span>
+                          <p className="text-[10px] text-slate-400 mt-0.5">{tx.reason}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className={`font-extrabold text-sm ${tx.points > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                            {tx.points > 0 ? `+${tx.points}` : tx.points}
+                          </span>
+                          <p className="text-[9px] text-slate-400">{new Date(tx.createdAt).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
-              ))
-            )}
-          </div>
+                {totalTxPages > 1 && (
+                  <div className="flex justify-between items-center pt-4 mt-2 border-t border-slate-100">
+                    <button
+                      onClick={() => setTxPage(p => Math.max(1, p - 1))}
+                      disabled={txPage === 1}
+                      className="text-xs font-bold text-slate-500 hover:text-brand-600 disabled:opacity-50 disabled:hover:text-slate-500"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-[10px] font-bold text-slate-400">
+                      Page {txPage} of {totalTxPages}
+                    </span>
+                    <button
+                      onClick={() => setTxPage(p => Math.min(totalTxPages, p + 1))}
+                      disabled={txPage === totalTxPages}
+                      className="text-xs font-bold text-slate-500 hover:text-brand-600 disabled:opacity-50 disabled:hover:text-slate-500"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
       </div>
 

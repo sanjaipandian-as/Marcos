@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import WishlistIcon from '../../components/common/WishlistIcon';
 import {
   StyleSheet,
   Text,
@@ -18,7 +19,6 @@ import {
   SlidersHorizontal,
   ShoppingBag,
   ShoppingCart,
-  Heart,
   X,
   ChevronLeft
 } from 'lucide-react-native';
@@ -27,7 +27,6 @@ import { CustomCartAddIcon, CustomCartAddedIcon } from '../../components/CartIco
 export default function WishlistScreen({ navigation }) {
   const { theme, fonts, shadows } = useTheme();
   const [favorites, setFavorites] = useState([]);
-  const [cartItems, setCartItems] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -36,16 +35,10 @@ export default function WishlistScreen({ navigation }) {
       if (favorites.length === 0) {
         setLoading(true);
       }
-      const [favRes, cartRes] = await Promise.all([
-        api.get('/products/favorites'),
-        api.get('/products/cart')
-      ]);
+      const favRes = await api.get('/products/favorites');
 
       if (favRes.success) {
         setFavorites(favRes.data || []);
-      }
-      if (cartRes.success && cartRes.data) {
-        setCartItems(new Set(cartRes.data.map(item => item.productId)));
       }
     } catch (err) {
       console.error('Error fetching favorites data:', err);
@@ -69,28 +62,6 @@ export default function WishlistScreen({ navigation }) {
     } catch (err) {
       console.error('Error removing favorite:', err);
       Alert.alert('Error', 'Failed to remove from wishlist.');
-    }
-  };
-
-  const handleAddToCart = async (productId) => {
-    try {
-      const inCart = cartItems.has(productId);
-      if (!inCart) {
-        const res = await api.post('/products/cart', { productId, quantity: 1 });
-        if (res.success) {
-          setCartItems(prev => {
-            const next = new Set(prev);
-            next.add(productId);
-            return next;
-          });
-          Alert.alert('Success', 'Added to cart successfully!');
-        }
-      } else {
-        navigation.navigate('Cart');
-      }
-    } catch (err) {
-      const errorMsg = err?.message || 'Unable to add item to cart. Please try again.';
-      Alert.alert('Error', errorMsg);
     }
   };
 
@@ -127,7 +98,7 @@ export default function WishlistScreen({ navigation }) {
             onPress={() => handleToggleFavorite(product.id)}
             activeOpacity={0.7}
           >
-            <Heart 
+            <WishlistIcon 
               size={14} 
               color="#3D2E3D" 
               fill="#3D2E3D" 
@@ -139,34 +110,6 @@ export default function WishlistScreen({ navigation }) {
           <Text style={[styles.prodName, { color: theme.text.primary, fontFamily: fonts.semiBold }]} numberOfLines={2}>
             {product.name}
           </Text>
-          <View style={styles.priceRow}>
-            <View style={styles.priceContainer}>
-              <Text style={{ fontSize: 10, color: '#7A6B7A', marginBottom: 2 }}>Starts from</Text>
-              <Text style={[styles.prodPrice, { color: '#3D2E3D', fontFamily: fonts.bold }]}>
-                ₹{Number(product.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-              </Text>
-              <Text style={[styles.originalPrice, { fontFamily: fonts.regular, color: '#B8A8B8' }]}>
-                ₹{originalPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-              </Text>
-            </View>
-            
-            <TouchableOpacity 
-               style={[
-                 styles.cartIconBtn,
-                 cartItems.has(product.id)
-                   ? { backgroundColor: '#3D2E3D', borderWidth: 1, borderColor: '#3D2E3D' }
-                   : { backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#D8BFD8' }
-               ]} 
-               onPress={() => handleAddToCart(product.id)}
-               activeOpacity={0.7}
-             >
-               {cartItems.has(product.id) ? (
-                 <CustomCartAddedIcon color="#FDFBFD" size={18} />
-               ) : (
-                 <CustomCartAddIcon color="#3D2E3D" size={18} />
-               )}
-             </TouchableOpacity>
-          </View>
         </View>
       </TouchableOpacity>
     );
@@ -182,9 +125,7 @@ export default function WishlistScreen({ navigation }) {
         <Text style={[styles.headerTitle, { color: theme.text.primary, fontFamily: fonts.bold }]}>
           My Wishlist
         </Text>
-        <TouchableOpacity style={[styles.headerBtn, shadows.premium]} onPress={() => navigation.navigate('Cart')} activeOpacity={0.7}>
-          <ShoppingCart size={20} color="#1e1e1e" />
-        </TouchableOpacity>
+        <View style={{ width: 40 }} />
       </View>
       
       {/* Search Bar */}
@@ -227,7 +168,7 @@ export default function WishlistScreen({ navigation }) {
       ) : favorites.length === 0 ? (
         <View style={styles.emptyContainer}>
           <View style={[styles.emptyIconContainer, { backgroundColor: theme.bg.card }]}>
-            <Heart size={40} color={theme.brand[300]} />
+            <WishlistIcon size={40} color={theme.brand[300]} />
           </View>
           <Text style={[styles.emptyTitle, { color: theme.text.primary, fontFamily: fonts.bold }]}>
             Your Wishlist is Empty
@@ -237,7 +178,7 @@ export default function WishlistScreen({ navigation }) {
           </Text>
           <TouchableOpacity 
             style={[styles.shopBtn, { backgroundColor: theme.brand[500] }]}
-            onPress={() => navigation.navigate('Browse')}
+            onPress={() => navigation.navigate('MainTabs', { screen: 'Browse' })}
           >
             <Text style={[styles.shopBtnText, { color: '#3D2E3D', fontFamily: fonts.bold }]}>EXPLORE CATALOG</Text>
           </TouchableOpacity>

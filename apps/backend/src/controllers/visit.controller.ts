@@ -5,6 +5,7 @@ import { Role, VisitStatus } from '@prisma/client';
 import R2Service from '../services/r2.service.js';
 import { getIO } from '../socket/socket.handler.js';
 import { createAuditLog } from '../utils/audit.js';
+import redis from '../config/redis.js';
 
 export const visitCreateSchema = z.object({
   body: z.object({
@@ -28,6 +29,7 @@ export const visitUpdateSchema = z.object({
     address: z.string().min(1).optional(),
     requirements: z.string().min(1).optional(),
     status: z.enum(['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']).optional(),
+    orderId: z.string().uuid().optional().nullable(),
   }),
 });
 
@@ -38,7 +40,8 @@ export class VisitController {
   static async getVisits(req: Request, res: Response, next: NextFunction) {
     const user = req.user!;
     const { page = 1, limit = 20 } = req.query as any;
-    const skip = (Number(page) - 1) * Number(limit);
+    const safeLimit = Math.min(Number(limit) || 20, 100);
+    const skip = (Number(page) - 1) * safeLimit;
 
     try {
       const where: any = {};
@@ -50,7 +53,7 @@ export class VisitController {
           where,
           orderBy: { preferredDate: 'asc' },
           skip,
-          take: Number(limit),
+          take: safeLimit,
           include: {
             customer: {
               select: {
@@ -93,6 +96,33 @@ export class VisitController {
     const { preferredDate, address, requirements } = req.body;
 
     try {
+      if (user.role === Role.CUSTOMER) {
+        // Layer 1: Burst limit (1 request per 3 seconds per user)
+        const burstKey = `visit:burst:${user.id}`;
+        const burstLock = await redis.set(burstKey, 'locked', 'EX', 3, 'NX');
+        if (!burstLock) {
+          return res.status(429).json({ success: false, message: 'Please wait a few seconds before making another visit request.' });
+        }
+
+        // Layer 2 & 3: Daily Quotas (User & IP)
+        const todayStr = new Date().toISOString().split('T')[0];
+        const dailyUserKey = `visit:daily:${user.id}:${todayStr}`;
+        const dailyIpKey = `visit:daily_ip:${req.ip}:${todayStr}`;
+
+        const userCount = await redis.incr(dailyUserKey);
+        const ipCount = await redis.incr(dailyIpKey);
+
+        if (userCount === 1) await redis.expire(dailyUserKey, 86400);
+        if (ipCount === 1) await redis.expire(dailyIpKey, 86400);
+
+        if (userCount > 20 || ipCount > 30) {
+          return res.status(429).json({
+            success: false,
+            message: 'You have reached the daily store visit limit. Please try again tomorrow.',
+          });
+        }
+      }
+
       const visit = await prisma.storeVisit.create({
         data: {
           customerId: user.id,
@@ -284,7 +314,7 @@ export class VisitController {
   static async updateVisit(req: Request, res: Response, next: NextFunction) {
     const user = req.user!;
     const { id } = req.params;
-    const { preferredDate, confirmedDate, address, requirements, status } = req.body;
+    const { preferredDate, confirmedDate, address, requirements, status, orderId } = req.body;
 
     try {
       const visit = await prisma.storeVisit.findUnique({
@@ -314,6 +344,7 @@ export class VisitController {
           ...(address && { address }),
           ...(requirements && { requirements }),
           ...(targetStatus && { status: targetStatus as VisitStatus }),
+          ...(orderId !== undefined && { orderId }),
         },
       });
 

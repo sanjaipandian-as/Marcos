@@ -17,7 +17,6 @@ exports.productCreateSchema = zod_1.z.object({
         images: zod_1.z.array(zod_1.z.string()).default([]),
         bannerImage: zod_1.z.string().optional().nullable(),
         categoryId: zod_1.z.string().uuid(),
-        subCategoryId: zod_1.z.string().uuid().optional().nullable(),
         inventoryQty: zod_1.z.coerce.number().int().nonnegative().default(0),
         targetGender: zod_1.z.enum(['MEN', 'WOMEN', 'KIDS', 'UNISEX']).default('UNISEX'),
     }),
@@ -31,7 +30,6 @@ exports.productUpdateSchema = zod_1.z.object({
         images: zod_1.z.array(zod_1.z.string()).optional(),
         bannerImage: zod_1.z.string().optional().nullable(),
         categoryId: zod_1.z.string().uuid().optional(),
-        subCategoryId: zod_1.z.string().uuid().optional().nullable(),
         inventoryQty: zod_1.z.coerce.number().int().nonnegative().optional(),
         targetGender: zod_1.z.enum(['MEN', 'WOMEN', 'KIDS', 'UNISEX']).optional(),
     }),
@@ -47,7 +45,7 @@ class AdminProductController {
      * POST /admin/products
      */
     static async createProduct(req, res, next) {
-        const { name, description, price, materialInfo, images, bannerImage, categoryId, subCategoryId, inventoryQty, targetGender } = req.body;
+        const { name, description, price, materialInfo, images, bannerImage, categoryId, inventoryQty, targetGender } = req.body;
         try {
             // Verify category exists
             const categoryExists = await db_js_1.default.category.findUnique({ where: { id: categoryId } });
@@ -64,7 +62,6 @@ class AdminProductController {
                     images,
                     bannerImage,
                     categoryId,
-                    subCategoryId,
                     inventoryQty,
                     stockStatus,
                     targetGender,
@@ -105,7 +102,7 @@ class AdminProductController {
      */
     static async updateProduct(req, res, next) {
         const { id } = req.params;
-        const { name, description, price, materialInfo, images, bannerImage, categoryId, subCategoryId, inventoryQty, targetGender } = req.body;
+        const { name, description, price, materialInfo, images, bannerImage, categoryId, inventoryQty, targetGender } = req.body;
         try {
             const existingProduct = await db_js_1.default.product.findUnique({ where: { id } });
             if (!existingProduct) {
@@ -119,7 +116,6 @@ class AdminProductController {
                 images,
                 bannerImage,
                 categoryId,
-                subCategoryId,
                 inventoryQty,
                 targetGender,
             };

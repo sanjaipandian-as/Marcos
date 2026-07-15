@@ -1,6 +1,8 @@
 
 // API Configuration
-const BASE_URL = 'https://marcos-xxza.onrender.com/api/v1';
+const BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:5000/api/v1'
+  : 'https://marcos-xxza.onrender.com/api/v1';
 
 class APIClient {
   constructor() {
@@ -40,7 +42,7 @@ class APIClient {
   }
 
   async request(endpoint, options, _isRetry = false) {
-        // Set default JSON headers
+    // Set default JSON headers
     const headers = new Headers(options?.headers);
     if (!headers.has('Content-Type') && !(options?.body instanceof FormData)) {
       headers.set('Content-Type', 'application/json');
@@ -103,7 +105,17 @@ class APIClient {
         throw new Error(errorData.message || 'Forbidden: Insufficient privileges');
       }
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `Request failed: ${response.status}`);
+      let errorMessage = errorData.message || `Request failed: ${response.status}`;
+      
+      // If it's a Zod validation error, extract the specific details
+      if (errorData.errors && Array.isArray(errorData.errors)) {
+        const zodErrors = errorData.errors.map(err => err.message).join(', ');
+        if (zodErrors) errorMessage = `Validation Error: ${zodErrors}`;
+      } else if (errorData.error) {
+        errorMessage = errorData.error;
+      }
+      
+      throw new Error(errorMessage);
     }
 
     return response.json();
@@ -165,32 +177,32 @@ class APIClient {
 
   // DASHBOARD
   async getDashboard(weekStart) {
-    
-      const url = weekStart ? `/admin/dashboard?weekStart=${weekStart}` : '/admin/dashboard';
-      const res = await this.request(url);
-      return res.data;
-    
+
+    const url = weekStart ? `/admin/dashboard?weekStart=${weekStart}` : '/admin/dashboard';
+    const res = await this.request(url);
+    return res.data;
+
   }
 
   async getCustomerIntelligence() {
-    
-      const res = await this.request('/admin/customers-intelligence');
-      return res.data;
-    
+
+    const res = await this.request('/admin/customers-intelligence');
+    return res.data;
+
   }
 
   async getOrderIntelligence() {
-    
-      const res = await this.request('/admin/orders-intelligence');
-      return res.data;
-    
+
+    const res = await this.request('/admin/orders-intelligence');
+    return res.data;
+
   }
 
   async getRevenueIntelligence() {
-    
-      const res = await this.request('/admin/revenue-intelligence');
-      return res.data;
-    
+
+    const res = await this.request('/admin/revenue-intelligence');
+    return res.data;
+
   }
 
   async getPromotionsIntelligence() {
@@ -215,51 +227,51 @@ class APIClient {
 
   // PRODUCTS CRUD
   async getProductsPaginated({ page = 1, limit = 12, search = '', categorySlug = '' } = {}) {
-    
-      const query = new URLSearchParams();
-      query.append('page', page);
-      query.append('limit', limit);
-      if (search) query.append('search', search);
-      if (categorySlug) query.append('category', categorySlug);
 
-      const res = await this.request(`/products?${query.toString()}`);
-      return res;
-    
+    const query = new URLSearchParams();
+    query.append('page', page);
+    query.append('limit', limit);
+    if (search) query.append('search', search);
+    if (categorySlug) query.append('category', categorySlug);
+
+    const res = await this.request(`/products?${query.toString()}`);
+    return res;
+
   }
 
   async getProducts() {
-    
-      // Fallback for components needing all products (e.g. Sidebar counts)
-      const res = await this.request('/products?limit=1000');
-      return res.data;
-    
+
+    // Fallback for components needing all products (e.g. Sidebar counts)
+    const res = await this.request('/products?limit=1000');
+    return res.data;
+
   }
 
   async createProduct(product) {
-    
-      const res = await this.request('/admin/products', {
-        method: 'POST',
-        body: JSON.stringify(product),
-      });
-      return res.data;
-    
+
+    const res = await this.request('/admin/products', {
+      method: 'POST',
+      body: JSON.stringify(product),
+    });
+    return res.data;
+
   }
 
   async updateProduct(id, updates) {
-    
-      const res = await this.request(`/admin/products/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(updates),
-      });
-      return res.data;
-    
+
+    const res = await this.request(`/admin/products/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+    return res.data;
+
   }
 
   async deleteProduct(id) {
-    
-      await this.request(`/admin/products/${id}`, { method: 'DELETE' });
-      return true;
-    
+
+    await this.request(`/admin/products/${id}`, { method: 'DELETE' });
+    return true;
+
   }
 
   async toggleTrending(id, isTrending) {
@@ -279,110 +291,83 @@ class APIClient {
 
   // CATEGORIES CRUD & ORDERING
   async getCategories() {
-    
-      const res = await this.request('/categories');
-      return res.data;
-    
+
+    const res = await this.request('/categories');
+    return res.data;
+
   }
 
   async createCategory(category) {
-    
-      const res = await this.request('/admin/categories', {
-        method: 'POST',
-        body: JSON.stringify(category),
-      });
-      return res.data;
-    
+
+    const res = await this.request('/admin/categories', {
+      method: 'POST',
+      body: JSON.stringify(category),
+    });
+    return res.data;
+
   }
 
   async updateCategory(id, updates) {
-    
-      const res = await this.request(`/admin/categories/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(updates),
-      });
-      return res.data;
-    
+
+    const res = await this.request(`/admin/categories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+    return res.data;
+
   }
 
   async deleteCategory(id) {
-    
-      await this.request(`/admin/categories/${id}`, { method: 'DELETE' });
-      return true;
-    
+
+    await this.request(`/admin/categories/${id}`, { method: 'DELETE' });
+    return true;
+
   }
   async reorderCategories(orderedIds) {
-    
-      const categoriesPayload = orderedIds.map((id, index) => ({ id, order: index + 1 }));
-      const res = await this.request('/admin/categories/reorder', {
-        method: 'PUT',
-        body: JSON.stringify({ categories: categoriesPayload }),
-      });
-      return res.data;
-    
+
+    const categoriesPayload = orderedIds.map((id, index) => ({ id, order: index + 1 }));
+    const res = await this.request('/admin/categories/reorder', {
+      method: 'PUT',
+      body: JSON.stringify({ categories: categoriesPayload }),
+    });
+    return res.data;
+
   }
 
-  // SUBCATEGORIES CRUD
-  async createSubCategory(categoryId, subCategory) {
-    
-      const res = await this.request(`/admin/categories/${categoryId}/subcategories`, {
-        method: 'POST',
-        body: JSON.stringify(subCategory),
-      });
-      return res.data;
-    
-  }
-
-  async updateSubCategory(id, updates) {
-    
-      const res = await this.request(`/admin/subcategories/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(updates),
-      });
-      return res.data;
-    
-  }
-
-  async deleteSubCategory(id) {
-    
-      await this.request(`/admin/subcategories/${id}`, { method: 'DELETE' });
-      return true;
-    
-  }
 
   // OFFERS CRUD
   async getOffers() {
-    
-      const res = await this.request('/admin/offers');
-      return res.data || [];
-    
+
+    const res = await this.request('/admin/offers');
+    return res.data || [];
+
   }
 
   async createOffer(offerData) {
-    
-      const res = await this.request('/admin/offers', {
-        method: 'POST',
-        body: JSON.stringify(offerData)
-      });
-      return res.data;
-    
+
+    const res = await this.request('/admin/offers', {
+      method: 'POST',
+      body: JSON.stringify(offerData)
+    });
+    return res.data;
+
   }
 
   async updateOffer(id, updates) {
-    
-      const res = await this.request(`/admin/offers/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(updates)
-      });
-      return res.data;
-    
+
+    const res = await this.request(`/admin/offers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates)
+    });
+    return res.data;
+
   }
 
   async deleteOffer(id) {
-    
-      await this.request(`/admin/offers/${id}`, { method: 'DELETE' });
-      return true;
-    
+
+    await this.request(`/admin/offers/${id}`, { method: 'DELETE' });
+    return true;
+
   }
 
   // CUSTOMERS & MEASUREMENTS
@@ -391,444 +376,462 @@ class APIClient {
   }
 
   async createAppCustomer(customer) {
-    
-      const res = await this.request('/admin/customers', {
-        method: 'POST',
-        body: JSON.stringify(customer),
-      });
-      return res.data;
-    
+
+    const res = await this.request('/admin/customers', {
+      method: 'POST',
+      body: JSON.stringify(customer),
+    });
+    return res.data;
+
   }
 
   async updateAppCustomer(id, updates) {
-    
-      const res = await this.request(`/admin/customers/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(updates),
-      });
-      return res.data;
-    
+
+    const res = await this.request(`/admin/customers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+    return res.data;
+
   }
 
   async getCustomers() {
-    
-      const res = await this.request('/admin/customers?limit=1000');
-      return res.data;
-    
+
+    const res = await this.request('/admin/customers?limit=1000');
+    return res.data;
+
   }
 
   async searchCustomers(searchTerm) {
     if (!searchTerm) return [];
-    
-      const res = await this.request(`/admin/customers?search=${encodeURIComponent(searchTerm)}&limit=10`);
-      return res.data;
-    
+
+    const res = await this.request(`/admin/customers?search=${encodeURIComponent(searchTerm)}&limit=10`);
+    return res.data;
+
   }
 
   async getCustomerDetails(id) {
-    
-      const res = await this.request(`/admin/customers/${id}`);
-      return {
-        user: res.data,
-        profiles: res.data.measurementProfiles || [],
-      };
-    
+
+    const res = await this.request(`/admin/customers/${id}`);
+    return {
+      user: res.data,
+      profiles: res.data.measurementProfiles || [],
+    };
+
   }
 
   // STORE LOCATIONS CRUD
   async getStoreLocations() {
-    
-      const res = await this.request('/admin/stores');
-      return res.data;
-    
+
+    const res = await this.request('/admin/stores');
+    return res.data;
+
   }
 
   async createStoreLocation(store) {
-    
-      const res = await this.request('/admin/stores', {
-        method: 'POST',
-        body: JSON.stringify(store),
-      });
-      return res.data;
-    
+
+    const res = await this.request('/admin/stores', {
+      method: 'POST',
+      body: JSON.stringify(store),
+    });
+    return res.data;
+
   }
 
   async updateStoreLocation(id, updates) {
-    
-      const res = await this.request(`/admin/stores/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(updates),
-      });
-      return res.data;
-    
+
+    const res = await this.request(`/admin/stores/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+    return res.data;
+
   }
 
   async deleteStoreLocation(id) {
-    
-      await this.request(`/admin/stores/${id}`, { method: 'DELETE' });
-      return true;
-    
+
+    await this.request(`/admin/stores/${id}`, { method: 'DELETE' });
+    return true;
+
   }
 
   async deleteCustomer(id) {
-    
-      await this.request(`/admin/customers/${id}`, { method: 'DELETE' });
-      return true;
-    
+
+    await this.request(`/admin/customers/${id}`, { method: 'DELETE' });
+    return true;
+
+  }
+
+  async forcePasswordReset(id) {
+    const res = await this.request(`/admin/customers/${id}/force-password-reset`, {
+      method: 'POST'
+    });
+    return res.data;
   }
 
   async getMeasurements(userId) {
-    
-      const res = await this.request(`/measurements?userId=${userId}`);
-      return res.data;
-    
+
+    const res = await this.request(`/measurements?userId=${userId}`);
+    return res.data;
+
   }
 
   async getAllMeasurements() {
-    
-      const res = await this.request('/measurements');
-      return res.data;
-    
+
+    const res = await this.request('/measurements');
+    return res.data;
+
   }
 
   async createMeasurementProfile(profile) {
-    
-      const res = await this.request('/measurements', {
-        method: 'POST',
-        body: JSON.stringify(profile),
-      });
-      return res.data;
-    
+
+    const res = await this.request('/measurements', {
+      method: 'POST',
+      body: JSON.stringify(profile),
+    });
+    return res.data;
+
   }
 
   async updateMeasurements(id, updates) {
-    
-      const res = await this.request(`/measurements/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(updates),
-      });
-      return res.data;
-    
+
+    const res = await this.request(`/measurements/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+    return res.data;
+
   }
 
   async deleteMeasurementProfile(id) {
-    
-      await this.request(`/measurements/${id}`, { method: 'DELETE' });
-      return true;
-    
+
+    await this.request(`/measurements/${id}`, { method: 'DELETE' });
+    return true;
+
   }
 
   async getMeasurementHistory(profileId) {
-    
-      const res = await this.request(`/measurements/${profileId}/history`);
-      return res.data;
-    
+
+    const res = await this.request(`/measurements/${profileId}/history`);
+    return res.data;
+
   }
 
   // APPOINTMENTS
-  async getAppointments() {
-    
-      const res = await this.request('/appointments?limit=100');
-      return res.data.map(appt => ({
-        ...appt,
-        userName: appt.user?.fullName || 'Customer',
-      }));
-    
+  async getAppointments(page = 1, limit = 1000) {
+
+    const res = await this.request(`/appointments?page=${page}&limit=${limit}`);
+    const data = res.data.map(appt => ({
+      ...appt,
+      userName: appt.user?.fullName || 'Customer',
+    }));
+    data.pagination = res.pagination;
+    return data;
+
   }
 
   async updateAppointmentStatus(id, status) {
-    
-      const res = await this.request(`/appointments/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ status }),
-      });
-      return res.data;
-    
+
+    const res = await this.request(`/appointments/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    });
+    return res.data;
+
   }
 
   async updateAppointment(id, data) {
-    
-      const res = await this.request(`/appointments/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(data),
-      });
-      return res.data;
-    
+
+    const res = await this.request(`/appointments/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    return res.data;
+
   }
 
   async createAppointment(data) {
-    
-      const res = await this.request('/appointments', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
-      return res.data;
-    
+
+    const res = await this.request('/appointments', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return res.data;
+
   }
 
 
   async updateStoreVisit(id, data) {
-    
-      const res = await this.request(`/visits/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(data),
-      });
-      return res.data;
-    
+
+    const res = await this.request(`/visits/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    return res.data;
+
   }
 
   // STORE VISITS
   async getStoreVisits() {
-    
-      const res = await this.request('/visits');
-      return res.data.map(visit => ({
-        ...visit,
-        customerName: visit.customer?.fullName || 'Customer',
-        assignedStaffName: visit.assignedStaff?.fullName || '',
-      }));
-    
+
+    const res = await this.request('/visits');
+    return res.data.map(visit => ({
+      ...visit,
+      customerName: visit.customer?.fullName || 'Customer',
+      assignedStaffName: visit.assignedStaff?.fullName || '',
+    }));
+
   }
 
   async assignStaffToVisit(visitId, staffId) {
-    
-      const res = await this.request(`/visits/${visitId}/assign`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          assignedStaffId: staffId,
-          confirmedDate: new Date().toISOString(),
-        }),
-      });
-      return res.data;
-    
+
+    const res = await this.request(`/visits/${visitId}/assign`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        assignedStaffId: staffId,
+        confirmedDate: new Date().toISOString(),
+      }),
+    });
+    return res.data;
+
   }
 
   async completeStoreVisit(visitId, completionNotes, mediaUrls) {
-    
-      const res = await this.request(`/visits/${visitId}/status`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          status: 'COMPLETED',
-          completionNotes,
-          mediaUrls,
-        }),
-      });
-      return res.data;
-    
+
+    const res = await this.request(`/visits/${visitId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        status: 'COMPLETED',
+        completionNotes,
+        mediaUrls,
+      }),
+    });
+    return res.data;
+
   }
 
   // LOYALTY & REWARDS
   async adjustLoyaltyPoints(userId, points, reason) {
-    
-      await this.request('/admin/loyalty/adjust', {
-        method: 'POST',
-        body: JSON.stringify({ userId, points, reason }),
-      });
-      return true;
-    
+
+    await this.request('/admin/loyalty/adjust', {
+      method: 'POST',
+      body: JSON.stringify({ userId, points, reason }),
+    });
+    return true;
+
   }
 
   async getPointTransactions() {
-    
-      const res = await this.request('/admin/loyalty/transactions');
-      return res.data;
-    
+
+    const res = await this.request('/admin/loyalty/transactions');
+    return res.data;
+
   }
 
   async getVoucherPlans() {
-    
-      const res = await this.request('/auth/admin/loyalty/voucher-plans');
-      return res.data;
-    
+
+    const res = await this.request('/auth/admin/loyalty/voucher-plans');
+    return res.data;
+
   }
 
   async createVoucherPlan(plan) {
-    
-      const res = await this.request('/auth/admin/loyalty/voucher-plans', {
-        method: 'POST',
-        body: JSON.stringify(plan),
-      });
-      return res.data;
-    
+
+    const res = await this.request('/auth/admin/loyalty/voucher-plans', {
+      method: 'POST',
+      body: JSON.stringify(plan),
+    });
+    return res.data;
+
   }
 
   async deactivateVoucherPlan(id) {
-    
-      await this.request(`/auth/admin/loyalty/voucher-plans/${id}`, {
-        method: 'DELETE',
-      });
-      return true;
-    
+
+    await this.request(`/auth/admin/loyalty/voucher-plans/${id}`, {
+      method: 'DELETE',
+    });
+    return true;
+
   }
 
   // BANNERS MANAGEMENT
   async getBanners() {
-    
-      const res = await this.request('/banners/admin');
-      return res.data;
-    
+
+    const res = await this.request('/banners/admin');
+    return res.data;
+
   }
 
   async createBanner(banner) {
-    
-      const res = await this.request('/banners/admin', {
-        method: 'POST',
-        body: JSON.stringify(banner),
-      });
-      return res.data;
-    
+
+    const res = await this.request('/banners/admin', {
+      method: 'POST',
+      body: JSON.stringify(banner),
+    });
+    return res.data;
+
   }
 
   async toggleBannerActive(id, isActive) {
-    
-      const res = await this.request(`/banners/admin/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ isActive }),
-      });
-      return res.data;
-    
+
+    const res = await this.request(`/banners/admin/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ isActive }),
+    });
+    return res.data;
+
   }
 
   async updateBannerOrder(id, order) {
-    
-      const res = await this.request(`/banners/admin/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ order }),
-      });
-      return res.data;
-    
+
+    const res = await this.request(`/banners/admin/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ order }),
+    });
+    return res.data;
+
   }
 
   async deleteBanner(id) {
-    
-      await this.request(`/banners/admin/${id}`, { method: 'DELETE' });
-      return true;
-    
+
+    await this.request(`/banners/admin/${id}`, { method: 'DELETE' });
+    return true;
+
   }
 
   // COUPON MANAGEMENT
   async getCoupons() {
-    
-      const res = await this.request('/admin/coupons');
-      return res.data;
-    
+
+    const res = await this.request('/admin/coupons');
+    return res.data;
+
   }
 
   async createCoupon(coupon) {
-    
-      const res = await this.request('/admin/coupons', {
-        method: 'POST',
-        body: JSON.stringify(coupon),
-      });
-      return res.data;
-    
+
+    const res = await this.request('/admin/coupons', {
+      method: 'POST',
+      body: JSON.stringify(coupon),
+    });
+    return res.data;
+
   }
 
   async deactivateCoupon(id) {
-    
-      const res = await this.request(`/admin/coupons/${id}/deactivate`, {
-        method: 'PUT',
-      });
-      return res.data;
-    
+
+    const res = await this.request(`/admin/coupons/${id}/deactivate`, {
+      method: 'PUT',
+    });
+    return res.data;
+
   }
 
   // NOTIFICATION MANAGEMENT
   async getNotifications() {
-    
-      const res = await this.request('/notifications/history');
-      return res.data.map(notif => ({
-        ...notif,
-        targetAudience: notif.recipients && notif.recipients.length > 0 ? `${notif.recipients.length} Users` : 'All Customers',
-      }));
-    
+
+    const res = await this.request('/notifications/history');
+    return res.data.map(notif => ({
+      ...notif,
+      targetAudience: notif.recipients && notif.recipients.length > 0 ? `${notif.recipients.length} Users` : 'All Customers',
+    }));
+
   }
 
   async createNotification(notification) {
-    
-      const res = await this.request('/notifications/admin/broadcast', {
-        method: 'POST',
-        body: JSON.stringify({
-          title: notification.title,
-          body: notification.body,
-          channels: ['EMAIL', 'SMS', 'PUSH'],
-        }),
-      });
-      return res.data;
-    
+
+    const res = await this.request('/notifications/admin/broadcast', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: notification.title,
+        body: notification.body,
+        channels: ['EMAIL', 'SMS', 'PUSH'],
+      }),
+    });
+    return res.data;
+
   }
 
   // SUPPORT TICKETS
-  async getSupportTickets() {
-    
-      const res = await this.request('/tickets/admin?limit=100');
-      return res.data.map(ticket => ({
-        ...ticket,
-        userName: ticket.user?.fullName || 'Customer',
-      }));
-    
+  async getSupportTickets(page = 1, limit = 100) {
+
+    const res = await this.request(`/tickets/admin?page=${page}&limit=${limit}`);
+    const data = res.data.map(ticket => ({
+      ...ticket,
+      userName: ticket.user?.fullName || 'Customer',
+    }));
+    data.pagination = res.pagination;
+    return data;
+
   }
 
   async updateTicketStatus(id, status) {
-    
-      const res = await this.request(`/tickets/admin/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ status }),
-      });
-      return res.data;
-    
+
+    const res = await this.request(`/tickets/admin/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    });
+    return res.data;
+
   }
 
   async getTicketMessages(ticketId) {
-    
-      const res = await this.request(`/tickets/admin/${ticketId}/messages`);
-      return res.data;
-    
+
+    const res = await this.request(`/tickets/admin/${ticketId}/messages`);
+    return res.data;
+
   }
 
   async sendTicketMessage(id, text) {
-    
-      const res = await this.request(`/tickets/admin/${id}/messages`, {
-        method: 'POST',
-        body: JSON.stringify({ text }),
-      });
-      return res.data;
-    
+
+    const res = await this.request(`/tickets/admin/${id}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    });
+    return res.data;
+
   }
 
   // AUDIT LOGS
   async getAuditLogs() {
-    
-      const res = await this.request('/admin/audits');
-      return res.data;
-    
+
+    const res = await this.request('/admin/audits');
+    return res.data;
+
   }
 
   // STAFF MANAGEMENT
   async getStaffList() {
-    
-      const res = await this.request('/admin/users');
-      return res.data;
-    
+
+    const res = await this.request('/admin/users');
+    return res.data;
+
+  }
+
+  async forceStaffPasswordReset(id) {
+    const res = await this.request(`/admin/users/${id}/force-password-reset`, {
+      method: 'POST'
+    });
+    return res.data;
   }
 
   async createStaff(staff) {
-    
-      const res = await this.request('/admin/users', {
-        method: 'POST',
-        body: JSON.stringify(staff),
-      });
-      return res.data;
-    
+
+    const res = await this.request('/admin/users', {
+      method: 'POST',
+      body: JSON.stringify(staff),
+    });
+    return res.data;
+
   }
 
   async updateStaff(id, updates) {
-    
-      const res = await this.request(`/admin/users/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(updates),
-      });
-      return res.data;
-    
+
+    const res = await this.request(`/admin/users/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+    return res.data;
+
   }
 
   async updateUserRole(id, role) {
@@ -837,220 +840,241 @@ class APIClient {
 
   // MANUAL OFFLINE CHECKOUT
   async checkoutOfflineSale(sale) {
-    
-      const products = await this.getProducts();
-      const invoiceItems = sale.items.map(item => {
-        const prod = products.find(p => p.id === item.productId);
-        if (!prod) throw new Error(`Product not found: ${item.productId}`);
-        return {
-          productId: item.productId,
-          quantity: item.quantity,
-          price: Number(prod.price),
-        };
-      });
 
-      let discountAmount = 0;
-      if (sale.couponCode) {
-        try {
-          const coupons = await this.getCoupons();
-          const coupon = coupons.find(c => c.code.toUpperCase() === sale.couponCode.toUpperCase());
-          if (coupon && coupon.isActive) {
-            const subtotal = invoiceItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
-            if (coupon.discountPercent > 0) {
-              discountAmount = (subtotal * coupon.discountPercent) / 100;
-              if (coupon.maxDiscount && discountAmount > Number(coupon.maxDiscount)) {
-                discountAmount = Number(coupon.maxDiscount);
-              }
-            } else if (coupon.discountFlat > 0) {
-              discountAmount = Number(coupon.discountFlat);
-            }
-          }
-        } catch (e) {
-          // Ignore
-        }
-      }
-
-      const res = await this.request('/billing/invoice', {
-        method: 'POST',
-        body: JSON.stringify({
-          userId: sale.userId || undefined,
-          customerName: sale.customerName,
-          items: invoiceItems,
-          discountAmount,
-          paymentMethod: sale.paymentMethod.toUpperCase(),
-          isOfflineSales: true,
-          status: sale.status,
-          isQuickOrder: sale.isQuickOrder,
-          quickOrderReason: sale.quickOrderReason,
-          quickOrderExpectedDate: sale.quickOrderExpectedDate,
-        }),
-      });
-
+    const products = await this.getProducts();
+    const invoiceItems = sale.items.map(item => {
+      const prod = products.find(p => p.id === item.productId);
+      if (!prod) throw new Error(`Product not found: ${item.productId}`);
       return {
-        ...res.data,
-        customerName: sale.customerName,
-        items: sale.items.map(item => {
-          const prod = products.find(p => p.id === item.productId);
-          return {
-            id: item.productId,
-            productName: prod ? prod.name : 'Unknown Item',
-            quantity: item.quantity,
-            price: prod ? Number(prod.price) : 0,
-          };
-        }),
+        productId: item.productId,
+        quantity: item.quantity,
+        price: item.customPrice !== undefined ? Number(item.customPrice) : Number(prod.price),
       };
-    
+    });
+
+    let discountAmount = 0;
+    if (sale.couponCode) {
+      try {
+        const coupons = await this.getCoupons();
+        const coupon = coupons.find(c => c.code.toUpperCase() === sale.couponCode.toUpperCase());
+        if (coupon && coupon.isActive) {
+          const subtotal = invoiceItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
+          if (coupon.discountPercent > 0) {
+            discountAmount = (subtotal * coupon.discountPercent) / 100;
+            if (coupon.maxDiscount && discountAmount > Number(coupon.maxDiscount)) {
+              discountAmount = Number(coupon.maxDiscount);
+            }
+          } else if (coupon.discountFlat > 0) {
+            discountAmount = Number(coupon.discountFlat);
+          }
+        }
+      } catch (e) {
+        // Ignore
+      }
+    }
+
+    const res = await this.request('/billing/invoice', {
+      method: 'POST',
+      body: JSON.stringify({
+        userId: sale.userId || undefined,
+        customerName: sale.customerName,
+        items: invoiceItems,
+        discountAmount,
+        paymentMethod: sale.paymentMethod ? sale.paymentMethod.toUpperCase() : 'CASH',
+        isOfflineSales: true,
+        status: sale.status || 'PAID',
+        advancePayment: sale.advancePayment !== '' ? Number(sale.advancePayment) : undefined,
+        isQuickOrder: sale.isQuickOrder || false,
+        quickOrderReason: sale.quickOrderReason || undefined,
+        quickOrderExpectedDate: sale.quickOrderExpectedDate || undefined,
+        gstPercentage: sale.gstPercentage !== undefined ? sale.gstPercentage : undefined,
+        measurementProfileIds: sale.measurementProfileIds || undefined,
+        deliveryDate: sale.deliveryDate || undefined,
+      }),
+    });
+
+    return {
+      ...res.data,
+      customerName: sale.customerName,
+      items: sale.items.map(item => {
+        const prod = products.find(p => p.id === item.productId);
+        return {
+          id: item.productId,
+          productName: prod ? prod.name : 'Unknown Item',
+          quantity: item.quantity,
+          price: prod ? Number(prod.price) : 0,
+        };
+      }),
+    };
+
   }
 
   // ORDER RETRIEVAL
-  async getOrders() {
-    
-      const res = await this.request('/orders/admin/list?limit=100');
-      return res.data.map(order => ({
-        ...order,
-        customerName: order.user ? order.user.fullName : (order.gatewayResponse?.guestCustomerName || 'Offline Customer (Guest)'),
-        userId: order.userId || order.user?.id,
-        items: (order.orderItems || []).map(item => ({
-          id: item.id,
-          productName: item.product?.name || 'Unknown Item',
-          quantity: item.quantity,
-          price: Number(item.price),
-        })),
-        // booking is already attached by the backend (getAssociatedBooking), pass it through
-        booking: order.booking || null,
-      }));
-    
+  async getOrders(page = 1, limit = 1000) {
+
+    const res = await this.request(`/orders/admin/list?page=${page}&limit=${limit}`);
+    const data = res.data.map(order => ({
+      ...order,
+      customerName: order.user ? order.user.fullName : (order.gatewayResponse?.guestCustomerName || 'Offline Customer (Guest)'),
+      userId: order.userId || order.user?.id,
+      items: (order.orderItems || []).map(item => ({
+        id: item.id,
+        productName: item.product?.name || 'Unknown Item',
+        quantity: item.quantity,
+        price: Number(item.price),
+      })),
+      // booking is already attached by the backend (getAssociatedBooking), pass it through
+      booking: order.booking || null,
+    }));
+    data.pagination = res.pagination;
+    return data;
+
   }
 
   async updateOrderStatus(id, status) {
-    
-      const res = await this.request(`/orders/admin/${id}/status`, {
-        method: 'PUT',
-        body: JSON.stringify({ status }),
-      });
-      return res.data;
-    
+
+    const res = await this.request(`/orders/admin/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    });
+    return res.data;
+
   }
 
   async updateQuickOrderStatus(id, quickOrderStatus, quickOrderProposedDate, adminProposalNote) {
-    
-      const res = await this.request(`/orders/admin/${id}/quick-status`, {
-        method: 'PUT',
-        body: JSON.stringify({ quickOrderStatus, quickOrderProposedDate, adminProposalNote }),
-      });
-      return res.data;
-    
+
+    const res = await this.request(`/orders/admin/${id}/quick-status`, {
+      method: 'PUT',
+      body: JSON.stringify({ quickOrderStatus, quickOrderProposedDate, adminProposalNote }),
+    });
+    return res.data;
+
   }
 
   async updateOrderDetails(id, updates) {
-    
-      const res = await this.request(`/orders/admin/${id}/status`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          status: updates.status,
-          paymentStatus: updates.paymentStatus,
-          fabricType: updates.fabricType,
-          customizations: updates.customizations,
-          tailorNotes: updates.tailorNotes,
-          measurementProfileId: updates.measurementProfileId,
-        }),
-      });
-      return res.data;
-    
+
+    const res = await this.request(`/orders/admin/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        status: updates.status,
+        paymentStatus: updates.paymentStatus,
+        advancePayment: updates.advancePayment,
+        deliveryDate: updates.deliveryDate,
+        fabricType: updates.fabricType,
+        customizations: updates.customizations,
+        tailorNotes: updates.tailorNotes,
+        measurementProfileId: updates.measurementProfileId,
+      }),
+    });
+    return res.data;
+
   }
 
   async getPackingSlip(orderId) {
-    
-      const res = await this.request(`/orders/admin/${orderId}/packing-slip`);
-      return res.data;
-    
+
+    const res = await this.request(`/orders/admin/${orderId}/packing-slip`);
+    return res.data;
+
   }
 
   // ANALYTICS & EXTENDED REPORTS
   async getDashboardReport() {
-    
-      const realDashboard = await this.request('/admin/dashboard').then(res => res.data);
-      const orders = await this.getOrders();
-      
-      const totalRevenue = realDashboard.overview?.revenue?.value || 0;
-      const orderCount = realDashboard.overview?.orders?.value || 0;
-      const aov = realDashboard.overview?.aov?.value || 0;
-      
-      const revenueChart = [
-        { month: 'Jan 26', revenue: 45000 },
-        { month: 'Feb 26', revenue: 52000 },
-        { month: 'Mar 26', revenue: 68000 },
-        { month: 'Apr 26', revenue: 58000 },
-        { month: 'May 26', revenue: 84000 },
-        { month: 'Jun 26', revenue: totalRevenue }
-      ];
 
-      const topCategories = (realDashboard.productSales?.topSelling || []).map(p => ({
-        name: p.name,
-        value: p.unitsSold * 1000
-      }));
+    const realDashboard = await this.request('/admin/dashboard').then(res => res.data);
+    const orders = await this.getOrders();
 
-      if (topCategories.length === 0) {
-        topCategories.push(
-          { name: 'Sarees', value: 85000 },
-          { name: 'Lehengas', value: 65000 },
-          { name: 'Kurtas', value: 45000 }
-        );
-      }
+    const totalRevenue = realDashboard.overview?.revenue?.value || 0;
+    const orderCount = realDashboard.overview?.orders?.value || 0;
+    const aov = realDashboard.overview?.aov?.value || 0;
 
-      return {
-        totalRevenue,
-        orderCount,
-        aov,
-        recentOrders: Array.isArray(orders) ? orders.slice(0, 10) : [],
-        revenueChart,
-        topCategories,
-        indiaActiveUsers: [
-          { name: 'Bangalore, Karnataka', count: 5 },
-          { name: 'Mumbai, Maharashtra', count: 2 },
-          { name: 'New Delhi, Delhi', count: 1 }
-        ],
-        productTraffic: [
-          { name: 'Google Search', percentage: 45 },
-          { name: 'Instagram Ads', percentage: 25 },
-          { name: 'Direct/Email', percentage: 20 },
-          { name: 'Referral', percentage: 10 }
-        ],
-        conversionRates: [
-          { name: 'Overall Conversion', value: 3.2, change: '+0.5%' },
-          { name: 'Add to Cart', value: 12.5, change: '+1.2%' },
-          { name: 'Checkout Initiated', value: 8.4, change: '-0.3%' },
-          { name: 'Cart Abandonment', value: 65.2, change: '-2.1%' },
-          { name: 'Repeat Customer', value: 24.8, change: '+3.4%' }
-        ],
-        pendingVisits: 0
-      };
-    
+    const revenueChart = [
+      { month: 'Jan 26', revenue: 45000 },
+      { month: 'Feb 26', revenue: 52000 },
+      { month: 'Mar 26', revenue: 68000 },
+      { month: 'Apr 26', revenue: 58000 },
+      { month: 'May 26', revenue: 84000 },
+      { month: 'Jun 26', revenue: totalRevenue }
+    ];
+
+    const topCategories = (realDashboard.productSales?.topSelling || []).map(p => ({
+      name: p.name,
+      value: p.unitsSold * 1000
+    }));
+
+    if (topCategories.length === 0) {
+      topCategories.push(
+        { name: 'Sarees', value: 85000 },
+        { name: 'Lehengas', value: 65000 },
+        { name: 'Kurtas', value: 45000 }
+      );
+    }
+
+    return {
+      totalRevenue,
+      orderCount,
+      aov,
+      todayStats: realDashboard.todayStats,
+      _raw: realDashboard,
+      recentOrders: Array.isArray(orders) ? orders.slice(0, 10) : [],
+      revenueChart,
+      topCategories,
+      indiaActiveUsers: [
+        { name: 'Bangalore, Karnataka', count: 5 },
+        { name: 'Mumbai, Maharashtra', count: 2 },
+        { name: 'New Delhi, Delhi', count: 1 }
+      ],
+      productTraffic: [
+        { name: 'Google Search', percentage: 45 },
+        { name: 'Instagram Ads', percentage: 25 },
+        { name: 'Direct/Email', percentage: 20 },
+        { name: 'Referral', percentage: 10 }
+      ],
+      conversionRates: [
+        { name: 'Overall Conversion', value: 3.2, change: '+0.5%' },
+        { name: 'Add to Cart', value: 12.5, change: '+1.2%' },
+        { name: 'Checkout Initiated', value: 8.4, change: '-0.3%' },
+        { name: 'Cart Abandonment', value: 65.2, change: '-2.1%' },
+        { name: 'Repeat Customer', value: 24.8, change: '+3.4%' }
+      ],
+      pendingVisits: 0
+    };
+
+  }
+
+  async getRawDashboard() {
+    const res = await this.request('/admin/dashboard');
+    return res.data;
+  }
+
+  async getDateStats(date) {
+    const query = date ? `?date=${date}` : '';
+    const res = await this.request(`/admin/dashboard/date-stats${query}`);
+    return res.data;
   }
 
   async getExtendedReports() {
-    
-      const res = await this.request('/admin/reports');
-      return res.data;
-    
+
+    const res = await this.request('/admin/reports');
+    return res.data;
+
   }
 
   // SETTINGS
   async getSettings() {
-    
-      const res = await this.request('/admin/settings');
-      return res.data;
-    
+
+    const res = await this.request('/admin/settings');
+    return res.data;
+
   }
 
   async saveSettings(settings) {
-    
-      const res = await this.request('/admin/settings', {
-        method: 'PUT',
-        body: JSON.stringify(settings),
-      });
-      return res.data;
-    
+
+    const res = await this.request('/admin/settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    });
+    return res.data;
+
   }
 
   async uploadImage(file) {

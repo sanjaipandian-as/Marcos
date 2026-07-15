@@ -3,12 +3,14 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTheme } from '../styles/ThemeContext';
 import { Platform, View, Text } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Path, Rect, Polygon } from 'react-native-svg';
 
 // Auth Screens
 import WelcomeScreen from '../screens/auth/WelcomeScreen';
+import LoginIdentifierScreen from '../screens/auth/LoginIdentifierScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
 import RegisterScreen from '../screens/auth/RegisterScreen';
+import SetupPasswordScreen from '../screens/auth/SetupPasswordScreen';
 import OtpVerifyScreen from '../screens/auth/OtpVerifyScreen';
 import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
 
@@ -20,7 +22,7 @@ import MoreScreen from '../screens/core/MoreScreen';
 // Shop Screens
 import ProductsCatalogScreen from '../screens/shop/ProductsCatalogScreen';
 import ProductDetailsScreen from '../screens/shop/ProductDetailsScreen';
-import CartScreen from '../screens/shop/CartScreen';
+
 import TrendingProductsScreen from '../screens/shop/TrendingProductsScreen';
 import NewArrivalsScreen from '../screens/shop/NewArrivalsScreen';
 import BestSellersScreen from '../screens/shop/BestSellersScreen';
@@ -35,6 +37,7 @@ import StoreLocatorScreen from '../screens/shop/StoreLocatorScreen';
 // Services Screens
 import AppointmentBookingScreen from '../screens/services/AppointmentBookingScreen';
 import StoreVisitRequestScreen from '../screens/services/StoreVisitRequestScreen';
+import BespokeBookingScreen from '../screens/services/BespokeBookingScreen';
 
 // Account Screens
 import ProfileScreen from '../screens/account/ProfileScreen';
@@ -55,25 +58,42 @@ import {
   User as UserIcon,
   Calendar,
   ShoppingBag,
-  Heart,
-} from 'lucide-react-native';
+  } from 'lucide-react-native';
+
+import { useAuth } from '../contexts/AuthContext';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 // Auth Stack Navigation
-export function AuthNavigator({ onLoginSuccess }) {
+export function AuthNavigator() {
+  const { login } = useAuth();
+  const navigation = require('@react-navigation/native').useNavigation();
+
+  const handleLoginSuccess = async (userData) => {
+    await login(userData);
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('MainApp');
+    }
+  };
+
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Welcome">
+    <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="LoginIdentifier">
       <Stack.Screen name="Welcome" component={WelcomeScreen} />
+      <Stack.Screen name="LoginIdentifier" component={LoginIdentifierScreen} />
       <Stack.Screen name="Login">
-        {props => <LoginScreen {...props} onLoginSuccess={onLoginSuccess} />}
+        {props => <LoginScreen {...props} onLoginSuccess={handleLoginSuccess} />}
+      </Stack.Screen>
+      <Stack.Screen name="SetupPassword">
+        {props => <SetupPasswordScreen {...props} onLoginSuccess={handleLoginSuccess} />}
       </Stack.Screen>
       <Stack.Screen name="Register">
-        {props => <RegisterScreen {...props} onLoginSuccess={onLoginSuccess} />}
+        {props => <RegisterScreen {...props} onLoginSuccess={handleLoginSuccess} />}
       </Stack.Screen>
       <Stack.Screen name="OtpVerify">
-        {props => <OtpVerifyScreen {...props} onLoginSuccess={onLoginSuccess} />}
+        {props => <OtpVerifyScreen {...props} onLoginSuccess={handleLoginSuccess} />}
       </Stack.Screen>
       <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
     </Stack.Navigator>
@@ -108,8 +128,18 @@ const CustomShoppingIcon = ({ color, size }) => (
 );
 
 const CustomStoreIcon = ({ color, size }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24">
-    <Path fill={color} d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+  <Svg width={size} height={size} viewBox="1.4 9.6 87.5 88">
+    <Path fill={color} d="m33.6 71h-15.8c-0.8 0-1.4 0.6-1.4 1.4v10.2c-0.1 0.7 0.5 1.2 1.3 1.2h15.8c0.8 0 1.3-0.6 1.3-1.3l0.1-10.1c0-0.8-0.6-1.4-1.3-1.4z"/>
+    <Path fill={color} d="m72.5 16.5c-4.8 0-8.7 3.4-9.6 8-0.5 7.8 7.1 12.5 12.7 10.5 3.3-1.1 5.9-4 6.2-8.2s-2.9-10.3-9.3-10.3z"/>
+    <Path fill={color} d="m72.5 9.6c-8.5 0-16.7 6.8-16.7 16.5 0 7 8.7 22.2 14.1 32.5 0.7 1.5 2.6 1.7 4 0.7v-0.2c0.1-0.1 15-24.2 15-32.2 0-9.3-7.3-17.3-16.4-17.3zm-0.1 28.7c-6.3 0-12.4-4.7-12.4-12.1 0-6.2 4.9-12.3 12.2-12.3s12.6 5.1 12.6 12.2-5.5 12.2-12.4 12.2z"/>
+    <Path fill={color} d="m80.7 95.5c-0.1-0.5-0.6-0.9-1.3-0.9h-5.5v-32.1c-2.3 0.7-4.6-0.3-5.9-2.2-2-3.3-10.9-19.2-14.2-29.9h-6.2c0.5 4.6 1.2 9.2 1.9 14.6h5.6c1.5 0 1.9 2.4 0 2.8h-5.1v3.2c0 4.9 5.4 7.7 9.6 5 1.9-1.3 3.3 0.8 2 2.1-4.6 3.1-10.5 2.3-13.5-2.2-3.4 5.5-11.6 5.7-15.1 0-3 5-11 6.2-15.8 0-1.5 2.6-5.3 4.5-9.3 3.9v34.5h-5.1c-1.7 0-1.8 2.7 0.2 2.7h76.4c0.9 0 1.4-0.9 1.3-1.5zm-37.7-23.2c0-2.6 1.9-4.9 4.5-4.9h13.5c2.4 0 4.6 1.7 4.6 4.8v22.1h-2.9v-22.1c0-1.1-0.8-1.8-1.8-1.8h-13.6c-1 0-1.8 0.7-1.8 1.7v22.3h-2.8v-22.1h0.3zm4.6 2.3c0-0.7 0.6-1.3 1.3-1.3h10.5c0.8 0 1.2 0.6 1.2 1.4v6.3c0 0.7-0.6 1.3-1.3 1.3h-10.5c-0.7 0-1.3-0.6-1.3-1.3l0.1-6.4zm0 11.8c0-0.7 0.7-1.2 1.3-1.2 0.7 0 1.4 0.6 1.4 1.2v1.9c0 0.7-0.6 1.4-1.4 1.3-0.7 0-1.3-0.6-1.3-1.3v-1.9zm-10-4c0 2.2-1.7 4.2-4.2 4.2h-15.6c-2.4 0-4.2-1.7-4.2-4.2v-9.9c0-2.4 1.9-4.3 4.2-4.3h15.6c2.2 0 4.2 1.7 4.2 4.1v10.1z"/>
+    <Rect fill={color} x="50.4" y="76" width="7.6" height="3.7"/>
+    <Path fill={color} d="m35.2 45h11.8c-0.7-4-1.4-9-1.9-14.6h-7.8l-1.9 11.9-0.2 2.7z"/>
+    <Polygon fill={color} points="19.7 45 32.3 45 34.4 30.4 26.7 30.4"/>
+    <Path fill={color} d="m4.7 45h12l6.7-15h-6.1c-0.8 0.1-1.5 0.4-2.1 1l-10.5 14z"/>
+    <Path fill={color} d="m16.3 47.8h-12.8v3.2c0 3.3 2.7 6.4 6.4 6.4 3.5 0 6.3-2.7 6.4-6.1v-3.5z"/>
+    <Path fill={color} d="m18.9 51.3c0 6.9 9.1 9 12.4 3.3 0.9-1.7 0.8-3.2 0.8-6.8h-13.2v3.5z"/>
+    <Path fill={color} d="m34.8 47.8v3.2c0 3.3 2.7 6.3 6.2 6.4 3.3 0 6.1-2.3 6.3-5.8v-3.8h-12.5z"/>
   </Svg>
 );
 
@@ -120,7 +150,7 @@ const CustomCartIcon = ({ color, size }) => (
 );
 
 // Bottom Tab Navigation (Redesigned for the requested mockup design)
-function TabNavigator({ onLogout }) {
+function TabNavigator() {
   const { theme, fonts, shadows } = useTheme();
 
   return (
@@ -191,21 +221,14 @@ function TabNavigator({ onLogout }) {
     >
       <Tab.Screen
         name="HomeTab"
+        component={HomeScreen}
         options={{ tabBarLabel: 'Home' }}
-      >
-        {props => <HomeScreen {...props} onLogout={onLogout} />}
-      </Tab.Screen>
+      />
 
       <Tab.Screen
         name="Browse"
         component={ProductsCatalogScreen}
         options={{ tabBarLabel: 'Shopping' }}
-      />
-
-      <Tab.Screen
-        name="Cart"
-        component={CartScreen}
-        options={{ tabBarLabel: 'Cart' }}
       />
 
       <Tab.Screen
@@ -222,28 +245,25 @@ function TabNavigator({ onLogout }) {
 
       <Tab.Screen
         name="Profile"
+        component={ProfileScreen}
         options={{ tabBarLabel: 'Account' }}
-      >
-        {props => <ProfileScreen {...props} onLogout={onLogout} />}
-      </Tab.Screen>
+      />
     </Tab.Navigator>
   );
 }
 
 // Main Logged-In App Navigator
-export function AppNavigator({ onLogout }) {
+export function AppNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {/* Tab bar is the home core screen */}
-      <Stack.Screen name="MainTabs">
-        {props => <TabNavigator {...props} onLogout={onLogout} />}
-      </Stack.Screen>
+      <Stack.Screen name="MainTabs" component={TabNavigator} />
 
       {/* Nested secondary pages */}
       <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />
       <Stack.Screen name="Reels" component={ReelsScreen} />
       <Stack.Screen name="More" component={MoreScreen} />
-      <Stack.Screen name="Cart" component={CartScreen} />
+
       <Stack.Screen name="Checkout" component={CheckoutScreen} />
       <Stack.Screen name="Wishlist" component={WishlistScreen} />
       <Stack.Screen name="Loyalty" component={LoyaltyDashboardScreen} />
@@ -257,6 +277,7 @@ export function AppNavigator({ onLogout }) {
       <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
       <Stack.Screen name="Appointments" component={AppointmentBookingScreen} />
       <Stack.Screen name="StoreVisits" component={StoreVisitRequestScreen} />
+      <Stack.Screen name="BespokeBooking" component={BespokeBookingScreen} />
       <Stack.Screen name="TrendingProducts" component={TrendingProductsScreen} />
       <Stack.Screen name="NewArrivals" component={NewArrivalsScreen} />
       <Stack.Screen name="BestSellers" component={BestSellersScreen} />
@@ -264,6 +285,16 @@ export function AppNavigator({ onLogout }) {
       <Stack.Screen name="SeasonalCollections" component={SeasonalCollectionsScreen} />
       <Stack.Screen name="FestivalOffers" component={FestivalOffersScreen} />
       <Stack.Screen name="Discounts" component={DiscountsScreen} />
+    </Stack.Navigator>
+  );
+}
+
+// Root Navigator combining Main App and Auth Stack
+export function RootNavigator() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false, presentation: 'modal' }}>
+      <Stack.Screen name="MainApp" component={AppNavigator} />
+      <Stack.Screen name="AuthStack" component={AuthNavigator} />
     </Stack.Navigator>
   );
 }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import WishlistIcon from '../../components/common/WishlistIcon';
 import {
   StyleSheet,
   Text,
@@ -27,7 +28,6 @@ import {
   Bell,
   ShoppingBag,
   ShoppingCart,
-  Heart,
   ChevronRight,
   Sparkles,
   Play,
@@ -114,22 +114,31 @@ export default function HomeScreen({ navigation }) {
 
   useEffect(() => {
     const loadSavedAddressesList = async () => {
+      if (!userProfile?.id) {
+        setSavedAddressesList([]);
+        setCustomAddress('');
+        return;
+      }
       try {
-        const active = await AsyncStorage.getItem('active_delivery_address');
+        const active = await AsyncStorage.getItem(`active_delivery_address_${userProfile.id}`);
         if (active) {
           setCustomAddress(active);
+        } else {
+          setCustomAddress('');
         }
         
-        const savedListJSON = await AsyncStorage.getItem('saved_delivery_addresses');
+        const savedListJSON = await AsyncStorage.getItem(`saved_delivery_addresses_${userProfile.id}`);
         if (savedListJSON) {
           setSavedAddressesList(JSON.parse(savedListJSON));
+        } else {
+          setSavedAddressesList([]);
         }
       } catch (e) {
         console.error('Error loading saved addresses:', e);
       }
     };
     loadSavedAddressesList();
-  }, []);
+  }, [userProfile?.id]);
 
   function parseAddressText(addrStr) {
     if (!addrStr) return '';
@@ -166,7 +175,7 @@ export default function HomeScreen({ navigation }) {
     const syncProfileAddress = async () => {
       if (userProfile && userProfile.address) {
         try {
-          const savedListJSON = await AsyncStorage.getItem('saved_delivery_addresses');
+          const savedListJSON = await AsyncStorage.getItem(`saved_delivery_addresses_${userProfile.id}`);
           let currentList = savedListJSON ? JSON.parse(savedListJSON) : [];
           
           const hasProfile = currentList.some(item => item.id === 'profile');
@@ -175,20 +184,20 @@ export default function HomeScreen({ navigation }) {
             const cleanPh = cleanPhone(userProfile.phoneNumber);
             const profileAddrObj = {
               id: 'profile',
-              name: userProfile.fullName || 'Sanjai Pandian',
+              name: userProfile.fullName || 'Guest',
               phone: cleanPh,
               address: cleanAddr,
               label: 'HOME'
             };
             const updated = [profileAddrObj, ...currentList];
             setSavedAddressesList(updated);
-            await AsyncStorage.setItem('saved_delivery_addresses', JSON.stringify(updated));
+            await AsyncStorage.setItem(`saved_delivery_addresses_${userProfile.id}`, JSON.stringify(updated));
             
             // Set it as active delivery address if none is active yet
-            const active = await AsyncStorage.getItem('active_delivery_address');
+            const active = await AsyncStorage.getItem(`active_delivery_address_${userProfile.id}`);
             if (!active) {
               setCustomAddress(cleanAddr);
-              await AsyncStorage.setItem('active_delivery_address', cleanAddr);
+              await AsyncStorage.setItem(`active_delivery_address_${userProfile.id}`, cleanAddr);
             }
           }
         } catch (e) {
@@ -226,7 +235,9 @@ export default function HomeScreen({ navigation }) {
   const handleSelectAddressObject = async (addrObj) => {
     try {
       setCustomAddress(addrObj.address);
-      await AsyncStorage.setItem('active_delivery_address', addrObj.address);
+      if (userProfile?.id) {
+        await AsyncStorage.setItem(`active_delivery_address_${userProfile.id}`, addrObj.address);
+      }
       setShowAddressModal(false);
     } catch (e) {
       console.error('Error selecting address:', e);
@@ -332,10 +343,12 @@ export default function HomeScreen({ navigation }) {
 
       const updatedList = [newAddrObj, ...savedAddressesList];
       setSavedAddressesList(updatedList);
-      await AsyncStorage.setItem('saved_delivery_addresses', JSON.stringify(updatedList));
+      if (userProfile?.id) {
+        await AsyncStorage.setItem(`saved_delivery_addresses_${userProfile.id}`, JSON.stringify(updatedList));
+        await AsyncStorage.setItem(`active_delivery_address_${userProfile.id}`, completeAddressStr);
+      }
 
       setCustomAddress(completeAddressStr);
-      await AsyncStorage.setItem('active_delivery_address', completeAddressStr);
 
       // Persist to database profile if logged in
       if (userProfile) {
@@ -377,7 +390,9 @@ export default function HomeScreen({ navigation }) {
             try {
               const updated = savedAddressesList.filter(item => item.id !== id);
               setSavedAddressesList(updated);
-              await AsyncStorage.setItem('saved_delivery_addresses', JSON.stringify(updated));
+              if (userProfile?.id) {
+                await AsyncStorage.setItem(`saved_delivery_addresses_${userProfile.id}`, JSON.stringify(updated));
+              }
             } catch (e) {
               console.error('Error deleting address:', e);
             }
@@ -428,12 +443,18 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
+  // Initial load on mount
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // Refresh data whenever the tab is re-focused
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       loadData();
     });
     return unsubscribe;
-  }, [navigation, products]);
+  }, [navigation]);
 
   const toggleFavorite = async (productId) => {
     try {
@@ -1064,7 +1085,7 @@ export default function HomeScreen({ navigation }) {
               <Bell size={20} color="#1e1e1e" />
             </TouchableOpacity>
             <TouchableOpacity style={[styles.actionBtn, shadows.premium]} activeOpacity={0.7} onPress={() => navigation.navigate('Wishlist')}>
-              <Heart size={20} color="#1e1e1e" />
+              <WishlistIcon size={20} color="#1e1e1e" />
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -1085,7 +1106,7 @@ export default function HomeScreen({ navigation }) {
               />
             </View>
             <TouchableOpacity style={[styles.actionBtn, shadows.premium]} activeOpacity={0.7} onPress={() => navigation.navigate('Wishlist')}>
-              <Heart size={20} color="#1e1e1e" />
+              <WishlistIcon size={20} color="#1e1e1e" />
             </TouchableOpacity>
           </View>
         </Animated.View>

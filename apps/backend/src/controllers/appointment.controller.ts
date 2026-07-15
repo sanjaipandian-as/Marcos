@@ -23,8 +23,9 @@ export const appointmentUpdateSchema = z.object({
   body: z.object({
     date: z.string().datetime().optional(),
     timeSlot: z.string().min(1).optional(),
-    status: z.enum(['PENDING', 'CONFIRMED', 'CANCELLED', 'RESCHEDULED']).optional(),
+    status: z.enum(['PENDING', 'CONFIRMED', 'CANCELLED', 'RESCHEDULED', 'CONSULTED', 'ORDERED']).optional(),
     notes: z.string().optional(),
+    orderId: z.string().uuid().optional().nullable(),
   }),
 });
 
@@ -142,7 +143,37 @@ export class AppointmentController {
       const maxSlots = settings?.maxBookingsPerSlot || 5;
       const bypassLimits = adminOverride && (user.role === Role.ADMIN || user.role === Role.SUPERADMIN || user.role === Role.STAFF);
 
+      let targetUserId = user.id;
+      if (user.role !== Role.CUSTOMER) {
+        targetUserId = userId || null;
+      }
+
       if (!bypassLimits) {
+        // Layer 1: Burst limit (1 request per 3 seconds per user)
+        const burstKey = `booking:burst:${targetUserId}`;
+        const burstLock = await redis.set(burstKey, 'locked', 'EX', 3, 'NX');
+        if (!burstLock) {
+          return res.status(429).json({ success: false, message: 'Please wait a few seconds before making another booking request.' });
+        }
+
+        // Layer 2 & 3: Daily Quotas (User & IP)
+        const todayStr = new Date().toISOString().split('T')[0];
+        const dailyUserKey = `booking:daily:${targetUserId}:${todayStr}`;
+        const dailyIpKey = `booking:daily_ip:${req.ip}:${todayStr}`;
+
+        const userCount = await redis.incr(dailyUserKey);
+        const ipCount = await redis.incr(dailyIpKey);
+
+        if (userCount === 1) await redis.expire(dailyUserKey, 86400);
+        if (ipCount === 1) await redis.expire(dailyIpKey, 86400);
+
+        if (userCount > 20 || ipCount > 30) {
+          return res.status(429).json({
+            success: false,
+            message: 'You have reached the daily booking limit. Please try again tomorrow.',
+          });
+        }
+
         // Acquire Redis lock
         for (let attempt = 0; attempt < 5; attempt++) {
           const resLock = await redis.set(lockKey, 'locked', 'PX', 3000, 'NX');
@@ -176,11 +207,6 @@ export class AppointmentController {
           success: false,
           message: `The requested appointment slot is fully booked (maximum ${maxSlots} bookings). Please choose another time.`,
         });
-      }
-
-      let targetUserId = user.id;
-      if (user.role !== Role.CUSTOMER) {
-        targetUserId = userId || null;
       }
 
       const appointment = await prisma.appointment.create({
@@ -228,7 +254,7 @@ export class AppointmentController {
   static async updateAppointment(req: Request, res: Response, next: NextFunction) {
     const user = req.user!;
     const { id } = req.params;
-    const { date, timeSlot, status, notes } = req.body;
+    const { date, timeSlot, status, notes, orderId } = req.body;
 
     let lockKey: string | null = null;
     let lockAcquired = false;
@@ -313,6 +339,7 @@ export class AppointmentController {
           ...(timeSlot && { timeSlot }),
           ...(status && { status: status as AppointmentStatus }),
           ...(notes !== undefined && { notes }),
+          ...(orderId !== undefined && { orderId }),
         },
       });
 

@@ -49,6 +49,8 @@ const sheetTabs = {
 export default function CustomerManager() {
   const [customers, setCustomers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
   const [customerInfo, setCustomerInfo] = useState(null);
@@ -206,39 +208,74 @@ export default function CustomerManager() {
             <input
               type="text"
               value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
+              onChange={e => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
               placeholder="Search customer name..."
               className="w-full pl-9 pr-4 py-1.5 text-xs rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:outline-none"
             />
             <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
           </div>
 
-          <div className="divide-y divide-slate-100 max-h-[500px] overflow-y-auto pr-1">
-            {filteredCustomers.length === 0 ? (
-              <p className="text-xs text-center text-slate-400 py-8">No customers found</p>
-            ) : (
-              filteredCustomers.map(cust => (
-                <button
-                  key={cust.id}
-                  onClick={() => handleSelectCustomer(cust.id)}
-                  className={`
-                    w-full text-left p-3 rounded-2xl flex items-center gap-3 transition-colors focus:outline-none
-                    ${selectedCustomerId === cust.id 
-                      ? 'bg-brand-50 border border-brand-100/50' 
-                      : 'hover:bg-slate-550 border border-transparent'}
-                  `}
-                >
-                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs ${selectedCustomerId === cust.id ? 'bg-brand-500 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                    {cust.fullName.charAt(0)}
+          {(() => {
+            const totalPages = Math.ceil(filteredCustomers.length / itemsPerPage);
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const paginatedCustomers = filteredCustomers.slice(startIndex, startIndex + itemsPerPage);
+
+            return (
+              <>
+                <div className="divide-y divide-slate-100 max-h-[500px] overflow-y-auto pr-1">
+                  {paginatedCustomers.length === 0 ? (
+                    <p className="text-xs text-center text-slate-400 py-8">No customers found</p>
+                  ) : (
+                    paginatedCustomers.map(cust => (
+                      <button
+                        key={cust.id}
+                        onClick={() => handleSelectCustomer(cust.id)}
+                        className={`
+                          w-full text-left p-3 rounded-2xl flex items-center gap-3 transition-colors focus:outline-none
+                          ${selectedCustomerId === cust.id 
+                            ? 'bg-brand-50 border border-brand-100/50' 
+                            : 'hover:bg-slate-50 border border-transparent'}
+                        `}
+                      >
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs ${selectedCustomerId === cust.id ? 'bg-brand-500 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                          {cust.fullName.charAt(0)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-slate-800 truncate">{cust.fullName}</p>
+                          <p className="text-[10px] text-slate-400 truncate">{cust.email}</p>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+
+                {totalPages > 1 && (
+                  <div className="flex justify-between items-center pt-4 mt-2 border-t border-slate-100">
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="text-xs font-bold text-slate-500 hover:text-brand-600 disabled:opacity-50 disabled:hover:text-slate-500"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-[10px] font-bold text-slate-400">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="text-xs font-bold text-slate-500 hover:text-brand-600 disabled:opacity-50 disabled:hover:text-slate-500"
+                    >
+                      Next
+                    </button>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-slate-800 truncate">{cust.fullName}</p>
-                    <p className="text-[10px] text-slate-400 truncate">{cust.email}</p>
-                  </div>
-                </button>
-              ))
-            )}
-          </div>
+                )}
+              </>
+            );
+          })()}
         </div>
 
         <div className="lg:col-span-8 space-y-6">

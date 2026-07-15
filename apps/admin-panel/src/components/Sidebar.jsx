@@ -6,6 +6,7 @@ import {
   ShoppingCart, 
   Users, 
   Calendar, 
+  CalendarCheck,
   Award, 
   Megaphone, 
   Image, 
@@ -89,6 +90,7 @@ export default function Sidebar({
         'orders-fittings': pendingAppts,
         'orders-visits': activeVisits,
         'orders-quick': quickOrdersCount,
+        'bookings': pendingAppts + activeVisits,
         support: pendingSupport
       });
     } catch (err) {
@@ -137,6 +139,7 @@ export default function Sidebar({
       title: 'SALES & CHECKOUT',
       items: [
         { id: 'checkout', label: 'Manual Checkout', icon: ShoppingCart },
+        { id: 'bookings', label: 'Bookings & Appointments', icon: CalendarCheck },
         { 
           id: 'orders', 
           label: 'Bookings & Fittings', 
@@ -194,7 +197,7 @@ export default function Sidebar({
   const isTabAllowed = (tabId) => {
     if (userRole === 'SUPERADMIN' || userRole === 'ADMIN') return true;
     if (userRole === 'STAFF') {
-      const allowedTabs = ['orders', 'orders-bookings', 'orders-fittings', 'orders-visits', 'orders-quick', 'orders-print', 'products', 'categories', 'customers', 'app-customers', 'stores', 'support'];
+      const allowedTabs = ['orders', 'orders-bookings', 'orders-fittings', 'orders-visits', 'orders-quick', 'orders-print', 'products', 'categories', 'customers', 'app-customers', 'stores', 'support', 'bookings'];
       return allowedTabs.includes(tabId);
     }
     return false;

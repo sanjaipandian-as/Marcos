@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sensitiveRateLimiter = exports.globalRateLimiter = void 0;
+exports.identifyTargetLimiter = exports.identifyIpLimiter = exports.sensitiveRateLimiter = exports.globalRateLimiter = void 0;
 exports.rateLimiter = rateLimiter;
 const redis_js_1 = __importDefault(require("../config/redis.js"));
 const env_js_1 = __importDefault(require("../config/env.js"));
@@ -65,4 +65,23 @@ exports.sensitiveRateLimiter = rateLimiter({
         const identifier = req.body.phoneNumber || req.body.email || req.body.username || req.ip || 'unknown';
         return identifier;
     },
+});
+exports.identifyIpLimiter = rateLimiter({
+    windowMs: 60 * 1000,
+    max: 10,
+    prefix: 'identify-ip',
+    keyGenerator: (req) => req.ip || 'unknown-ip',
+});
+exports.identifyTargetLimiter = rateLimiter({
+    windowMs: 10 * 60 * 1000,
+    max: 5,
+    prefix: 'identify-target',
+    keyGenerator: (req) => {
+        let identifier = req.body.identifier || 'unknown';
+        // Use simple normalization if available
+        if (identifier.includes('@')) {
+            identifier = identifier.toLowerCase().trim();
+        }
+        return identifier;
+    }
 });

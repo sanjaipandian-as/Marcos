@@ -22,25 +22,27 @@ import { ChevronLeft, Eye, EyeOff } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
 
-export default function LoginScreen({ navigation, onLoginSuccess }) {
+export default function LoginScreen({ route, navigation, onLoginSuccess }) {
   const { theme, fonts, shadows } = useTheme();
-  const [emailOrPhone, setEmailOrPhone] = useState('');
+  
+  // Get identifier passed from LoginIdentifierScreen
+  const identifier = route?.params?.identifier || '';
+  
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   const handleLogin = async () => {
-    const trimmedIdentifier = emailOrPhone.trim();
-    if (!trimmedIdentifier || !password) {
-      setErrorMsg('Please enter both mobile number/email and password.');
+    if (!password) {
+      setErrorMsg('Please enter your password.');
       return;
     }
     setLoading(true);
     setErrorMsg('');
     try {
       const res = await api.post('/auth/login', { 
-        email: trimmedIdentifier,
+        email: identifier,
         password 
       });
       
@@ -56,7 +58,14 @@ export default function LoginScreen({ navigation, onLoginSuccess }) {
       }
     } catch (err) {
       console.error('Login Error:', err);
-      const errorMessage = err.response?.data?.message || err.message || 'Login failed. Please check credentials.';
+      let errorMessage = 'Login failed. Please check credentials.';
+      if (err.response?.data?.errors && Array.isArray(err.response.data.errors) && err.response.data.errors.length > 0) {
+        errorMessage = err.response.data.errors.map(e => e.message).join('\\n');
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
       setErrorMsg(errorMessage);
     } finally {
       setLoading(false);
@@ -107,22 +116,13 @@ export default function LoginScreen({ navigation, onLoginSuccess }) {
               <Text style={[styles.errorText, { fontFamily: fonts.medium }]}>{errorMsg}</Text>
             ) : null}
 
-            {/* Email or Phone Input */}
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { fontFamily: fonts.semiBold }]}>
-                Enter your mobile number or email
+                {identifier}
               </Text>
-              <View style={[styles.inputWrapper, { borderColor: theme.border }]}>
-                <TextInput
-                  style={[styles.input, { fontFamily: fonts.regular }]}
-                  placeholder="e.g. +91 9876543210 or email"
-                  placeholderTextColor={theme.text.muted}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  value={emailOrPhone}
-                  onChangeText={setEmailOrPhone}
-                />
-              </View>
+              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.editBtn}>
+                <Text style={[styles.editBtnText, { color: theme.brand[500], fontFamily: fonts.bold }]}>Change</Text>
+              </TouchableOpacity>
             </View>
 
             {/* Password Input */}
@@ -276,9 +276,15 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   label: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#334155',
     marginBottom: 6,
+  },
+  editBtn: {
+    paddingVertical: 4,
+  },
+  editBtnText: {
+    fontSize: 13,
   },
   inputWrapper: {
     flexDirection: 'row',

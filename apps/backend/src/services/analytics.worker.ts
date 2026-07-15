@@ -5,6 +5,10 @@ import logger from '../utils/logger.js';
 const CHUNK_SIZE = 2000;
 
 export function startAnalyticsFlushWorker() {
+  if (process.env.NODE_ENV === 'development') {
+    logger.info('Background Analytics Flush Worker disabled in development to save Redis limits.');
+    return;
+  }
   logger.info('Background Analytics Flush Worker started.');
 
   // Run the flush job every 5 minutes (300 seconds) to conserve Redis commands

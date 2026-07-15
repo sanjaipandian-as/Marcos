@@ -13,15 +13,12 @@ import {
 } from 'react-native';
 import { useTheme } from '../../styles/ThemeContext';
 import api from '../../utils/api';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   ChevronLeft,
   Share2,
   Heart,
-  Plus,
-  Minus,
-  ShoppingCart,
-  ShoppingBag,
-  PlusCircle,
+  CalendarCheck,
   Sparkles,
   Truck
 } from 'lucide-react-native';
@@ -31,6 +28,7 @@ const { width } = Dimensions.get('window');
 export default function ProductDetailsScreen({ route, navigation }) {
   const { productId } = route.params;
   const { theme, fonts, shadows } = useTheme();
+  const { requireAuth } = useAuth();
 
   // Data & Control States
   const [product, setProduct] = useState(null);
@@ -53,9 +51,9 @@ export default function ProductDetailsScreen({ route, navigation }) {
         setLoading(true);
       }
       const [prodRes, cartRes, favRes, allProductsRes, categoriesRes, offersRes] = await Promise.all([
-        api.get(`/products/${productId}`),
-        api.get('/products/cart'),
-        api.get('/products/favorites'),
+        api.get(`/products/${productId}`).catch(err => ({ success: false, _err: err })),
+        api.get('/products/cart').catch(() => ({ success: false, data: [] })),
+        api.get('/products/favorites').catch(() => ({ success: false, data: [] })),
         api.get('/products?page=1&limit=200').catch(() => ({ success: false, data: [] })),
         api.get('/categories').catch(() => ({ success: false, data: [] })),
         api.get('/offers/active').catch(() => ({ success: false, data: [] }))
@@ -92,7 +90,8 @@ export default function ProductDetailsScreen({ route, navigation }) {
           setActiveOffers(applicable);
         }
       } else {
-        Alert.alert('Error', 'Product not found.');
+        console.warn('Product not found or failed to load:', prodRes);
+        Alert.alert('Error', 'Product not found or failed to load.');
         navigation.goBack();
         return;
       }
@@ -104,9 +103,8 @@ export default function ProductDetailsScreen({ route, navigation }) {
         setIsFav(favRes.data.some(item => item.productId === productId));
       }
     } catch (err) {
-      console.error('Error loading product details:', err);
-      Alert.alert('Error', 'Failed to load details.');
-      navigation.goBack();
+      console.warn('Error loading product details:', err.message);
+      // Don't navigate back — just stop loading so user isn't trapped
     } finally {
       setLoading(false);
     }
@@ -117,7 +115,8 @@ export default function ProductDetailsScreen({ route, navigation }) {
   }, [productId]);
 
   const toggleFavorite = async () => {
-    if (!product) return;
+    requireAuth(async () => {
+      if (!product) return;
     try {
       if (isFav) {
         await api.delete(`/products/favorites/${product.id}`);
@@ -126,13 +125,15 @@ export default function ProductDetailsScreen({ route, navigation }) {
         await api.post('/products/favorites', { productId: product.id });
         setIsFav(true);
       }
-    } catch (err) {
-      console.error('Error toggling favorite:', err);
-    }
+      } catch (err) {
+        console.warn('Favorite toggle failed (likely session expired):', err.message);
+      }
+    });
   };
 
   const handleAddToCart = async () => {
-    if (!product) return;
+    requireAuth(async () => {
+      if (!product) return;
     if (isInCart) {
       navigation.navigate('Cart');
       return;
@@ -159,22 +160,36 @@ export default function ProductDetailsScreen({ route, navigation }) {
     } catch (err) {
       Alert.alert('Error', err.message || 'Failed to add item to cart.');
     } finally {
-      setAdding(false);
-    }
+        setAdding(false);
+      }
+    });
   };
 
   const handleBuyNow = () => {
-    if (!product) return;
-    const directCheckoutItem = {
-      id: 'direct_' + Date.now(),
-      productId: product.id,
-      quantity: quantity,
-      product: product
-    };
-    navigation.navigate('Checkout', {
-      cartItems: [directCheckoutItem],
-      appliedCoupon: null,
-      discountAmount: 0
+    requireAuth(() => {
+      if (!product) return;
+      const directCheckoutItem = {
+        id: 'direct_' + Date.now(),
+        productId: product.id,
+        quantity: quantity,
+        product: product
+      };
+      navigation.navigate('Checkout', {
+        cartItems: [directCheckoutItem],
+        appliedCoupon: null,
+        discountAmount: 0
+      });
+    });
+  };
+
+  const handleBookConsultation = () => {
+    requireAuth(() => {
+      if (!product) return;
+      navigation.navigate('BespokeBooking', {
+        prefillProduct: product.name,
+        prefillCategory: categoryName || 'Product Consultation',
+        prefillProductImage: product.images && product.images[0] ? product.images[0] : ''
+      });
     });
   };
 
@@ -203,7 +218,24 @@ export default function ProductDetailsScreen({ route, navigation }) {
     );
   }
 
-  if (!product) return null;
+  if (!product) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.bg.main, justifyContent: 'center', alignItems: 'center', gap: 16, padding: 32 }]}>
+        <Text style={{ fontSize: 16, color: theme.text.secondary, textAlign: 'center', fontFamily: fonts.medium }}>
+          Could not load product details. Please check your connection and try again.
+        </Text>
+        <TouchableOpacity
+          style={{ backgroundColor: theme.brand[500], paddingHorizontal: 24, paddingVertical: 12, borderRadius: 14 }}
+          onPress={() => { setLoading(true); loadProductDetails(); }}
+        >
+          <Text style={{ color: '#3D2E3D', fontFamily: fonts.bold }}>Retry</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Text style={{ color: theme.text.secondary, fontFamily: fonts.medium }}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   const thumbnails = (product.images && product.images.length > 0) 
     ? product.images 
@@ -404,70 +436,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
             </View>
           )}
 
-          {/* Size Selector and Quantity Adjuster Row */}
-          <View style={styles.selectorsRow}>
-            <View style={styles.sizeSection}>
-              <Text style={[styles.sectionLabel, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-                Select Size
-              </Text>
-              <View style={styles.sizesRow}>
-                {['S', 'M', 'L', 'XL'].map((size) => {
-                  const isActive = selectedSize === size;
-                  return (
-                    <TouchableOpacity
-                      key={size}
-                      style={[
-                        styles.sizeBox,
-                        isActive ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.input }
-                      ]}
-                      onPress={() => setSelectedSize(size)}
-                      activeOpacity={0.8}
-                    >
-                      <Text
-                        style={[
-                          styles.sizeText,
-                          { fontFamily: fonts.bold },
-                          isActive ? { color: '#ffffff' } : { color: theme.text.primary }
-                        ]}
-                      >
-                        {size}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
 
-            {/* Quantity Adjuster */}
-            <View style={styles.qtySection}>
-              <View style={styles.qtyContainer}>
-                <TouchableOpacity 
-                  style={styles.qtyBtn} 
-                  onPress={() => setQuantity(q => Math.max(1, q - 1))}
-                  activeOpacity={0.7}
-                >
-                  <Minus size={16} color="#1e1e1e" />
-                </TouchableOpacity>
-                <Text style={[styles.qtyText, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-                  {quantity}
-                </Text>
-                <TouchableOpacity 
-                  style={styles.qtyBtn} 
-                  onPress={() => setQuantity(q => q + 1)}
-                  activeOpacity={0.7}
-                >
-                  <Plus size={16} color="#1e1e1e" />
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-
-          {/* Sizing Price Notice */}
-          <View style={{ backgroundColor: 'rgba(216, 191, 216, 0.15)', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(216, 191, 216, 0.4)' }}>
-            <Text style={{ fontSize: 11.5, color: theme.brand[700], fontFamily: fonts.medium, lineHeight: 16 }}>
-              Note: This is a starting price, not the final price. The amount will differ based on your sizes.
-            </Text>
-          </View>
 
           {/* Description Section */}
           <View style={styles.descriptionSection}>
@@ -531,31 +500,31 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
       {/* Bottom Actions Row */}
       <View style={[styles.bottomActionsRow, shadows.premium]}>
-        <TouchableOpacity 
-          style={[styles.cartActionBtn, { borderColor: theme.text.primary }]}
-          onPress={handleAddToCart}
-          disabled={adding}
+        {/* Wishlist / Heart Button */}
+        <TouchableOpacity
+          style={[
+            styles.wishlistActionBtn,
+            { borderColor: isFav ? '#ef4444' : theme.border, backgroundColor: isFav ? '#fff0f0' : theme.bg.card }
+          ]}
+          onPress={toggleFavorite}
           activeOpacity={0.8}
         >
-          {adding ? (
-            <ActivityIndicator size="small" color={theme.text.primary} />
-          ) : (
-            <>
-              <PlusCircle size={20} color={theme.text.primary} style={{ marginRight: 8 }} />
-              <Text style={[styles.btnTextOutline, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-                {isInCart ? 'Go to Cart' : 'Add To Cart'}
-              </Text>
-            </>
-          )}
+          <Heart
+            size={24}
+            color={isFav ? '#ef4444' : theme.text.secondary}
+            fill={isFav ? '#ef4444' : 'transparent'}
+          />
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.buyActionBtn, { backgroundColor: theme.brand[500] }]}
-          onPress={handleBuyNow}
+
+        {/* Book a Slot Button */}
+        <TouchableOpacity
+          style={[styles.bookSlotBtn, { backgroundColor: theme.brand[500] }]}
+          onPress={handleBookConsultation}
           activeOpacity={0.8}
         >
-          <ShoppingBag size={20} color="#3D2E3D" style={{ marginRight: 8 }} />
-          <Text style={[styles.btnTextFilled, { fontFamily: fonts.bold, color: '#3D2E3D' }]}>
-            Buy Now
+          <CalendarCheck size={20} color="#3D2E3D" style={{ marginRight: 10 }} />
+          <Text style={[styles.bookSlotBtnText, { fontFamily: fonts.bold, color: '#3D2E3D' }]}>
+            BOOK A SLOT
           </Text>
         </TouchableOpacity>
       </View>
@@ -769,28 +738,25 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#f0f0f2',
   },
-  cartActionBtn: {
-    flex: 1,
-    height: 54,
+  wishlistActionBtn: {
+    width: 56,
+    height: 56,
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bookSlotBtn: {
+    flex: 1,
+    height: 56,
+    borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  buyActionBtn: {
-    flex: 1,
-    height: 54,
-    borderRadius: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  btnTextOutline: {
-    fontSize: 15,
-  },
-  btnTextFilled: {
-    fontSize: 15,
+  bookSlotBtnText: {
+    fontSize: 14,
+    letterSpacing: 1.2,
   },
   similarSection: {
     marginTop: 32,

@@ -28,6 +28,7 @@ router.post('/upload-video', (0, auth_middleware_js_1.authorize)(client_1.Role.A
 // Helper for other routes restricted to ADMIN & SUPERADMIN
 const restrictToAdmin = (0, auth_middleware_js_1.authorize)(client_1.Role.ADMIN, client_1.Role.SUPERADMIN);
 router.get('/dashboard', restrictToAdmin, admin_controller_js_1.AdminController.getDashboard);
+router.get('/dashboard/date-stats', restrictToAdmin, admin_controller_js_1.AdminController.getDateStats);
 router.post('/loyalty/adjust', restrictToAdmin, (0, validate_middleware_js_1.validate)(admin_controller_js_1.loyaltyAdjustSchema), admin_controller_js_1.AdminController.adjustPoints);
 router.get('/loyalty/transactions', restrictToAdmin, admin_controller_js_1.AdminController.listPointTransactions);
 router.get('/reports', restrictToAdmin, admin_controller_js_1.AdminController.getExtendedReports);
@@ -45,18 +46,16 @@ router.post('/categories', restrictToAdmin, (0, validate_middleware_js_1.validat
 router.put('/categories/reorder', restrictToAdmin, (0, validate_middleware_js_1.validate)(adminCategory_controller_js_1.categoriesReorderSchema), adminCategory_controller_js_1.AdminCategoryController.reorderCategories);
 router.put('/categories/:id', restrictToAdmin, (0, validate_middleware_js_1.validate)(adminCategory_controller_js_1.categoryUpdateSchema), adminCategory_controller_js_1.AdminCategoryController.updateCategory);
 router.delete('/categories/:id', restrictToAdmin, adminCategory_controller_js_1.AdminCategoryController.deleteCategory);
-// Sub-Category Management CRUD
-router.post('/categories/:categoryId/subcategories', restrictToAdmin, (0, validate_middleware_js_1.validate)(adminCategory_controller_js_1.subCategoryCreateSchema), adminCategory_controller_js_1.AdminCategoryController.createSubCategory);
-router.put('/subcategories/:id', restrictToAdmin, (0, validate_middleware_js_1.validate)(adminCategory_controller_js_1.subCategoryUpdateSchema), adminCategory_controller_js_1.AdminCategoryController.updateSubCategory);
-router.delete('/subcategories/:id', restrictToAdmin, adminCategory_controller_js_1.AdminCategoryController.deleteSubCategory);
 // App Customer Management (Admin-created customers for the mobile app)
 router.post('/customers', restrictToAdmin, (0, validate_middleware_js_1.validate)(adminCustomer_controller_js_1.appCustomerCreateSchema), adminCustomer_controller_js_1.AdminCustomerController.createCustomer);
 router.put('/customers/:id', restrictToAdmin, (0, validate_middleware_js_1.validate)(adminCustomer_controller_js_1.appCustomerUpdateSchema), adminCustomer_controller_js_1.AdminCustomerController.updateCustomer);
+router.post('/customers/:id/force-password-reset', restrictToAdmin, adminCustomer_controller_js_1.AdminCustomerController.forcePasswordReset);
 router.delete('/customers/:id', restrictToAdmin, adminCustomer_controller_js_1.AdminCustomerController.deleteCustomer);
 // Staff management (Read-only staff list allowed for STAFF; CRUD restricted to ADMIN/SUPERADMIN)
 router.get('/users', (0, auth_middleware_js_1.authorize)(client_1.Role.ADMIN, client_1.Role.SUPERADMIN, client_1.Role.STAFF), admin_controller_js_1.AdminController.listStaff);
 router.post('/users', restrictToAdmin, (0, validate_middleware_js_1.validate)(admin_controller_js_1.staffCreateSchema), admin_controller_js_1.AdminController.createStaff);
 router.put('/users/:id', restrictToAdmin, (0, validate_middleware_js_1.validate)(admin_controller_js_1.userUpdateSchema), admin_controller_js_1.AdminController.updateStaff);
+router.post('/users/:id/force-password-reset', restrictToAdmin, admin_controller_js_1.AdminController.forceStaffPasswordReset);
 // Role management (Restricted to SUPERADMIN)
 router.put('/users/:id/role', (0, auth_middleware_js_1.authorize)(client_1.Role.SUPERADMIN), (0, validate_middleware_js_1.validate)(admin_controller_js_1.userRoleUpdateSchema), admin_controller_js_1.AdminController.updateUserRole);
 // Coupon management

@@ -9,7 +9,7 @@ import Constants from 'expo-constants';
 const getApiUrl = () => {
   // If running in production mode (production APK/AAB or App Store bundle), use the public production URL
   if (typeof __DEV__ !== 'undefined' && !__DEV__) {
-    const prodUrl = 'https://api.marcosbespoke.com/api/v1'; // Replace with your production domain
+    const prodUrl = 'https://marcos-xxza.onrender.com/api/v1'; // Replace with your production domain
     console.log('[API] Production build: using server URL:', prodUrl);
     return prodUrl;
   }

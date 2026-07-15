@@ -189,8 +189,10 @@ export class MeasurementController {
         const newValues: Record<string, any> = {};
 
         Object.keys(updates).forEach((key) => {
-          prevValues[key] = (existingProfile as any)[key];
-          newValues[key] = (updated as any)[key];
+          const prev = (existingProfile as any)[key];
+          const curr = (updated as any)[key];
+          if (prev !== undefined) prevValues[key] = prev;
+          if (curr !== undefined) newValues[key] = curr;
         });
 
         // 3. Save to History
@@ -203,27 +205,25 @@ export class MeasurementController {
           },
         });
 
-        // 4. Save to AuditLog
-        await tx.auditLog.create({
-          data: {
-            userId: user.id,
-            action: 'UPDATE_MEASUREMENT',
-            ipAddress: req.ip,
-            details: {
-              message: `Staff member ${user.fullName} updated measurement profile '${existingProfile.profileName}' (Profile ID: ${id})`,
-              profileId: id,
-              profileName: existingProfile.profileName,
-              changedBy: user.id,
-              previousValues: prevValues,
-              newValues,
-            },
-          },
-        });
-
-        return updated;
+        return { updated, prevValues, newValues };
       });
 
-      return res.status(200).json({ success: true, data: updatedProfile });
+      // 4. Save to AuditLog (outside tx)
+      await createAuditLog({
+        userId: user.id,
+        action: 'UPDATE_MEASUREMENT',
+        ipAddress: req.ip,
+        details: {
+          message: `Staff member ${user.fullName} updated measurement profile '${existingProfile.profileName}' (Profile ID: ${id})`,
+          profileId: id,
+          profileName: existingProfile.profileName,
+          changedBy: user.id,
+          previousValues: updatedProfile.prevValues,
+          newValues: updatedProfile.newValues,
+        },
+      });
+
+      return res.status(200).json({ success: true, data: updatedProfile.updated });
     } catch (error) {
       next(error);
     }

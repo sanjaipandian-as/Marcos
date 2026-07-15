@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import WishlistIcon from '../../components/common/WishlistIcon';
 import {
   StyleSheet,
   Text,
@@ -13,7 +14,8 @@ import {
   Dimensions,
   Alert,
   Modal,
-  PanResponder
+  PanResponder,
+  Animated
 } from 'react-native';
 import { useTheme } from '../../styles/ThemeContext';
 import api from '../../utils/api';
@@ -24,7 +26,10 @@ import {
   ShoppingCart,
   Heart,
   ChevronRight,
-  X
+  ChevronDown,
+  X,
+  CheckSquare,
+  Square
 } from 'lucide-react-native';
 import { CustomCartAddIcon, CustomCartAddedIcon } from '../../components/CartIcons';
 
@@ -50,6 +55,94 @@ export default function ProductsCatalogScreen({ navigation, route }) {
   const [activeThumb, setActiveThumb] = useState('right');
   const [subCategories, setSubCategories] = useState([]);
   const [selectedSubCategory, setSelectedSubCategory] = useState(null);
+  const [expandedCategories, setExpandedCategories] = useState(new Set());
+
+  const toggleExpand = (catId) => {
+    setExpandedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(catId)) next.delete(catId);
+      else next.add(catId);
+      return next;
+    });
+  };
+
+  // Get all descendant category IDs (including the node itself) for filtering
+  const getAllDescendantIds = (node) => {
+    const ids = [node.id];
+    if (node.subCategories && node.subCategories.length > 0) {
+      node.subCategories.forEach(child => {
+        ids.push(...getAllDescendantIds(child));
+      });
+    }
+    return ids;
+  };
+
+  // Recursive renderer for category tree nodes
+  const renderCategoryNode = (node, depth = 0, rootId = null) => {
+    const effectiveRoot = rootId || node.id;
+    const isChecked = selectedCategory === node.id;
+    const hasSub = node.subCategories && node.subCategories.length > 0;
+    const isExpanded = expandedCategories.has(node.id);
+    const indentLeft = depth * 16;
+
+    return (
+      <View key={node.id}>
+        <View style={[styles.checkboxRow, { paddingLeft: indentLeft }]}>
+          <TouchableOpacity
+            style={styles.expandIconBox}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            onPress={() => { if (hasSub) toggleExpand(node.id); }}
+          >
+            {hasSub ? (
+              isExpanded ? <ChevronDown size={15} color="#a1a1aa" /> : <ChevronRight size={15} color="#a1a1aa" />
+            ) : (
+              <View style={{ width: 15 }} />
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.checkboxRowContent}
+            activeOpacity={0.65}
+            onPress={() => {
+              if (isChecked) {
+                // Deselect — go back to All
+                setSelectedCategory('All');
+                setSelectedSubCategory(null);
+              } else {
+                // Select this node directly (works at any depth)
+                setSelectedCategory(node.id);
+                setSelectedSubCategory(null);
+                if (hasSub) setExpandedCategories(prev => new Set(prev).add(node.id));
+              }
+            }}
+          >
+            <View style={[
+              styles.customCheckbox,
+              depth > 0 && styles.customCheckboxSmall,
+              isChecked && styles.customCheckboxActive
+            ]}>
+              {isChecked && <View style={depth === 0 ? styles.customCheckboxInner : styles.customCheckboxInnerSmall} />}
+            </View>
+            <Text style={[
+              depth === 0 ? styles.checkboxLabel : styles.subCheckboxLabel,
+              {
+                fontFamily: isChecked ? fonts.semiBold : fonts.regular,
+                color: isChecked ? '#18181b' : (depth === 0 ? '#52525b' : '#71717a')
+              }
+            ]}>
+              {node.name}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {isExpanded && hasSub && (
+          <View style={{ paddingLeft: indentLeft + 8 }}>
+            {node.subCategories.map(child => renderCategoryNode(child, depth + 1, effectiveRoot))}
+          </View>
+        )}
+      </View>
+    );
+  };
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -59,6 +152,27 @@ export default function ProductsCatalogScreen({ navigation, route }) {
 
   // Slider Dragging Logic — use refs so PanResponder closures always read fresh values
   const [sliderWidth, setSliderWidth] = useState(1);
+  const [modalVisible, setModalVisible] = useState(false);
+  const slideAnim = useRef(new Animated.Value(width)).current;
+
+  const openFilters = () => {
+    setModalVisible(true);
+    Animated.spring(slideAnim, {
+      toValue: 0,
+      useNativeDriver: true,
+      bounciness: 0,
+      speed: 14
+    }).start();
+  };
+
+  const closeFilters = () => {
+    Animated.timing(slideAnim, {
+      toValue: width,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => setModalVisible(false));
+  };
+
   const minPriceRef = useRef(Number(minPrice) || 0);
   const maxPriceRef = useRef(Number(maxPrice) || 50000);
   const absoluteMinRef = useRef(absoluteMin);
@@ -253,26 +367,15 @@ export default function ProductsCatalogScreen({ navigation, route }) {
     }
   }, [selectedCategory, products]);
 
-  // Fetch Subcategories when Category changes
+  // Load Subcategories when Category changes
   useEffect(() => {
-    if (selectedCategory !== 'All') {
-      const fetchSubCategories = async () => {
-        try {
-          const res = await api.get(`/categories/${selectedCategory}/subcategories`);
-          if (res.success) {
-            setSubCategories(res.data || []);
-          } else {
-            setSubCategories([]);
-          }
-        } catch (err) {
-          setSubCategories([]);
-        }
-      };
-      fetchSubCategories();
+    if (selectedCategory !== 'All' && categories.length > 0) {
+      const category = categories.find(c => c.id === selectedCategory);
+      setSubCategories(category?.subCategories || []);
     } else {
       setSubCategories([]);
     }
-  }, [selectedCategory]);
+  }, [selectedCategory, categories]);
 
   const toggleFavorite = async (productId) => {
     try {
@@ -323,14 +426,21 @@ export default function ProductsCatalogScreen({ navigation, route }) {
   const getFilteredProducts = () => {
     let result = products;
 
-    // Filter by Category
+    // Filter by selected category — collect all descendant IDs so sub/sub-sub products show too
     if (selectedCategory !== 'All') {
-      result = result.filter(product => product.categoryId === selectedCategory);
-    }
-
-    // Filter by SubCategory
-    if (selectedSubCategory) {
-      result = result.filter(product => product.subCategoryId === selectedSubCategory);
+      const findNode = (nodes, id) => {
+        for (const n of nodes) {
+          if (n.id === id) return n;
+          if (n.subCategories) {
+            const found = findNode(n.subCategories, id);
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+      const selectedNode = findNode(categories, selectedCategory);
+      const validIds = selectedNode ? getAllDescendantIds(selectedNode) : [selectedCategory];
+      result = result.filter(product => validIds.includes(product.categoryId));
     }
 
     // Filter by Price Range
@@ -432,8 +542,12 @@ export default function ProductsCatalogScreen({ navigation, route }) {
             </TouchableOpacity>
           )}
         </View>
-        <TouchableOpacity style={[styles.filterSettingsBtn, { backgroundColor: showFilters ? theme.brand[500] : theme.bg.card }, shadows.premium]} activeOpacity={0.7} onPress={() => setShowFilters(v => !v)}>
-          <SlidersHorizontal size={18} color={showFilters ? '#ffffff' : '#1e1e1e'} />
+        <TouchableOpacity 
+          style={[styles.filterSettingsBtn, { backgroundColor: theme.bg.card }, shadows.premium]} 
+          activeOpacity={0.7} 
+          onPress={openFilters}
+        >
+          <SlidersHorizontal size={18} color="#1e1e1e" />
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.wishlistHeaderBtn, { backgroundColor: theme.bg.card }, shadows.premium]} 
@@ -460,67 +574,7 @@ export default function ProductsCatalogScreen({ navigation, route }) {
               <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
                 Products
               </Text>
-              <TouchableOpacity 
-                onPress={() => { 
-                  setSelectedCategory('All'); 
-                  setSelectedSubCategory(null);
-                  setMinPrice(absoluteMin.toString()); 
-                  setMaxPrice(absoluteMax.toString()); 
-                }}
-                style={[styles.seeAllBtn, { backgroundColor: theme.brand[50] }]}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.seeAllBtnText, { fontFamily: fonts.bold, color: '#6B4B6B' }]}>
-                  Clear Filters
-                </Text>
-                <X size={12} color="#6B4B6B" />
-              </TouchableOpacity>
             </View>
-
-            {/* Subcategories Horizontal Scroll */}
-            {selectedCategory !== 'All' && subCategories.length > 0 && (
-              <ScrollView 
-                horizontal 
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 16, gap: 10 }}
-              >
-                <TouchableOpacity
-                  style={[
-                    styles.subCategoryPill,
-                    !selectedSubCategory ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.card }
-                  ]}
-                  onPress={() => setSelectedSubCategory(null)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[
-                    styles.subCategoryText,
-                    { fontFamily: fonts.medium },
-                    !selectedSubCategory ? { color: '#3D2E3D' } : { color: theme.text.primary }
-                  ]}>
-                    All
-                  </Text>
-                </TouchableOpacity>
-                {subCategories.map(sub => (
-                  <TouchableOpacity
-                    key={sub.id}
-                    style={[
-                      styles.subCategoryPill,
-                      selectedSubCategory === sub.id ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.card }
-                    ]}
-                    onPress={() => setSelectedSubCategory(sub.id)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[
-                      styles.subCategoryText,
-                      { fontFamily: fonts.medium },
-                      selectedSubCategory === sub.id ? { color: '#3D2E3D' } : { color: theme.text.primary }
-                    ]}>
-                      {sub.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            )}
           </>
         }
         renderItem={({ item }) => {
@@ -539,17 +593,6 @@ export default function ProductsCatalogScreen({ navigation, route }) {
                     source={{ uri: (item.images && item.images[0]) || undefined }}
                     style={styles.productImage}
                   />
-                  <TouchableOpacity
-                    style={styles.favBtn}
-                    onPress={() => toggleFavorite(item.id)}
-                    activeOpacity={0.7}
-                  >
-                    <Heart
-                      size={14}
-                      color={isFav ? '#3D2E3D' : '#767676'}
-                      fill={isFav ? '#3D2E3D' : 'transparent'}
-                    />
-                  </TouchableOpacity>
                 </View>
                 
                 <View style={styles.productInfo}>
@@ -569,20 +612,16 @@ export default function ProductsCatalogScreen({ navigation, route }) {
                       ) : null}
                     </View>
                     <TouchableOpacity
-                      style={[
-                        styles.cartBtn,
-                        inCart
-                          ? { backgroundColor: '#3D2E3D', borderWidth: 1, borderColor: '#3D2E3D' }
-                          : { backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#D8BFD8' }
-                      ]}
-                      onPress={() => handleAddToCart(item.id)}
-                      activeOpacity={0.7}
+                      style={styles.wishlistBtnBottom}
+                      onPress={() => toggleFavorite(item.id)}
+                      activeOpacity={0.6}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                     >
-                      {inCart ? (
-                        <CustomCartAddedIcon color="#FDFBFD" size={18} />
-                      ) : (
-                        <CustomCartAddIcon color="#3D2E3D" size={18} />
-                      )}
+                      <WishlistIcon
+                        size={22}
+                        color={isFav ? '#ef4444' : '#94a3b8'}
+                        fill={isFav ? '#ef4444' : 'transparent'}
+                      />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -619,212 +658,50 @@ export default function ProductsCatalogScreen({ navigation, route }) {
 
       {/* Filters Modal */}
       <Modal
-        visible={showFilters}
-        animationType="slide"
+        visible={modalVisible}
+        animationType="fade"
         transparent={true}
-        onRequestClose={() => setShowFilters(false)}
+        onRequestClose={closeFilters}
       >
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowFilters(false)}>
-          <TouchableOpacity activeOpacity={1} style={[styles.modalContent, { backgroundColor: theme.bg.main }, shadows.premium]}>
-            {/* Custom Tabs Header */}
-            <View style={styles.filterTabsHeader}>
-              <TouchableOpacity onPress={() => setActiveFilterTab('Product')} style={styles.topFilterTabBtn} activeOpacity={0.7}>
-                <Text style={[styles.topFilterTabText, activeFilterTab === 'Product' && styles.topFilterTabTextActive]}>Product Filter</Text>
-                {activeFilterTab === 'Product' && <View style={styles.activeTabIndicator} />}
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setActiveFilterTab('Price')} style={styles.topFilterTabBtn} activeOpacity={0.7}>
-                <Text style={[styles.topFilterTabText, activeFilterTab === 'Price' && styles.topFilterTabTextActive]}>Price Filter</Text>
-                {activeFilterTab === 'Price' && <View style={styles.activeTabIndicator} />}
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeFilters}>
+          <Animated.View style={[styles.sideDrawer, { backgroundColor: theme.bg.main, transform: [{ translateX: slideAnim }] }, shadows.premium]}>
+            <TouchableOpacity activeOpacity={1} style={{ flex: 1 }}>
+            <View style={styles.filterDrawerHeader}>
+              <Text style={[styles.filterDrawerTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>Filter by category</Text>
+              <TouchableOpacity onPress={closeFilters} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <X size={20} color={theme.text.muted} />
               </TouchableOpacity>
             </View>
-            
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
-              {activeFilterTab === 'Product' ? (
-                <View>
-                  <Text style={[styles.filterLabel, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-                    Category
-                  </Text>
-                  <View style={styles.filterTabsGrid}>
-                    <TouchableOpacity
-                      style={[
-                        styles.filterTabPill,
-                        selectedCategory === 'All' ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.card }
-                      ]}
-                      activeOpacity={0.8}
-                      onPress={() => { setSelectedCategory('All'); setSelectedSubCategory(null); }}
-                    >
-                      <Text
-                        style={[
-                          styles.filterTabText,
-                          { fontFamily: fonts.medium },
-                          selectedCategory === 'All' ? { color: '#ffffff' } : { color: theme.text.primary }
-                        ]}
-                      >
-                        All
-                      </Text>
-                    </TouchableOpacity>
-                    {categories.map((cat) => {
-                      const isActive = selectedCategory === cat.id;
-                      return (
-                        <TouchableOpacity
-                          key={cat.id}
-                          style={[
-                            styles.filterTabPill,
-                            isActive ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.card }
-                          ]}
-                          activeOpacity={0.8}
-                          onPress={() => { setSelectedCategory(cat.id); setSelectedSubCategory(null); }}
-                        >
-                          <Text
-                            style={[
-                              styles.filterTabText,
-                              { fontFamily: fonts.medium },
-                              isActive ? { color: '#ffffff' } : { color: theme.text.primary }
-                            ]}
-                          >
-                            {cat.name}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                  
-                  {/* Subcategories in Filter Modal */}
-                  {selectedCategory !== 'All' && subCategories.length > 0 && (
-                    <View style={{ marginTop: 24 }}>
-                      <Text style={[styles.filterLabel, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-                        Subcategory
-                      </Text>
-                      <View style={styles.filterTabsGrid}>
-                        <TouchableOpacity
-                          style={[
-                            styles.filterTabPill,
-                            !selectedSubCategory ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.card }
-                          ]}
-                          activeOpacity={0.8}
-                          onPress={() => setSelectedSubCategory(null)}
-                        >
-                          <Text
-                            style={[
-                              styles.filterTabText,
-                              { fontFamily: fonts.medium },
-                              !selectedSubCategory ? { color: '#ffffff' } : { color: theme.text.primary }
-                            ]}
-                          >
-                            All
-                          </Text>
-                        </TouchableOpacity>
-                        {subCategories.map((sub) => {
-                          const isActive = selectedSubCategory === sub.id;
-                          return (
-                            <TouchableOpacity
-                              key={sub.id}
-                              style={[
-                                styles.filterTabPill,
-                                isActive ? { backgroundColor: theme.brand[500] } : { backgroundColor: theme.bg.card }
-                              ]}
-                              activeOpacity={0.8}
-                              onPress={() => setSelectedSubCategory(sub.id)}
-                            >
-                              <Text
-                                style={[
-                                  styles.filterTabText,
-                                  { fontFamily: fonts.medium },
-                                  isActive ? { color: '#ffffff' } : { color: theme.text.primary }
-                                ]}
-                              >
-                                {sub.name}
-                              </Text>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  )}
-                </View>
-              ) : (
-                <View style={styles.priceFilterContainer}>
-                  {/* Interactive Slider */}
-                  <View 
-                    style={styles.sliderVisualContainer} 
-                    onLayout={(e) => setSliderWidth(e.nativeEvent.layout.width)}
-                  >
-                    <View style={styles.sliderTrackLine} />
-                    <View style={[styles.sliderActiveLine, { left: `${getThumbLeftPercent()}%`, width: `${Math.max(0, getThumbRightPercent() - getThumbLeftPercent())}%` }]} />
-                    
-                    <View 
-                      style={[styles.sliderThumbContainer, { left: `${getThumbLeftPercent()}%`, zIndex: activeThumb === 'left' ? 20 : 10 }]}
-                      {...leftThumbPanResponder.panHandlers}
-                      hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-                    >
-                      <View style={styles.tooltipBubble}>
-                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>◀</Text>
-                      </View>
-                      <View style={styles.tooltipPointer} />
-                      <View style={styles.trackDot} />
-                    </View>
+            <View style={styles.filterDrawerSubheader}>
+               <Text style={[styles.filterDrawerSubText, { color: theme.text.secondary }]}>
+                 {selectedCategory === 'All' && !selectedSubCategory ? 'No filters selected' : '1 filter selected'}
+               </Text>
+            </View>
 
-                    <View 
-                      style={[styles.sliderThumbContainer, { left: `${getThumbRightPercent()}%`, zIndex: activeThumb === 'right' ? 20 : 10 }]}
-                      {...rightThumbPanResponder.panHandlers}
-                      hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-                    >
-                      <View style={styles.tooltipBubble}>
-                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>▶</Text>
-                      </View>
-                      <View style={styles.tooltipPointer} />
-                      <View style={styles.trackDot} />
-                    </View>
-                  </View>
-
-                  {/* From To Boxes */}
-                  <View style={styles.priceInputsRow}>
-                    <View style={styles.priceInputBox}>
-                      <Text style={styles.priceInputLabel}>From :</Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Text style={styles.priceCurrencySymbol}>₹</Text>
-                        <TextInput
-                          style={styles.priceInputValue}
-                          value={minPrice}
-                          onChangeText={setMinPrice}
-                          keyboardType="numeric"
-                        />
-                      </View>
-                    </View>
-                    <View style={styles.priceInputBox}>
-                      <Text style={styles.priceInputLabel}>To :</Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Text style={styles.priceCurrencySymbol}>₹</Text>
-                        <TextInput
-                          style={styles.priceInputValue}
-                          value={maxPrice}
-                          onChangeText={setMaxPrice}
-                          keyboardType="numeric"
-                        />
-                      </View>
-                    </View>
-                  </View>
-                </View>
-              )}
-              
-              <View style={styles.filterActionsRow}>
-                <TouchableOpacity 
-                  style={styles.applyFilterBtnBlack} 
-                  onPress={() => setShowFilters(false)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.applyFilterBtnBlackText, { fontFamily: fonts.bold }]}>Apply</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.cancelFilterBtn} 
-                  onPress={() => setShowFilters(false)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.cancelFilterBtnText, { fontFamily: fonts.bold }]}>Cancel</Text>
-                </TouchableOpacity>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
+              <View style={styles.categoryCheckboxList}>
+                {categories.map(cat => renderCategoryNode(cat, 0))}
               </View>
             </ScrollView>
-          </TouchableOpacity>
+            
+            <View style={styles.filterActionsRowFixed}>
+              <TouchableOpacity 
+                style={styles.cancelFilterBtnLight} 
+                onPress={() => { setSelectedCategory('All'); setSelectedSubCategory(null); }}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.cancelFilterBtnTextLight, { fontFamily: fonts.bold }]}>Reset</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.applyFilterBtnBlack} 
+                onPress={closeFilters}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.applyFilterBtnBlackText, { fontFamily: fonts.bold }]}>Apply filters</Text>
+              </TouchableOpacity>
+            </View>
+            </TouchableOpacity>
+          </Animated.View>
         </TouchableOpacity>
       </Modal>
 
@@ -906,15 +783,37 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    flexDirection: 'row',
     justifyContent: 'flex-end',
   },
-  modalContent: {
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    paddingTop: 16,
+  sideDrawer: {
+    width: width * 0.85,
+    height: '100%',
+    borderTopLeftRadius: 24,
+    borderBottomLeftRadius: 24,
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
-    maxHeight: '90%',
+    flexDirection: 'column',
+  },
+  filterDrawerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 56 : 40,
+    paddingBottom: 8,
+  },
+  filterDrawerTitle: {
+    fontSize: 18,
+  },
+  filterDrawerSubheader: {
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f4f4f5',
+  },
+  filterDrawerSubText: {
+    fontSize: 13,
   },
   filterTabsHeader: {
     flexDirection: 'row',
@@ -1066,37 +965,110 @@ const styles = StyleSheet.create({
     padding: 0,
     flex: 1,
   },
-  filterActionsRow: {
+  filterActionsRowFixed: {
     flexDirection: 'row',
     paddingHorizontal: 24,
-    marginTop: 30,
-    gap: 16,
+    paddingTop: 16,
+    paddingBottom: Platform.OS === 'ios' ? 32 : 24,
+    borderTopWidth: 1,
+    borderTopColor: '#f4f4f5',
+    backgroundColor: '#ffffff',
+    gap: 12,
+  },
+  categoryCheckboxList: {
+    paddingHorizontal: 20,
+  },
+  checkboxItemWrapper: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#f4f4f5',
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  expandIconBox: {
+    width: 28,
+    alignItems: 'center',
+    marginRight: 2,
+  },
+  checkboxRowContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  customCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#d4d4d8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  customCheckboxActive: {
+    borderColor: '#18181b',
+    backgroundColor: '#18181b',
+  },
+  customCheckboxSmall: {
+    width: 18,
+    height: 18,
+    borderRadius: 3,
+  },
+  customCheckboxInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 2,
+    backgroundColor: '#ffffff',
+  },
+  customCheckboxInnerSmall: {
+    width: 8,
+    height: 8,
+    borderRadius: 1,
+    backgroundColor: '#ffffff',
+  },
+  checkboxLabel: {
+    fontSize: 15,
+  },
+  subCategoryCheckboxList: {
+    paddingLeft: 42,
+    paddingBottom: 8,
+  },
+  subCheckboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    gap: 12,
+  },
+  subCheckboxLabel: {
+    fontSize: 14,
   },
   applyFilterBtnBlack: {
-    flex: 2,
+    flex: 1,
     backgroundColor: '#000000',
-    borderRadius: 16,
-    height: 56,
+    borderRadius: 12,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
   },
   applyFilterBtnBlackText: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 14,
   },
-  cancelFilterBtn: {
+  cancelFilterBtnLight: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: 'transparent',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e5e5e5',
-    borderRadius: 16,
-    height: 56,
+    borderColor: '#e4e4e7',
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cancelFilterBtnText: {
-    color: '#000000',
-    fontSize: 16,
+  cancelFilterBtnTextLight: {
+    color: '#18181b',
+    fontSize: 14,
   },
   gridContainer: {
     flexDirection: 'row',
@@ -1133,17 +1105,11 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  favBtn: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#ffffff',
+  wishlistBtnBottom: {
+    padding: 4,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 5,
+    marginLeft: 8,
   },
   productInfo: {
     padding: 10,

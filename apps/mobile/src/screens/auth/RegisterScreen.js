@@ -23,21 +23,25 @@ import { ChevronLeft, Eye, EyeOff } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
 
-export default function RegisterScreen({ navigation, onLoginSuccess }) {
+export default function RegisterScreen({ route, navigation, onLoginSuccess }) {
   const { theme, fonts, shadows } = useTheme();
   
   // Registration steps: 1 (Contact Info) -> 2 (OTP Verification) -> 3 (Password & Delivery Details)
   const [step, setStep] = useState(1);
   
+  const initialIdentifier = route?.params?.identifier || '';
+  const isEmail = initialIdentifier.includes('@');
+
   // Step 1 States
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const [email, setEmail] = useState(isEmail ? initialIdentifier : '');
+  const [phoneNumber, setPhoneNumber] = useState(!isEmail ? initialIdentifier : '');
   const [referredByCode, setReferredByCode] = useState('');
 
   // Step 2 States
   const [otpCode, setOtpCode] = useState('');
   const [timer, setTimer] = useState(0);
+  const [registrationToken, setRegistrationToken] = useState('');
 
   // Step 3 States
   const [password, setPassword] = useState('');
@@ -113,6 +117,7 @@ export default function RegisterScreen({ navigation, onLoginSuccess }) {
 
       const res = await api.post('/auth/otp/verify', payload);
       if (res.success) {
+        setRegistrationToken(res.registrationToken);
         setStep(3);
       } else {
         setErrorMsg(res.message || 'Invalid verification code.');
@@ -148,6 +153,7 @@ export default function RegisterScreen({ navigation, onLoginSuccess }) {
         email: email.trim().toLowerCase(),
         phoneNumber: phoneNumber.trim(),
         password,
+        registrationToken,
         address: address ? address.trim() : null,
         gender: gender,
         referredByCode: referredByCode ? referredByCode.trim() : null,

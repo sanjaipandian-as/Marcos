@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AuthController = exports.confirmContactUpdateSchema = exports.requestContactUpdateSchema = exports.verifyPasswordSchema = exports.redeemPointsSchema = exports.updateProfileSchema = exports.verifyResetOtpSchema = exports.resetPasswordSchema = exports.forgotPasswordSchema = exports.otpVerifySchema = exports.otpSendSchema = exports.loginSchema = exports.registerSchema = void 0;
+exports.AuthController = exports.confirmContactUpdateSchema = exports.requestContactUpdateSchema = exports.verifyPasswordSchema = exports.redeemPointsSchema = exports.updateProfileSchema = exports.verifyResetOtpSchema = exports.resetPasswordSchema = exports.forgotPasswordSchema = exports.otpVerifySchema = exports.otpSendSchema = exports.setupPasswordSchema = exports.checkIdentifierSchema = exports.loginSchema = exports.registerSchema = void 0;
 exports.normalizePhoneNumber = normalizePhoneNumber;
 const zod_1 = require("zod");
 const db_js_1 = __importDefault(require("../config/db.js"));
@@ -13,6 +13,9 @@ const auth_service_js_1 = __importDefault(require("../services/auth.service.js")
 const sms_service_js_1 = __importDefault(require("../services/sms.service.js"));
 const email_service_js_1 = __importDefault(require("../services/email.service.js"));
 const crypto_1 = __importDefault(require("crypto"));
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const env_js_1 = __importDefault(require("../config/env.js"));
+const password_validator_js_1 = require("../validators/password.validator.js");
 const audit_js_1 = require("../utils/audit.js");
 const logger_js_1 = __importDefault(require("../utils/logger.js"));
 function normalizePhoneNumber(phone) {
@@ -38,6 +41,7 @@ exports.registerSchema = zod_1.z.object({
         phoneNumber: zod_1.z.string(),
         password: zod_1.z.string().min(6),
         fullName: zod_1.z.string(),
+        registrationToken: zod_1.z.string().min(1, "Registration token is required"),
         referredById: zod_1.z.string().uuid().optional().nullable(),
         referredByCode: zod_1.z.string().optional().nullable(),
         role: zod_1.z.enum(['CUSTOMER', 'STAFF', 'ADMIN']).optional(),
@@ -48,6 +52,19 @@ exports.loginSchema = zod_1.z.object({
     body: zod_1.z.object({
         email: zod_1.z.string(), // Accepts both email or phone number
         password: zod_1.z.string(),
+    }),
+});
+// Check Identifier Schema
+exports.checkIdentifierSchema = zod_1.z.object({
+    body: zod_1.z.object({
+        identifier: zod_1.z.string().min(1, "Identifier is required"), // Email or phone
+    }),
+});
+// Setup Password Schema
+exports.setupPasswordSchema = zod_1.z.object({
+    body: zod_1.z.object({
+        verifyToken: zod_1.z.string().min(1, "Verify token is required"),
+        newPassword: zod_1.z.string().min(10, "Password must be at least 10 characters"),
     }),
 });
 // OTP send schema
@@ -138,11 +155,20 @@ class AuthController {
      */
     static async register(req, res, next) {
         try {
-            let { email, phoneNumber, password, fullName, referredById, referredByCode, role } = req.body;
+            let { email, phoneNumber, password, fullName, registrationToken, referredById, referredByCode, role } = req.body;
             const normalizedPhone = normalizePhoneNumber(phoneNumber);
             const cleanDigits = phoneNumber.replace(/[\s\-()]/g, '');
             const rawDigits = cleanDigits.startsWith('+91') ? cleanDigits.substring(3) : (cleanDigits.startsWith('91') ? cleanDigits.substring(2) : cleanDigits);
             const possiblePhoneNumbers = [phoneNumber, normalizedPhone, cleanDigits, rawDigits];
+            // Validate Registration Token
+            const storedTokenPhone = await redis_js_1.default.get(`registration_token:${normalizedPhone}`);
+            const storedTokenEmail = await redis_js_1.default.get(`registration_token:${email}`);
+            if (!storedTokenPhone && !storedTokenEmail) {
+                return res.status(401).json({ success: false, message: 'Registration token missing or expired. Please verify your OTP again.' });
+            }
+            if ((storedTokenPhone && storedTokenPhone !== registrationToken) && (storedTokenEmail && storedTokenEmail !== registrationToken)) {
+                return res.status(401).json({ success: false, message: 'Invalid registration token.' });
+            }
             // Check existence
             const existingUser = await db_js_1.default.user.findFirst({
                 where: {
@@ -232,6 +258,110 @@ class AuthController {
         }
     }
     /**
+     * POST /auth/login/check
+     * Amazon-style step 1: Check if identifier exists and if password setup is required
+     */
+    static async checkIdentifier(req, res, next) {
+        const { identifier } = req.body;
+        try {
+            const start = process.hrtime.bigint();
+            let possiblePhoneNumbers = [identifier];
+            if (!identifier.includes('@')) {
+                const normalized = normalizePhoneNumber(identifier);
+                const clean = identifier.replace(/[\s\-()]/g, '');
+                const raw = clean.startsWith('+91') ? clean.substring(3) : (clean.startsWith('91') ? clean.substring(2) : clean);
+                possiblePhoneNumbers = [identifier, normalized, clean, raw];
+            }
+            const user = await db_js_1.default.user.findFirst({
+                where: {
+                    OR: [
+                        { email: identifier },
+                        { phoneNumber: { in: possiblePhoneNumbers } }
+                    ]
+                }
+            });
+            // Constant-time-ish: always do a comparable amount of work
+            if (!user || !user.passwordHash) {
+                // Dummy bcrypt comparison
+                await (0, crypto_js_1.verifyPassword)("dummy_password", "$2b$10$C8.w1N/bY.W/F8e8uO/3k.U5EwKqZ6M3v/Zz1L6C.m3J0XwX7.F.m");
+            }
+            const state = !user
+                ? 'NOT_FOUND'
+                : !user.passwordHash
+                    ? 'SETUP_REQUIRED'
+                    : 'PASSWORD_REQUIRED';
+            const end = process.hrtime.bigint();
+            const elapsedMs = Number(end - start) / 1000000;
+            if (elapsedMs < 150) {
+                await new Promise(resolve => setTimeout(resolve, 150 - elapsedMs));
+            }
+            return res.status(200).json({ success: true, status: state });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    /**
+     * POST /auth/setup-password
+     */
+    static async setupPassword(req, res, next) {
+        const { verifyToken, newPassword } = req.body;
+        const clientType = req.headers['x-client-type'] || 'web';
+        try {
+            // 1. Verify token
+            let decoded;
+            try {
+                decoded = jsonwebtoken_1.default.verify(verifyToken, env_js_1.default.JWT_ACCESS_SECRET);
+                if (decoded.scope !== 'setup-password')
+                    throw new Error('Invalid token scope');
+            }
+            catch (err) {
+                return res.status(401).json({ success: false, message: 'Invalid or expired verify token.' });
+            }
+            // 2. Find User
+            const user = await db_js_1.default.user.findUnique({
+                where: { id: decoded.sub }
+            });
+            if (!user) {
+                return res.status(404).json({ success: false, message: 'User not found.' });
+            }
+            // 3. Validate new password
+            (0, password_validator_js_1.validatePassword)(newPassword, { email: user.email, fullName: user.fullName });
+            // 4. Update Password
+            const passwordHash = await (0, crypto_js_1.hashPassword)(newPassword);
+            await db_js_1.default.user.update({
+                where: { id: user.id },
+                // @ts-ignore - IDE TS cache issue
+                data: { passwordHash, passwordSetByUser: true }
+            });
+            // 5. Generate Tokens
+            const payload = {
+                id: user.id,
+                email: user.email,
+                role: user.role,
+                fullName: user.fullName,
+            };
+            const accessToken = auth_service_js_1.default.generateAccessToken(payload);
+            const refreshToken = await auth_service_js_1.default.generateRefreshToken(user.id);
+            if (clientType === 'web' || user.role === 'ADMIN' || user.role === 'SUPERADMIN') {
+                res.cookie('refreshToken', refreshToken, {
+                    path: '/',
+                    httpOnly: true,
+                    secure: process.env.NODE_ENV === 'production',
+                    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+                    maxAge: 7 * 24 * 60 * 60 * 1000,
+                });
+                return res.status(200).json({ success: true, accessToken, user: payload, message: 'Password configured successfully' });
+            }
+            else {
+                return res.status(200).json({ success: true, accessToken, refreshToken, user: payload, message: 'Password configured successfully' });
+            }
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    /**
      * POST /auth/login
      */
     static async login(req, res, next) {
@@ -245,6 +375,12 @@ class AuthController {
                 const raw = clean.startsWith('+91') ? clean.substring(3) : (clean.startsWith('91') ? clean.substring(2) : clean);
                 possiblePhoneNumbers = [email, normalized, clean, raw];
             }
+            // Check if IP or Email is temporarily blocked due to brute-force
+            const ipBlock = await redis_js_1.default.get(`block_login_ip:${req.ip}`);
+            const emailBlock = await redis_js_1.default.get(`block_login:${email}`);
+            if (ipBlock || emailBlock) {
+                return res.status(429).json({ success: false, message: 'Too many failed login attempts. Please try again later.' });
+            }
             const user = await db_js_1.default.user.findFirst({
                 where: {
                     OR: [
@@ -256,6 +392,9 @@ class AuthController {
             if (!user) {
                 await AuthController.trackFailedLogin(email, req.ip || 'unknown');
                 return res.status(401).json({ success: false, message: 'Invalid credentials' });
+            }
+            if (!user.passwordHash) {
+                return res.status(403).json({ success: false, message: 'SETUP_REQUIRED', details: 'Please setup your password first.' });
             }
             const isPasswordValid = await (0, crypto_js_1.verifyPassword)(password, user.passwordHash);
             if (!isPasswordValid) {
@@ -311,27 +450,33 @@ class AuthController {
         const countEmail = await redis_js_1.default.incr(keyEmail);
         const countIp = await redis_js_1.default.incr(keyIp);
         if (countEmail === 1)
-            await redis_js_1.default.expire(keyEmail, 60);
+            await redis_js_1.default.expire(keyEmail, 300); // 5 minutes window
         if (countIp === 1)
-            await redis_js_1.default.expire(keyIp, 60);
-        await (0, audit_js_1.createAuditLog)({
-            action: 'FAILED_LOGIN',
-            ipAddress: ip,
-            details: {
-                message: `Failed login attempt for identifier: ${email}`,
-                identifier: email,
-                timestamp: new Date().toISOString(),
-            },
-        });
+            await redis_js_1.default.expire(keyIp, 300);
         if (countEmail > 10 || countIp > 10) {
-            // Trigger warning into audit logs
+            // Block for 15 minutes
+            if (countEmail > 10)
+                await redis_js_1.default.set(`block_login:${email}`, 'blocked', 'EX', 900);
+            if (countIp > 10)
+                await redis_js_1.default.set(`block_login_ip:${ip}`, 'blocked', 'EX', 900);
             await (0, audit_js_1.createAuditLog)({
                 action: 'FAILED_LOGIN_ALERT',
                 ipAddress: ip,
                 details: {
-                    message: `More than 10 failed login attempts triggered. Email: ${email}, IP: ${ip}`,
+                    message: `More than 10 failed login attempts triggered. Blocked for 15 minutes. Email: ${email}, IP: ${ip}`,
                     email,
                     ip,
+                },
+            });
+        }
+        else {
+            await (0, audit_js_1.createAuditLog)({
+                action: 'FAILED_LOGIN',
+                ipAddress: ip,
+                details: {
+                    message: `Failed login attempt for identifier: ${email}`,
+                    identifier: email,
+                    timestamp: new Date().toISOString(),
                 },
             });
         }
@@ -343,6 +488,14 @@ class AuthController {
         const { phoneNumber, email } = req.body;
         const identifier = phoneNumber ? normalizePhoneNumber(phoneNumber) : email;
         try {
+            // IP-based Rate Limit (max 10 OTP requests per hour per IP)
+            const ipKey = `otp_ip_count:${req.ip}`;
+            const ipCount = await redis_js_1.default.incr(ipKey);
+            if (ipCount === 1)
+                await redis_js_1.default.expire(ipKey, 3600);
+            if (ipCount > 10) {
+                return res.status(429).json({ success: false, message: 'Too many OTP requests from this IP address. Please try again later.' });
+            }
             // 1. Check if the identifier is blocked (from failed verifications or hourly limit)
             const isBlocked = await redis_js_1.default.get(`cooldown:otp:${identifier}`);
             if (isBlocked) {
@@ -520,9 +673,13 @@ class AuthController {
                         message: 'Email or Phone Number already registered. Please login instead.',
                     });
                 }
+                // Generate registration token to prevent bypass
+                const registrationToken = crypto_1.default.randomBytes(32).toString('hex');
+                await redis_js_1.default.set(`registration_token:${identifier}`, registrationToken, 'EX', 900); // 15 mins TTL
                 return res.status(200).json({
                     success: true,
                     message: 'OTP verified successfully.',
+                    registrationToken
                 });
             }
             if (!user) {
@@ -530,6 +687,10 @@ class AuthController {
                     success: false,
                     message: 'Verification complete, but no user profile matches this phone/email. Please register first.',
                 });
+            }
+            if (purpose === 'setup-password') {
+                const verifyToken = jsonwebtoken_1.default.sign({ sub: user.id, scope: 'setup-password' }, env_js_1.default.JWT_ACCESS_SECRET, { expiresIn: '5m' });
+                return res.status(200).json({ success: true, message: 'OTP verified successfully.', verifyToken });
             }
             const payload = {
                 id: user.id,
@@ -677,10 +838,25 @@ class AuthController {
     static async verifyResetOtp(req, res, next) {
         const { email, code } = req.body;
         try {
+            // Check cooldown block
+            const isBlocked = await redis_js_1.default.get(`cooldown:reset_otp:${email}`);
+            if (isBlocked) {
+                return res.status(429).json({ success: false, message: 'Identifier temporarily locked out. Try again later.' });
+            }
             const storedHash = await redis_js_1.default.get(`reset_otp:${email}`);
             const hashedIncoming = crypto_1.default.createHash('sha256').update(code).digest('hex');
             if (!storedHash || storedHash !== hashedIncoming) {
-                return res.status(400).json({ success: false, message: 'Invalid or expired reset code.' });
+                // Track failed reset attempts
+                const failKey = `reset_otp_fail:${email}`;
+                const attempts = await redis_js_1.default.incr(failKey);
+                if (attempts === 1)
+                    await redis_js_1.default.expire(failKey, 900);
+                if (attempts >= 3) {
+                    await redis_js_1.default.set(`cooldown:reset_otp:${email}`, 'blocked', 'EX', 900);
+                    await redis_js_1.default.del(failKey);
+                    return res.status(429).json({ success: false, message: 'Too many incorrect attempts. Locked out for 15 minutes.' });
+                }
+                return res.status(400).json({ success: false, message: `Invalid or expired reset code. ${3 - attempts} attempts remaining.` });
             }
             return res.status(200).json({ success: true, message: 'Reset code verified successfully.' });
         }
@@ -694,13 +870,28 @@ class AuthController {
     static async resetPassword(req, res, next) {
         const { email, code, newPassword } = req.body;
         try {
+            // Check cooldown block
+            const isBlocked = await redis_js_1.default.get(`cooldown:reset_otp:${email}`);
+            if (isBlocked) {
+                return res.status(429).json({ success: false, message: 'Identifier temporarily locked out. Try again later.' });
+            }
             const storedHash = await redis_js_1.default.get(`reset_otp:${email}`);
             const hashedIncoming = crypto_1.default.createHash('sha256').update(code).digest('hex');
             if (!storedHash || storedHash !== hashedIncoming) {
-                return res.status(400).json({ success: false, message: 'Invalid or expired reset code.' });
+                const failKey = `reset_otp_fail:${email}`;
+                const attempts = await redis_js_1.default.incr(failKey);
+                if (attempts === 1)
+                    await redis_js_1.default.expire(failKey, 900);
+                if (attempts >= 3) {
+                    await redis_js_1.default.set(`cooldown:reset_otp:${email}`, 'blocked', 'EX', 900);
+                    await redis_js_1.default.del(failKey);
+                    return res.status(429).json({ success: false, message: 'Too many incorrect attempts. Locked out for 15 minutes.' });
+                }
+                return res.status(400).json({ success: false, message: `Invalid or expired reset code. ${3 - attempts} attempts remaining.` });
             }
             // Successful verification - delete OTP and update password
             await redis_js_1.default.del(`reset_otp:${email}`);
+            await redis_js_1.default.del(`reset_otp_fail:${email}`);
             const passwordHash = await (0, crypto_js_1.hashPassword)(newPassword);
             await db_js_1.default.user.update({
                 where: { email },
@@ -774,10 +965,12 @@ class AuthController {
      * PUT /auth/profile
      */
     static async updateProfile(req, res, next) {
-        const { fullName, gender, address, fcmToken } = req.body;
         try {
-            const updatedUser = await db_js_1.default.user.update({
-                where: { id: req.user.id },
+            const userId = req.user.id;
+            const { fullName, gender, address, fcmToken } = req.body;
+            // Update user details
+            const user = await db_js_1.default.user.update({
+                where: { id: userId },
                 data: {
                     fullName,
                     gender,
@@ -798,18 +991,18 @@ class AuthController {
                 },
             });
             await (0, audit_js_1.createAuditLog)({
-                userId: req.user.id,
-                action: 'USER_PROFILE_UPDATED',
+                userId,
+                action: 'PROFILE_UPDATED',
                 ipAddress: req.ip,
                 details: {
-                    message: `User ${req.user.fullName} updated their profile fields`,
+                    message: 'User profile updated',
                     updatedFields: { fullName, gender, address, fcmToken },
                 },
             });
             return res.status(200).json({
                 success: true,
                 message: 'Profile updated successfully.',
-                data: updatedUser,
+                data: user,
             });
         }
         catch (error) {
@@ -1017,6 +1210,9 @@ class AuthController {
             if (!user) {
                 return res.status(404).json({ success: false, message: 'User not found.' });
             }
+            if (!user.passwordHash) {
+                return res.status(403).json({ success: false, message: 'SETUP_REQUIRED', details: 'Please setup your password first.' });
+            }
             const isPasswordValid = await (0, crypto_js_1.verifyPassword)(password, user.passwordHash);
             if (!isPasswordValid) {
                 return res.status(401).json({ success: false, message: 'Incorrect password.' });
@@ -1158,6 +1354,9 @@ class AuthController {
             const user = await db_js_1.default.user.findUnique({ where: { id: userId } });
             if (!user) {
                 return res.status(404).json({ success: false, message: 'User not found.' });
+            }
+            if (!user.passwordHash) {
+                return res.status(403).json({ success: false, message: 'SETUP_REQUIRED', details: 'Please setup your password first.' });
             }
             const isPasswordValid = await (0, crypto_js_1.verifyPassword)(password, user.passwordHash);
             if (!isPasswordValid) {

@@ -47,12 +47,26 @@ function computeStockStatus(qty) {
 }
 class ProductController {
     /**
+     * Helper to fetch and cache active offers
+     */
+    static async getActiveOffers() {
+        const cacheKey = 'cache:active_offers';
+        const cached = await redis_js_1.default.get(cacheKey);
+        if (cached) {
+            return JSON.parse(cached);
+        }
+        const offers = await db_js_1.default.offer.findMany({ where: { isActive: true } });
+        await redis_js_1.default.set(cacheKey, JSON.stringify(offers), 'EX', 300); // 5 minutes
+        return offers;
+    }
+    /**
      * GET /products
      */
     static async getProducts(req, res, next) {
         const { page, limit, category, search, sortBy, sortOrder } = req.query;
-        const skip = (page - 1) * limit;
-        const cacheKey = `cache:products:${JSON.stringify(req.query)}`;
+        const safeLimit = Math.min(Number(limit) || 20, 1000); // clamp pagination limit
+        const skip = (Number(page) - 1) * safeLimit;
+        const cacheKey = `cache:products:page-${page}-limit-${safeLimit}-cat-${category || 'all'}-search-${search || 'none'}-sort-${sortBy}-${sortOrder}`;
         try {
             const cached = await redis_js_1.default.get(cacheKey);
             if (cached) {
@@ -70,30 +84,28 @@ class ProductController {
                     { description: { contains: search, mode: 'insensitive' } },
                 ];
             }
-            const [products, total, activeOffers] = await Promise.all([
+            const [products, total] = await Promise.all([
                 db_js_1.default.product.findMany({
                     where,
                     orderBy: { [sortBy]: sortOrder },
                     skip,
-                    take: limit,
+                    take: safeLimit,
                     include: { category: true },
                 }),
                 db_js_1.default.product.count({ where }),
-                db_js_1.default.offer.findMany({
-                    where: { isActive: true },
-                }),
             ]);
+            const activeOffers = await ProductController.getActiveOffers();
             const freeShippingProductIds = new Set();
             const freeShippingCategoryIds = new Set();
             let storewideFreeShipping = false;
-            activeOffers.forEach(offer => {
+            activeOffers.forEach((offer) => {
                 if (offer.isFreeShipping || offer.type === 'FREE_SHIPPING') {
                     if (offer.applicableProductIds.length === 0 && offer.applicableCategoryIds.length === 0) {
                         storewideFreeShipping = true;
                     }
                     else {
-                        offer.applicableProductIds.forEach(id => freeShippingProductIds.add(id));
-                        offer.applicableCategoryIds.forEach(id => freeShippingCategoryIds.add(id));
+                        offer.applicableProductIds.forEach((id) => freeShippingProductIds.add(id));
+                        offer.applicableCategoryIds.forEach((id) => freeShippingCategoryIds.add(id));
                     }
                 }
             });
@@ -124,15 +136,11 @@ class ProductController {
     static async getProductById(req, res, next) {
         const { id } = req.params;
         try {
-            const [product, activeOffers] = await Promise.all([
-                db_js_1.default.product.findUnique({
-                    where: { id },
-                    include: { category: true },
-                }),
-                db_js_1.default.offer.findMany({
-                    where: { isActive: true },
-                })
-            ]);
+            const product = await db_js_1.default.product.findUnique({
+                where: { id },
+                include: { category: true },
+            });
+            const activeOffers = await ProductController.getActiveOffers();
             if (!product) {
                 return res.status(404).json({ success: false, message: 'Product not found' });
             }
@@ -178,26 +186,22 @@ class ProductController {
         if (!userId)
             return res.status(401).json({ success: false, message: 'Unauthorized' });
         try {
-            const [items, activeOffers] = await Promise.all([
-                db_js_1.default.cartItem.findMany({
-                    where: { userId },
-                    include: { product: true },
-                }),
-                db_js_1.default.offer.findMany({
-                    where: { isActive: true },
-                })
-            ]);
+            const items = await db_js_1.default.cartItem.findMany({
+                where: { userId },
+                include: { product: true },
+            });
+            const activeOffers = await ProductController.getActiveOffers();
             const freeShippingProductIds = new Set();
             const freeShippingCategoryIds = new Set();
             let storewideFreeShipping = false;
-            activeOffers.forEach(offer => {
+            activeOffers.forEach((offer) => {
                 if (offer.isFreeShipping || offer.type === 'FREE_SHIPPING') {
                     if (offer.applicableProductIds.length === 0 && offer.applicableCategoryIds.length === 0) {
                         storewideFreeShipping = true;
                     }
                     else {
-                        offer.applicableProductIds.forEach(id => freeShippingProductIds.add(id));
-                        offer.applicableCategoryIds.forEach(id => freeShippingCategoryIds.add(id));
+                        offer.applicableProductIds.forEach((id) => freeShippingProductIds.add(id));
+                        offer.applicableCategoryIds.forEach((id) => freeShippingCategoryIds.add(id));
                     }
                 }
             });

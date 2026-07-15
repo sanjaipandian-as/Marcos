@@ -22,9 +22,14 @@ export const invoiceCreateSchema = z.object({
     paymentMethod: z.enum(['CASH', 'CARD', 'ONLINE']),
     isOfflineSales: z.boolean().default(true),
     status: z.enum(['PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED']).optional(),
+    paymentStatus: z.enum(['PENDING', 'COMPLETED', 'FAILED', 'REFUNDED']).optional(),
+    advancePayment: z.coerce.number().nonnegative().optional(),
+    gstPercentage: z.coerce.number().nonnegative().optional(),
     isQuickOrder: z.boolean().optional(),
     quickOrderReason: z.string().optional(),
     quickOrderExpectedDate: z.string().optional(),
+    measurementProfileIds: z.array(z.string()).optional(),
+    deliveryDate: z.string().min(1, "Delivery date is required"),
   }).refine(data => !data.isQuickOrder || (data.quickOrderReason && data.quickOrderReason.trim().length > 0), {
     message: "Reason is required for quick orders",
     path: ["quickOrderReason"]
@@ -37,7 +42,7 @@ export class BillingController {
    * Creates an Order, adjusts inventory, and queues BullMQ background tasks.
    */
   static async createInvoice(req: Request, res: Response, next: NextFunction) {
-    const { userId, customerName, items, discountAmount, paymentMethod, isOfflineSales, status, isQuickOrder, quickOrderReason, quickOrderExpectedDate } = req.body;
+    const { userId, customerName, items, discountAmount, paymentMethod, isOfflineSales, status, paymentStatus, advancePayment, gstPercentage, isQuickOrder, quickOrderReason, quickOrderExpectedDate, measurementProfileIds, deliveryDate } = req.body;
 
     try {
       // 1. Process inventory adjust and Order insertion inside a database transaction
@@ -85,10 +90,14 @@ export class BillingController {
         }
 
         // Calculations
-        const taxRate = 0.18; // 18% GST/VAT default
+        const finalGstPercentage = gstPercentage !== undefined ? Number(gstPercentage) : 0;
+        const taxRate = finalGstPercentage / 100;
         const taxAmount = (subtotal - discountAmount) * taxRate;
         const totalAmount = subtotal;
         const payableAmount = (subtotal - discountAmount) + taxAmount;
+        
+        const advancePaymentValue = advancePayment ? Number(advancePayment) : 0;
+        const balanceAmount = payableAmount - advancePaymentValue;
 
         const invoiceNumber = `INV-${Date.now()}-${crypto.randomUUID().substring(0, 8).toUpperCase()}`;
 
@@ -97,19 +106,24 @@ export class BillingController {
           data: {
             userId,
             status: status || 'PAID', // use provided status or default to PAID
-            paymentStatus: 'COMPLETED',
+            paymentStatus: paymentStatus || 'COMPLETED',
             totalAmount,
             taxAmount,
+            gstPercentage: finalGstPercentage,
             discountAmount,
             payableAmount,
             paymentMethod,
             isOfflineSales,
             invoiceNumber,
+            advancePayment: advancePaymentValue,
+            balanceAmount: Math.max(0, balanceAmount),
             gatewayResponse: customerName ? { guestCustomerName: customerName } : undefined,
             isQuickOrder: isQuickOrder || false,
             quickOrderReason: isQuickOrder ? quickOrderReason : null,
             quickOrderExpectedDate: isQuickOrder && quickOrderExpectedDate ? new Date(quickOrderExpectedDate) : null,
             quickOrderStatus: isQuickOrder ? 'PENDING' : null,
+            measurementProfileIds: measurementProfileIds && measurementProfileIds.length > 0 ? measurementProfileIds : undefined,
+            deliveryDate: deliveryDate ? new Date(deliveryDate) : undefined,
           },
           include: {
             orderItems: true,
