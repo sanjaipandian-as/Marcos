@@ -12,6 +12,7 @@ import {
   Info,
   BookOpen
 } from 'lucide-react';
+import { PRODUCT_NAME } from '../config/productName';
 import api from '../utils/api';
 
 const formatTabName = (str) => {
@@ -57,7 +58,7 @@ export default function Header({
   }, [activeTab]);
 
   const getBreadcrumbs = () => {
-    const brandName = 'MARCOS';
+    const brandName = PRODUCT_NAME;
     
     if (activeTab === 'dashboard') {
       return (
@@ -111,7 +112,7 @@ export default function Header({
           {getBreadcrumbs()}
         </div>
         <div className="hidden sm:block lg:hidden text-xs font-extrabold text-[#3D2E3D]">
-          MARCOS &gt; {formatTabName(activeTab)}
+          {PRODUCT_NAME} &gt; {formatTabName(activeTab)}
         </div>
       </div>
 

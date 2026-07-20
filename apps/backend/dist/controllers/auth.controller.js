@@ -265,6 +265,10 @@ class AuthController {
         const { identifier } = req.body;
         try {
             const start = process.hrtime.bigint();
+            let searchEmail = identifier;
+            if (identifier.includes('@')) {
+                searchEmail = identifier.toLowerCase();
+            }
             let possiblePhoneNumbers = [identifier];
             if (!identifier.includes('@')) {
                 const normalized = normalizePhoneNumber(identifier);
@@ -275,7 +279,7 @@ class AuthController {
             const user = await db_js_1.default.user.findFirst({
                 where: {
                     OR: [
-                        { email: identifier },
+                        { email: searchEmail },
                         { phoneNumber: { in: possiblePhoneNumbers } }
                     ]
                 }
@@ -368,6 +372,10 @@ class AuthController {
         const { email, password } = req.body;
         const clientType = req.headers['x-client-type'] || 'web'; // Determine cookie vs body
         try {
+            let searchEmail = email;
+            if (email.includes('@')) {
+                searchEmail = email.toLowerCase();
+            }
             let possiblePhoneNumbers = [email];
             if (!email.includes('@')) {
                 const normalized = normalizePhoneNumber(email);
@@ -377,14 +385,14 @@ class AuthController {
             }
             // Check if IP or Email is temporarily blocked due to brute-force
             const ipBlock = await redis_js_1.default.get(`block_login_ip:${req.ip}`);
-            const emailBlock = await redis_js_1.default.get(`block_login:${email}`);
+            const emailBlock = await redis_js_1.default.get(`block_login:${searchEmail}`);
             if (ipBlock || emailBlock) {
                 return res.status(429).json({ success: false, message: 'Too many failed login attempts. Please try again later.' });
             }
             const user = await db_js_1.default.user.findFirst({
                 where: {
                     OR: [
-                        { email },
+                        { email: searchEmail },
                         { phoneNumber: { in: possiblePhoneNumbers } }
                     ]
                 }

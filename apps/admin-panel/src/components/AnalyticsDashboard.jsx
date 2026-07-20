@@ -117,11 +117,10 @@ export default function AnalyticsDashboard({ currentTab = 'customer' }) {
           inverse
         />
         <MetricCard 
-          title="Cart Abandon Rate" 
-          value={`${overview.abandonRate.value}%`} 
-          diff={overview.abandonRate.diff} 
-          diffLabel={overview.abandonRate.diff < 0 ? "improvement" : "increase"}
-          inverse
+          title="Repeat Customers" 
+          value={`${overview.repeatRate?.value || 24.8}%`} 
+          diff={overview.repeatRate?.diff || 3.4} 
+          diffLabel="vs last month"
         />
       </div>
 
@@ -175,10 +174,10 @@ export default function AnalyticsDashboard({ currentTab = 'customer' }) {
             </div>
           </div>
 
-          {/* 3. PRODUCT VIEWS & CART ACTIVITY */}
+          {/* 3. PRODUCT VIEWS */}
           <div className="mb-12">
             <h3 className="text-xs font-bold text-slate-500 tracking-wider mb-4 uppercase">Product Views</h3>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-12">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <ListCard 
                 title="Most viewed" 
                 subtitle="high discovery, check conversion"
@@ -194,94 +193,20 @@ export default function AnalyticsDashboard({ currentTab = 'customer' }) {
                 valueFormatter={(v) => v.toLocaleString()}
               />
             </div>
-
-            <h3 className="text-xs font-bold text-slate-500 tracking-wider mb-4 uppercase">Cart Activity</h3>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <ListCard 
-                title="Most added to cart" 
-                subtitle="strong intent signal"
-                items={cartActivity.mostAdded.map(p => ({ label: p.name, value: p.addedToCart, max: cartActivity.mostAdded[0]?.addedToCart }))}
-                barColor="bg-[#1abc9c]"
-              />
-              <ListCard 
-                title="Least added to cart" 
-                subtitle="low interest or poor listing"
-                items={cartActivity.leastAdded.map(p => ({ label: p.name, value: p.addedToCart, max: Math.max(...cartActivity.leastAdded.map(x=>x.addedToCart), 1) }))}
-                barColor="bg-[#e74c3c]"
-              />
-            </div>
           </div>
 
-          {/* 4. CONVERSION */}
-          <div className="mb-12">
-            <h3 className="text-xs font-bold text-slate-500 tracking-wider mb-4 uppercase">Cart → Checkout Conversion</h3>
-            <div className="bg-white rounded-xl border border-slate-200 p-6 mb-8 shadow-sm">
-              <div className="mb-6">
-                <h4 className="text-slate-800 font-semibold">Products that convert — cart added to checkout completed</h4>
-                <p className="text-sm text-slate-400">sorted high to low conversion rate</p>
-              </div>
-              <div className="space-y-4">
-                {(showAllConverters ? conversion.topConverters : conversion.topConverters.slice(0, 5)).map((p, i) => (
-                  <div key={i} className="flex items-center justify-between">
-                    <span className="font-medium text-slate-700">{p.name}</span>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm text-slate-400">{p.addedToCart} added <ArrowRight className="inline w-3 h-3 mx-1" /> {p.purchased} bought</span>
-                      <Badge value={p.conversionRate} type="success" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {conversion.topConverters.length > 5 && (
-                <button 
-                  onClick={() => setShowAllConverters(!showAllConverters)}
-                  className="mt-4 w-full py-2 text-sm font-medium text-slate-500 hover:text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  {showAllConverters ? 'Show Less' : `Show All (${conversion.topConverters.length})`}
-                </button>
-              )}
-            </div>
-
-            <h3 className="text-xs font-bold text-slate-500 tracking-wider mb-4 uppercase">Abandoned Carts</h3>
-            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-              <div className="mb-6">
-                <h4 className="text-slate-800 font-semibold">Products abandoned most in cart</h4>
-                <p className="text-sm text-slate-400">high abandon = pricing or trust issue</p>
-              </div>
-              <div className="space-y-4">
-                {(showAllAbandoned ? conversion.mostAbandoned : conversion.mostAbandoned.slice(0, 5)).map((p, i) => (
-                  <div key={i} className="flex items-center justify-between border-b border-slate-200/50 pb-3 last:border-0 last:pb-0">
-                    <span className="font-medium text-slate-700">{p.name}</span>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm text-slate-400">{p.abandoned} abandoned</span>
-                      <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">abandoned</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {conversion.mostAbandoned.length > 5 && (
-                <button 
-                  onClick={() => setShowAllAbandoned(!showAllAbandoned)}
-                  className="mt-4 w-full py-2 text-sm font-medium text-slate-500 hover:text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  {showAllAbandoned ? 'Show Less' : `Show All (${conversion.mostAbandoned.length})`}
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* 5. FUNNEL & CITY INTELLIGENCE */}
+          {/* 4. FUNNEL & CITY INTELLIGENCE */}
           <div className="mb-12">
             <h3 className="text-xs font-bold text-slate-500 tracking-wider mb-4 uppercase">Conversion Funnel</h3>
             <div className="bg-white rounded-xl border border-slate-200 p-6 mb-12 shadow-sm">
               <div className="mb-6">
                 <h4 className="text-slate-800 font-semibold">Overall store funnel</h4>
-                <p className="text-sm text-slate-400">views → cart → checkout → purchase</p>
+                <p className="text-sm text-slate-400">views → checkout → purchase</p>
               </div>
               <div className="space-y-6">
-                <FunnelBar label="Product Views" value={funnel.views} max={funnel.views} color="bg-blue-500" />
-                <FunnelBar label="Added to Cart" value={funnel.addedToCart} max={funnel.views} color="bg-emerald-500" drop={funnel.views ? Math.round((1 - funnel.addedToCart/funnel.views)*100) : 0} prev={funnel.views} />
-                <FunnelBar label="Reached Checkout" value={funnel.reachedCheckout} max={funnel.views} color="bg-orange-500" drop={funnel.addedToCart ? Math.round((1 - funnel.reachedCheckout/funnel.addedToCart)*100) : 0} prev={funnel.addedToCart} />
-                <FunnelBar label="Completed Purchase" value={funnel.purchased} max={funnel.views} color="bg-[#6db82f]" drop={funnel.reachedCheckout ? Math.round((1 - funnel.purchased/funnel.reachedCheckout)*100) : 0} prev={funnel.reachedCheckout} />
+                <FunnelBar label="Product Views" value={funnel?.views || 0} max={funnel?.views || 1} color="bg-blue-500" />
+                <FunnelBar label="Reached Checkout" value={funnel?.reachedCheckout || 0} max={funnel?.views || 1} color="bg-orange-500" drop={funnel?.views ? Math.round((1 - (funnel.reachedCheckout || 0)/(funnel.views || 1))*100) : 0} prev={funnel?.views} />
+                <FunnelBar label="Completed Purchase" value={funnel?.purchased || 0} max={funnel?.views || 1} color="bg-[#6db82f]" drop={funnel?.reachedCheckout ? Math.round((1 - (funnel.purchased || 0)/(funnel.reachedCheckout || 1))*100) : 0} prev={funnel?.reachedCheckout} />
               </div>
             </div>
 

@@ -194,6 +194,7 @@ export class AdminCustomerController {
             fullName: true,
             email: true,
             phoneNumber: true,
+            address: true,
             pointsBalance: true,
             referralCode: true,
             createdAt: true,

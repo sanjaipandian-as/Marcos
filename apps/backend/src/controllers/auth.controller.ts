@@ -243,13 +243,15 @@ export class AuthController {
         return newUser;
       });
 
-      // Generate access token
-      const accessToken = AuthService.generateAccessToken({
+      // Generate tokens
+      const payload = {
         id: user.id,
         email: user.email,
         role: user.role,
         fullName: user.fullName,
-      });
+      };
+      const accessToken = AuthService.generateAccessToken(payload);
+      const refreshToken = await AuthService.generateRefreshToken(user.id);
 
       await createAuditLog({
         userId: user.id,
@@ -263,19 +265,40 @@ export class AuthController {
         },
       });
 
-      return res.status(201).json({
-        success: true,
-        message: 'User registered successfully',
-        accessToken,
-        user: {
-          id: user.id,
-          email: user.email,
-          role: user.role,
-          fullName: user.fullName,
-          pointsBalance: user.pointsBalance,
-          referredById: user.referredById,
-        },
-      });
+      const clientType = req.headers['x-client-type'] as string || 'web';
+      const responseUser = {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        fullName: user.fullName,
+        pointsBalance: user.pointsBalance,
+        referredById: user.referredById,
+      };
+
+      if (clientType === 'mobile') {
+        return res.status(201).json({
+          success: true,
+          message: 'User registered successfully',
+          accessToken,
+          refreshToken,
+          user: responseUser,
+        });
+      } else {
+        res.cookie('refreshToken', refreshToken, {
+          path: '/',
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+          maxAge: 7 * 24 * 60 * 60 * 1000,
+        });
+
+        return res.status(201).json({
+          success: true,
+          message: 'User registered successfully',
+          accessToken,
+          user: responseUser,
+        });
+      }
     } catch (error) {
       next(error);
     }
@@ -384,7 +407,9 @@ export class AuthController {
       const accessToken = AuthService.generateAccessToken(payload);
       const refreshToken = await AuthService.generateRefreshToken(user.id);
 
-      if (clientType === 'web' || user.role === 'ADMIN' || user.role === 'SUPERADMIN') {
+      if (clientType === 'mobile') {
+        return res.status(200).json({ success: true, accessToken, refreshToken, user: payload, message: 'Password configured successfully' });
+      } else {
         res.cookie('refreshToken', refreshToken, {
           path: '/',
           httpOnly: true,
@@ -393,8 +418,6 @@ export class AuthController {
           maxAge: 7 * 24 * 60 * 60 * 1000,
         });
         return res.status(200).json({ success: true, accessToken, user: payload, message: 'Password configured successfully' });
-      } else {
-        return res.status(200).json({ success: true, accessToken, refreshToken, user: payload, message: 'Password configured successfully' });
       }
     } catch (error) {
       next(error);
@@ -466,7 +489,15 @@ export class AuthController {
       const accessToken = AuthService.generateAccessToken(payload);
       const refreshToken = await AuthService.generateRefreshToken(user.id);
 
-      if (clientType === 'web' || user.role === 'ADMIN' || user.role === 'SUPERADMIN') {
+      if (clientType === 'mobile') {
+        // Return in body for Mobile Clients
+        return res.status(200).json({
+          success: true,
+          accessToken,
+          refreshToken,
+          user: payload,
+        });
+      } else {
         // Set secure Cookie for Web Clients / Admin Panel
         res.cookie('refreshToken', refreshToken, {
           path: '/',
@@ -479,14 +510,6 @@ export class AuthController {
         return res.status(200).json({
           success: true,
           accessToken,
-          user: payload,
-        });
-      } else {
-        // Return in body for Mobile Clients
-        return res.status(200).json({
-          success: true,
-          accessToken,
-          refreshToken,
           user: payload,
         });
       }
@@ -782,7 +805,9 @@ export class AuthController {
       const accessToken = AuthService.generateAccessToken(payload);
       const refreshToken = await AuthService.generateRefreshToken(user.id);
 
-      if (clientType === 'web' || user.role === 'ADMIN' || user.role === 'SUPERADMIN') {
+      if (clientType === 'mobile') {
+        return res.status(200).json({ success: true, accessToken, refreshToken, user: payload });
+      } else {
         res.cookie('refreshToken', refreshToken, {
           path: '/',
           httpOnly: true,
@@ -792,8 +817,6 @@ export class AuthController {
         });
 
         return res.status(200).json({ success: true, accessToken, user: payload });
-      } else {
-        return res.status(200).json({ success: true, accessToken, refreshToken, user: payload });
       }
     } catch (error) {
       next(error);
@@ -814,7 +837,9 @@ export class AuthController {
       const { accessToken, refreshToken: newRefreshToken, user } = await AuthService.rotateTokens(token);
       const clientType = req.headers['x-client-type'] as string || 'web';
 
-      if (clientType === 'web' || user.role === 'ADMIN' || user.role === 'SUPERADMIN') {
+      if (clientType === 'mobile') {
+        return res.status(200).json({ success: true, accessToken, refreshToken: newRefreshToken, user });
+      } else {
         res.cookie('refreshToken', newRefreshToken, {
           path: '/',
           httpOnly: true,
@@ -824,8 +849,6 @@ export class AuthController {
         });
 
         return res.status(200).json({ success: true, accessToken, user });
-      } else {
-        return res.status(200).json({ success: true, accessToken, refreshToken: newRefreshToken, user });
       }
     } catch (error: any) {
       return res.status(401).json({ success: false, message: error.message });

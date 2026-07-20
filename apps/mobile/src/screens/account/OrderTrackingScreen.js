@@ -688,54 +688,88 @@ export default function OrderTrackingScreen({ route, navigation }) {
   );
 
   // ─── Price breakdown ──────────────────────────────────────────────────────
-  const renderPriceBreakdown = () => (
-    <View style={[styles.sectionCard, shadows.premium, { backgroundColor: theme.bg.card }]}>
-      <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-        Payment Summary
-      </Text>
-      {[
-        { label: 'Subtotal', value: `₹${Number(order.totalAmount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` },
-        { label: 'Discount', value: `-₹${Number(order.discountAmount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, color: '#10b981' },
-        { label: `GST (${order.gstPercentage !== undefined && order.gstPercentage !== null ? order.gstPercentage : 18}%)`, value: `₹${Number(order.taxAmount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` },
-      ].map(row => (
-        <View key={row.label} style={styles.priceRow}>
-          <Text style={[styles.priceLabel, { fontFamily: fonts.regular, color: theme.text.secondary }]}>{row.label}</Text>
-          <Text style={[styles.priceValue, { fontFamily: fonts.semiBold, color: row.color || theme.text.primary }]}>{row.value}</Text>
-        </View>
-      ))}
-      <View style={[styles.priceDivider, { backgroundColor: theme.border }]} />
-      <View style={styles.priceRow}>
-        <Text style={[styles.priceLabel, { fontFamily: fonts.bold, color: theme.text.primary, fontSize: 14 }]}>Expected Amount</Text>
-        <Text style={[styles.priceValue, { fontFamily: fonts.bold, color: theme.brand[500], fontSize: 16 }]}>
-          ₹{Number(order.payableAmount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+  const renderPriceBreakdown = () => {
+    const hasAdvance = Number(order.advancePayment) > 0;
+    const history = Array.isArray(order.paymentHistory) ? order.paymentHistory : [];
+
+    return (
+      <View style={[styles.sectionCard, shadows.premium, { backgroundColor: theme.bg.card }]}>
+        <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+          Payment Summary
         </Text>
-      </View>
-      {Number(order.advancePayment) > 0 && (
-        <>
-          <View style={[styles.priceRow, { marginTop: 4 }]}>
+        {[
+          { label: 'Subtotal', value: `₹${Number(order.totalAmount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` },
+          { label: 'Discount', value: `-₹${Number(order.discountAmount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, color: '#10b981' },
+          { label: `GST (${order.gstPercentage !== undefined && order.gstPercentage !== null ? order.gstPercentage : 18}%)`, value: `₹${Number(order.taxAmount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` },
+        ].map(row => (
+          <View key={row.label} style={styles.priceRow}>
+            <Text style={[styles.priceLabel, { fontFamily: fonts.regular, color: theme.text.secondary }]}>{row.label}</Text>
+            <Text style={[styles.priceValue, { fontFamily: fonts.semiBold, color: row.color || theme.text.primary }]}>{row.value}</Text>
+          </View>
+        ))}
+        <View style={[styles.priceDivider, { backgroundColor: theme.border }]} />
+        <View style={styles.priceRow}>
+          <Text style={[styles.priceLabel, { fontFamily: fonts.bold, color: theme.text.primary, fontSize: 14 }]}>Expected Amount</Text>
+          <Text style={[styles.priceValue, { fontFamily: fonts.bold, color: theme.brand[500], fontSize: 16 }]}>
+            ₹{Number(order.payableAmount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+          </Text>
+        </View>
+
+        {hasAdvance && (
+          <View style={[styles.priceRow, { marginTop: 8 }]}>
             <Text style={[styles.priceLabel, { fontFamily: fonts.regular, color: '#047857' }]}>Advance Paid</Text>
             <Text style={[styles.priceValue, { fontFamily: fonts.semiBold, color: '#047857' }]}>
-              ₹{Number(order.advancePayment).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              -₹{Number(order.advancePayment).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </Text>
           </View>
-          <View style={styles.priceRow}>
-            <Text style={[styles.priceLabel, { fontFamily: fonts.bold, color: '#dc2626' }]}>Balance Due</Text>
-            <Text style={[styles.priceValue, { fontFamily: fonts.bold, color: '#dc2626' }]}>
-              ₹{Number(order.balanceAmount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-            </Text>
+        )}
+
+        {history.length > 0 && (
+          <View style={{ marginTop: 8, padding: 12, backgroundColor: theme.bg.input, borderRadius: 12 }}>
+            <Text style={{ fontFamily: fonts.semiBold, fontSize: 12, color: theme.text.primary, marginBottom: 8 }}>Additional Payments</Text>
+            {history.map((pay, idx) => (
+              <View key={idx} style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                <View>
+                  <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: theme.text.secondary }}>
+                    Paid via {pay.method}
+                  </Text>
+                  {pay.date && (
+                    <Text style={{ fontFamily: fonts.regular, fontSize: 10, color: theme.text.muted }}>
+                      {new Date(pay.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                    </Text>
+                  )}
+                </View>
+                <Text style={{ fontFamily: fonts.semiBold, fontSize: 13, color: '#047857' }}>
+                  -₹{Number(pay.amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                </Text>
+              </View>
+            ))}
           </View>
-        </>
-      )}
-      <View style={[styles.payMethodBadge, { backgroundColor: order.paymentStatus === 'COMPLETED' ? '#dcfce7' : theme.bg.input }]}>
-        <Text style={[styles.payMethodText, { fontFamily: fonts.medium, color: order.paymentStatus === 'COMPLETED' ? '#166534' : theme.text.secondary }]}>
-          {order.paymentStatus === 'COMPLETED' 
-            ? `Payment Collected (${order.paymentMethod})` 
-            : `Payment to be collected by Admin`}
-          {order.paymentStatus === 'REFUNDED' ? ' · Refund Initiated' : ''}
-        </Text>
+        )}
+
+        {(hasAdvance || history.length > 0) && (
+          <>
+            <View style={[styles.priceDivider, { backgroundColor: theme.border, marginVertical: 12 }]} />
+            <View style={styles.priceRow}>
+              <Text style={[styles.priceLabel, { fontFamily: fonts.bold, color: '#dc2626' }]}>Balance Due</Text>
+              <Text style={[styles.priceValue, { fontFamily: fonts.bold, color: '#dc2626' }]}>
+                ₹{Number(order.balanceAmount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </Text>
+            </View>
+          </>
+        )}
+        
+        <View style={[styles.payMethodBadge, { backgroundColor: order.paymentStatus === 'COMPLETED' ? '#dcfce7' : theme.bg.input }]}>
+          <Text style={[styles.payMethodText, { fontFamily: fonts.medium, color: order.paymentStatus === 'COMPLETED' ? '#166534' : theme.text.secondary }]}>
+            {order.paymentStatus === 'COMPLETED' 
+              ? `Payment Collected` 
+              : `Payment to be collected by Admin`}
+            {order.paymentStatus === 'REFUNDED' ? ' · Refund Initiated' : ''}
+          </Text>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   // ─── Action buttons ───────────────────────────────────────────────────────
   const renderActions = () => (

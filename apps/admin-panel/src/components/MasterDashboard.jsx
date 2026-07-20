@@ -327,7 +327,6 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
 
   const funnelSteps = [
     { name: 'Views', value: funnel.views || 0 },
-    { name: 'Added to Cart', value: funnel.addedToCart || 0 },
     { name: 'Checkout', value: funnel.reachedCheckout || 0 },
     { name: 'Purchased', value: funnel.purchased || 0 },
   ];
@@ -540,9 +539,8 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
           borderColor="border-[#378ADD]" iconBg="bg-[#378ADD]/10" iconColor="text-[#378ADD]" />
         <KPICard icon={BarChart2} label="Avg Order Value" value={fmtCur(aovO.value)} sub="per transaction" diff={aovO.diff}
           borderColor="border-[#D8BFD8]" iconBg="bg-[#D8BFD8]/20" iconColor="text-[#ad83ad]" />
-        <KPICard icon={AlertTriangle} label="Cart Abandon" value={`${abandon.value || 0}%`} sub="cart vs checkout"
-          diff={abandon.diff !== undefined ? -abandon.diff : undefined}
-          borderColor="border-amber-300" iconBg="bg-amber-50" iconColor="text-amber-500" />
+        <KPICard icon={Users} label="Total Orders" value={fmt(ord.value)} sub="all completed & active"
+          borderColor="border-emerald-300" iconBg="bg-emerald-50" iconColor="text-emerald-600" />
       </div>
 
       {/* ── Revenue Chart + Funnel ── */}

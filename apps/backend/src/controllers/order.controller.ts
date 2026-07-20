@@ -19,6 +19,13 @@ export const orderStatusUpdateSchema = z.object({
     measurementProfileId: z.string().uuid().optional().nullable(),
     advancePayment: z.coerce.number().optional(),
     deliveryDate: z.string().optional().nullable(),
+    newPayment: z.object({
+      id: z.string(),
+      amount: z.coerce.number(),
+      method: z.string(),
+      date: z.string(),
+      note: z.string().optional()
+    }).optional(),
   }),
 });
 
@@ -332,7 +339,7 @@ export class OrderController {
    */
   static async adminUpdateOrderStatus(req: Request, res: Response, next: NextFunction) {
     const { id } = req.params;
-    const { status, paymentStatus, fabricType, customizations, tailorNotes, measurementProfileId } = req.body;
+    const { status, paymentStatus, fabricType, customizations, tailorNotes, measurementProfileId, newPayment } = req.body;
 
     try {
       const existing = await prisma.order.findUnique({ where: { id } });
@@ -361,8 +368,28 @@ export class OrderController {
       }
       if (req.body.advancePayment !== undefined) {
         updateData.advancePayment = req.body.advancePayment;
-        updateData.balanceAmount = Math.max(0, Number(existing.payableAmount) - Number(req.body.advancePayment));
       }
+      
+      let currentPaymentHistory: any[] = [];
+      if (existing.paymentHistory) {
+        currentPaymentHistory = Array.isArray(existing.paymentHistory) ? existing.paymentHistory : [];
+      }
+      
+      if (newPayment) {
+        currentPaymentHistory.push(newPayment);
+        updateData.paymentHistory = currentPaymentHistory;
+      }
+
+      // Recalculate balance
+      const advance = updateData.advancePayment !== undefined ? Number(updateData.advancePayment) : Number(existing.advancePayment || 0);
+      const sumSubsequent = currentPaymentHistory.reduce((sum, p) => sum + Number(p.amount), 0);
+      updateData.balanceAmount = Math.max(0, Number(existing.payableAmount) - advance - sumSubsequent);
+
+      // Auto update payment status if balance is 0
+      if (updateData.balanceAmount === 0 && Number(existing.payableAmount) > 0) {
+         updateData.paymentStatus = 'COMPLETED';
+      }
+
 
       let deliveryDateChanged = false;
       let newDeliveryDateFormatted = '';
@@ -378,10 +405,7 @@ export class OrderController {
         }
       }
 
-      // If status is CANCELLED and payment was COMPLETED, auto refund
-      if (status === 'CANCELLED' && paymentStatus === undefined && existing.paymentStatus === 'COMPLETED') {
-        updateData.paymentStatus = 'REFUNDED';
-      }
+      // Do not auto-set paymentStatus to REFUNDED. Admin manually marks as REFUNDED.
 
       const order = await prisma.order.update({
         where: { id },
@@ -864,7 +888,6 @@ export class OrderController {
           where: { id },
           data: {
             status: 'CANCELLED',
-            ...(refundTriggered && { paymentStatus: 'REFUNDED' }),
           },
         });
 

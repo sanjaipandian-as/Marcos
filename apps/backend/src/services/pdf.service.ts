@@ -1,5 +1,6 @@
 import PDFDocument from 'pdfkit';
 import logger from '../utils/logger.js';
+import env from '../config/env.js';
 
 export class PdfService {
   /**
@@ -19,7 +20,7 @@ export class PdfService {
         });
 
         // 1. Header
-        doc.fillColor('#1F2937').fontSize(22).text('MARCOS PLATFORM', 50, 50, { align: 'left' });
+        doc.fillColor('#1F2937').fontSize(22).text(`${env.APP_NAME} PLATFORM`, 50, 50, { align: 'left' });
         doc.fontSize(10).fillColor('#6B7280').text('Premium Tailoring & Design Platform', 50, 75);
         
         doc.fontSize(18).fillColor('#111827').text('TAX INVOICE', 400, 50, { align: 'right' });
@@ -112,7 +113,7 @@ export class PdfService {
         doc.font('Helvetica');
 
         // 6. Footer
-        doc.fontSize(8).fillColor('#9CA3AF').text('Thank you for shopping with MARCOS Platform. For queries, email billing@marcosapp.com.', 50, 700, { align: 'center' });
+        doc.fontSize(8).fillColor('#9CA3AF').text(`Thank you for shopping with ${env.APP_NAME} Platform.`, 50, 700, { align: 'center' });
 
         doc.end();
       } catch (err) {

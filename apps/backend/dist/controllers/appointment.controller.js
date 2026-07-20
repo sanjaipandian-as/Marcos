@@ -99,23 +99,74 @@ class AppointmentController {
             if (isNaN(parsedDate.getTime())) {
                 return res.status(400).json({ success: false, message: 'Invalid date format' });
             }
-            const appointments = await db_js_1.default.appointment.groupBy({
-                by: ['timeSlot'],
-                where: {
-                    date: parsedDate,
-                    status: { in: ['PENDING', 'CONFIRMED'] },
-                },
-                _count: {
-                    id: true,
-                },
-            });
+            const [appointments, settings] = await Promise.all([
+                db_js_1.default.appointment.groupBy({
+                    by: ['timeSlot'],
+                    where: {
+                        date: parsedDate,
+                        status: { in: ['PENDING', 'CONFIRMED'] },
+                    },
+                    _count: {
+                        id: true,
+                    },
+                }),
+                db_js_1.default.systemSettings.findUnique({ where: { id: 'default' } })
+            ]);
             const availability = appointments.reduce((acc, curr) => {
                 acc[curr.timeSlot] = curr._count.id;
                 return acc;
             }, {});
+            // Fallback settings if default not found
+            const startHour = settings?.businessHoursStart || '09:00';
+            const endHour = settings?.businessHoursEnd || '18:00';
+            const duration = settings?.bookingSlotDurationMinutes || 60;
+            const maxSlots = settings?.maxBookingsPerSlot || 5;
+            const [startH, startM] = startHour.split(':').map(Number);
+            const [endH, endM] = endHour.split(':').map(Number);
+            const startTime = startH * 60 + startM;
+            const endTime = endH * 60 + endM;
+            const generatedSlots = [];
+            for (let time = startTime; time + duration <= endTime; time += duration) {
+                const sh = Math.floor(time / 60).toString().padStart(2, '0');
+                const sm = (time % 60).toString().padStart(2, '0');
+                const eh = Math.floor((time + duration) / 60).toString().padStart(2, '0');
+                const em = ((time + duration) % 60).toString().padStart(2, '0');
+                generatedSlots.push(`${sh}:${sm} - ${eh}:${em}`);
+            }
+            // Filter past slots if the requested date is today
+            const now = new Date();
+            const isToday = parsedDate.toDateString() === now.toDateString();
+            const currentMinutes = now.getHours() * 60 + now.getMinutes();
+            const availableSlots = generatedSlots.filter(slot => {
+                const count = availability[slot] || 0;
+                if (count >= maxSlots)
+                    return false;
+                if (isToday) {
+                    const startStr = slot.split(' - ')[0];
+                    const [h, m] = startStr.split(':').map(Number);
+                    const slotMinutes = h * 60 + m;
+                    if (slotMinutes <= currentMinutes)
+                        return false;
+                }
+                return true;
+            });
             return res.status(200).json({
                 success: true,
-                data: availability,
+                data: {
+                    counts: availability,
+                    availableSlots,
+                    debug: {
+                        now: now.toISOString(),
+                        parsedDate: parsedDate.toISOString(),
+                        isToday,
+                        currentMinutes,
+                        startTime,
+                        endTime,
+                        duration,
+                        maxSlots,
+                        generatedSlots
+                    }
+                },
             });
         }
         catch (error) {

@@ -69,9 +69,29 @@ const EMPTY_MEAS = () => Object.fromEntries(MEAS_FIELDS.map(f => [f.key, '']));
 // ─── DayNavigator ─────────────────────────────────────────────────────────────
 function DayNavigator({ value, onChange }) {
   const today = new Date();
-  const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(today); d.setDate(today.getDate() - 3 + i); return d; });
+  const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(value); d.setDate(value.getDate() - 3 + i); return d; });
+  
+  const localDateStr = `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+
   return (
     <div className="flex items-center gap-2 overflow-x-auto pb-1">
+      <div className="relative flex items-center justify-center p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 cursor-pointer shrink-0 transition-all" title="Select Specific Date">
+        <Calendar className="w-4 h-4" />
+        <input type="date" value={localDateStr} onChange={(e) => { 
+          if(e.target.value) {
+            const [y, m, d] = e.target.value.split('-');
+            onChange(new Date(y, m - 1, d));
+          }
+        }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+      </div>
+      
+      <button onClick={() => onChange(new Date())}
+        className="px-3 py-1.5 rounded-xl border border-brand-200 hover:bg-brand-50 text-brand-600 text-[10px] font-extrabold tracking-wider uppercase shrink-0 transition-all">
+        Today
+      </button>
+
+      <div className="w-px h-6 bg-slate-200 mx-1 shrink-0" />
+
       <button onClick={() => { const d = new Date(value); d.setDate(d.getDate() - 1); onChange(d); }}
         className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 shrink-0 transition-all">
         <ChevronLeft className="w-4 h-4" />
@@ -82,8 +102,8 @@ function DayNavigator({ value, onChange }) {
           return (
             <button key={i} onClick={() => onChange(d)}
               className={`flex flex-col items-center px-3 py-2 rounded-xl text-center transition-all min-w-[52px] border ${isSel ? 'bg-brand-500 text-[#3D2E3D] border-brand-500 shadow-md font-extrabold'
-                  : isToday ? 'border-brand-300 text-brand-700 bg-brand-50 font-bold'
-                    : 'border-slate-100 text-slate-500 hover:border-slate-300 hover:bg-slate-50 font-medium'
+                : isToday ? 'border-brand-300 text-brand-700 bg-brand-50 font-bold'
+                  : 'border-slate-100 text-slate-500 hover:border-slate-300 hover:bg-slate-50 font-medium'
                 }`}>
               <span className="text-[9px] uppercase tracking-widest">{d.toLocaleDateString('en', { weekday: 'short' })}</span>
               <span className="text-base leading-tight">{d.getDate()}</span>
@@ -118,7 +138,7 @@ function OrderPipeline({ order, onAdvance }) {
         return (
           <button key={stage.key} onClick={() => isNext && onAdvance(stage.key)} disabled={!isNext}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all ${isCur ? 'border-2 shadow-sm' : isDone ? 'opacity-50 cursor-default bg-slate-50 border-slate-100'
-                : isNext ? 'hover:shadow-md cursor-pointer hover:scale-[1.01]' : 'opacity-30 cursor-not-allowed bg-white border-slate-100'
+              : isNext ? 'hover:shadow-md cursor-pointer hover:scale-[1.01]' : 'opacity-30 cursor-not-allowed bg-white border-slate-100'
               }`}
             style={isCur ? { borderColor: stage.color, backgroundColor: stage.color + '12' } : isNext ? { borderColor: stage.color + '60', backgroundColor: stage.color + '08' } : {}}>
             <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${isDone ? 'bg-slate-200' : ''}`}
@@ -528,8 +548,8 @@ function DetailDrawer({ appt, visit, orders, staffList, onClose, onRefresh, setA
                         await onRefresh();
                       }}
                       className={`flex-1 py-2 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${item.status === 'CONSULTED'
-                          ? 'bg-teal-600 text-white border-teal-600 shadow-sm'
-                          : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-100'
+                        ? 'bg-teal-600 text-white border-teal-600 shadow-sm'
+                        : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-100'
                         }`}
                     >
                       <Sparkles className="w-3.5 h-3.5" />
@@ -541,8 +561,8 @@ function DetailDrawer({ appt, visit, orders, staffList, onClose, onRefresh, setA
                         await onRefresh();
                       }}
                       className={`flex-1 py-2 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${item.status === 'ORDERED'
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                          : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-100'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                        : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-100'
                         }`}
                     >
                       <ShoppingBag className="w-3.5 h-3.5" />
@@ -917,9 +937,9 @@ function ApptCard({ appt, onQuickStatus, onOpen, setActiveTab }) {
 
   return (
     <div className={`rounded-2xl border transition-all duration-200 overflow-hidden bg-white hover:shadow-md group ${appt.status === 'CONFIRMED' ? 'border-emerald-200' :
-        appt.status === 'CANCELLED' ? 'border-red-100 opacity-60' :
-          appt.status === 'CONSULTED' ? 'border-teal-200' :
-            appt.status === 'ORDERED' ? 'border-blue-200' : 'border-slate-200 hover:border-brand-300'
+      appt.status === 'CANCELLED' ? 'border-red-100 opacity-60' :
+        appt.status === 'CONSULTED' ? 'border-teal-200' :
+          appt.status === 'ORDERED' ? 'border-blue-200' : 'border-slate-200 hover:border-brand-300'
       } shadow-sm`}>
       <div className="p-4 flex items-start gap-3">
         {/* Time tile */}
@@ -1051,7 +1071,7 @@ function VisitCard({ visit, staffList, onRefresh, onOpen }) {
 
   return (
     <div className={`rounded-2xl border transition-all duration-200 overflow-hidden bg-white hover:shadow-md group ${visit.status === 'COMPLETED' ? 'border-blue-200 opacity-75' :
-        visit.status === 'ASSIGNED' ? 'border-indigo-200' : 'border-slate-200 hover:border-indigo-300'
+      visit.status === 'ASSIGNED' ? 'border-indigo-200' : 'border-slate-200 hover:border-indigo-300'
       } shadow-sm`}>
       <div className="p-4 flex items-start gap-3">
         <div className="flex flex-col items-center justify-center bg-gradient-to-b from-indigo-50 to-indigo-100 border border-indigo-200 rounded-xl px-3 py-2.5 min-w-[60px] shrink-0">
@@ -1197,6 +1217,163 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
   const [errorToast, setErrorToast] = useState(null);
   const [filterOrderId, setFilterOrderId] = useState(() => sessionStorage.getItem('filterBookingByOrderId'));
 
+  // ── Create Booking Modal State ────────────────────────────────
+  const [createModal, setCreateModal] = useState(false);
+  const [createType, setCreateType] = useState('slot'); // 'slot' | 'fitting' | 'home'
+  const [createDate, setCreateDate] = useState('');
+  const [createTime, setCreateTime] = useState('');
+  const [createProductType, setCreateProductType] = useState('');
+  const [createApptType, setCreateApptType] = useState('CONSULTATION');
+  const [createNotes, setCreateNotes] = useState('');
+  const [createAddress, setCreateAddress] = useState('');
+  const [createRequirements, setCreateRequirements] = useState('');
+  const [createCustomerSearch, setCreateCustomerSearch] = useState('');
+  const [createCustomerResults, setCreateCustomerResults] = useState([]);
+  const [createCustomer, setCreateCustomer] = useState(null); // { id, fullName, phoneNumber, address }
+  const [createSearching, setCreateSearching] = useState(false);
+  const [createProductSearch, setCreateProductSearch] = useState('');
+  const [createProductResults, setCreateProductResults] = useState([]);
+  const [createProductSearching, setCreateProductSearching] = useState(false);
+  const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [createError, setCreateError] = useState('');
+
+  const [availableSlots, setAvailableSlots] = useState([]);
+  const [fetchingSlots, setFetchingSlots] = useState(false);
+
+  useEffect(() => {
+    if (!createDate) {
+      setAvailableSlots([]);
+      return;
+    }
+    const fetchSlots = async () => {
+      setFetchingSlots(true);
+      try {
+        const dateObj = new Date(createDate);
+        const y = dateObj.getFullYear();
+        const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const d = String(dateObj.getDate()).padStart(2, '0');
+        const isoDate = `${y}-${m}-${d}T12:00:00.000Z`;
+
+        const res = await api.getAvailability(isoDate);
+        console.log('API Availability Response:', res);
+        setAvailableSlots(res?.availableSlots || []);
+      } catch (e) {
+        setAvailableSlots([]);
+      } finally {
+        setFetchingSlots(false);
+      }
+    };
+    fetchSlots();
+  }, [createDate]);
+
+  const resetCreateModal = () => {
+    setCreateType('slot');
+    setCreateDate('');
+    setCreateTime('');
+    setCreateProductType('');
+    setCreateProductSearch('');
+    setCreateProductResults([]);
+    setCreateApptType('CONSULTATION');
+    setCreateNotes('');
+    setCreateAddress('');
+    setCreateRequirements('');
+    setCreateCustomerSearch('');
+    setCreateCustomerResults([]);
+    setCreateCustomer(null);
+    setCreateError('');
+  };
+
+  const searchCustomers = useCallback(async (q) => {
+    if (!q || q.length < 2) { setCreateCustomerResults([]); return; }
+    setCreateSearching(true);
+    try {
+      const results = await api.searchCustomers(q);
+      setCreateCustomerResults(results || []);
+    } catch (e) {
+      setCreateCustomerResults([]);
+    } finally {
+      setCreateSearching(false);
+    }
+  }, []);
+
+  const searchProducts = useCallback(async (q) => {
+    setCreateProductSearching(true);
+    try {
+      const res = await api.getProductsPaginated({ search: q, limit: 5 });
+      setCreateProductResults(res.data || []);
+    } catch (e) {
+      setCreateProductResults([]);
+    } finally {
+      setCreateProductSearching(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => searchCustomers(createCustomerSearch), 300);
+    return () => clearTimeout(timer);
+  }, [createCustomerSearch, searchCustomers]);
+
+  useEffect(() => {
+    if (createType === 'fitting') {
+      const timer = setTimeout(() => searchProducts(createProductSearch), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [createProductSearch, searchProducts, createType]);
+
+  const submitCreateBooking = async () => {
+    setCreateError('');
+    if (!createCustomer) { setCreateError('Please select a customer.'); return; }
+    if (!createDate) { setCreateError('Please select a date.'); return; }
+
+    if (createType !== 'home') {
+      if (!createTime) { setCreateError('Please select a time slot.'); return; }
+    }
+    if (createType === 'fitting') {
+      if (!createProductType.trim()) { setCreateError('Please enter the product / service details.'); return; }
+    }
+    if (createType === 'home') {
+      if (!createAddress.trim()) { setCreateError('Please enter the address.'); return; }
+      if (!createRequirements.trim()) { setCreateError('Please enter the requirements.'); return; }
+    }
+
+    setCreateSubmitting(true);
+    try {
+      const dateObj = new Date(createDate);
+      const y = dateObj.getFullYear();
+      const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const d = String(dateObj.getDate()).padStart(2, '0');
+      const isoDate = `${y}-${m}-${d}T12:00:00.000Z`;
+
+      if (createType === 'home') {
+        await api.createStoreVisit({
+          customerId: createCustomer.id,
+          preferredDate: isoDate,
+          address: createAddress,
+          requirements: createRequirements,
+          adminOverride: true,
+        });
+      } else {
+        await api.createAppointment({
+          userId: createCustomer.id,
+          date: isoDate,
+          timeSlot: createTime,
+          productType: createType === 'slot' ? 'SLOT_BOOKING' : createProductType,
+          type: createType === 'slot' ? 'CONSULTATION' : createApptType,
+          notes: createNotes.trim() || undefined,
+          adminOverride: true,
+        });
+      }
+
+      setCreateModal(false);
+      resetCreateModal();
+      await load(true);
+    } catch (e) {
+      setCreateError(e.message || 'Failed to create booking.');
+    } finally {
+      setCreateSubmitting(false);
+    }
+  };
+
   useEffect(() => {
     if (sessionStorage.getItem('filterBookingByOrderId')) {
       sessionStorage.removeItem('filterBookingByOrderId');
@@ -1236,11 +1413,24 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
   const filteredOrder = filterOrderId ? orders.find(o => o.id === filterOrderId) : null;
 
   const isSel = d => filterOrderId ? true : isSameDay(d, selDate);
-  const todayAppts = filterOrderId ? appointments.filter(a => a.orderId === filterOrderId) : appointments.filter(a => isSel(a.date));
+  const todayAppts = filterOrderId
+    ? appointments.filter(a => a.orderId === filterOrderId && a.productType !== 'SLOT_BOOKING')
+    : appointments.filter(a => isSel(a.date) && a.productType !== 'SLOT_BOOKING');
   const todayVisits = filterOrderId ? visits.filter(v => v.orderId === filterOrderId) : visits.filter(v => isSel(v.preferredDate || v.createdAt));
+  const todaySlots = filterOrderId
+    ? appointments.filter(a => a.orderId === filterOrderId && a.productType === 'SLOT_BOOKING')
+    : appointments.filter(a => isSel(a.date) && a.productType === 'SLOT_BOOKING');
   const filtAppts = filterStatus === 'ALL' ? todayAppts : todayAppts.filter(a => a.status === filterStatus);
   const filtVisits = filterStatus === 'ALL' ? todayVisits : todayVisits.filter(v => v.status === filterStatus);
+  const filtSlots = filterStatus === 'ALL' ? todaySlots : todaySlots.filter(a => a.status === filterStatus);
+
+  const todayQuickOrders = filterOrderId
+    ? orders.filter(o => o.id === filterOrderId && o.isQuickOrder)
+    : orders.filter(o => isSel(o.createdAt) && o.isQuickOrder);
+  const filtQuickOrders = filterStatus === 'ALL' ? todayQuickOrders : todayQuickOrders.filter(o => o.status === filterStatus || o.quickOrderStatus === filterStatus);
+
   const sortedAppts = [...filtAppts].sort((a, b) => (a.timeSlot || '').localeCompare(b.timeSlot || ''));
+  const sortedSlots = [...filtSlots].sort((a, b) => (a.timeSlot || '').localeCompare(b.timeSlot || ''));
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
@@ -1260,7 +1450,7 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
   });
 
   const isToday = isSameDay(selDate, new Date());
-  const totalSlots = section === 'fittings' ? todayAppts.length : todayVisits.length;
+  const totalSlots = section === 'fittings' ? todayAppts.length : section === 'slots' ? todaySlots.length : section === 'quick_orders' ? todayQuickOrders.length : todayVisits.length;
 
   // Auto-switch tabs if the filtered order is a visit instead of an appointment
   useEffect(() => {
@@ -1301,10 +1491,18 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
         <p className="text-sm text-slate-400 font-medium mt-1 ml-12.5 sm:hidden">
           {filterOrderId ? 'Filtered by Order' : (isToday ? '📅 Today' : fmtDate(selDate, { weekday: 'long' }))} · {totalSlots} {section === 'fittings' ? 'fittings' : 'home visits'}
         </p>
-        <button onClick={() => load(true)} disabled={refreshing}
-          className="self-start flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50 text-xs font-bold transition-all">
-          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />Refresh
-        </button>
+        <div className="flex items-center gap-2 self-start">
+          <button
+            onClick={() => { resetCreateModal(); setCreateModal(true); }}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-[#3D2E3D] text-xs font-bold transition-all shadow-sm"
+          >
+            <Plus className="w-4 h-4" />Create Booking
+          </button>
+          <button onClick={() => load(true)} disabled={refreshing}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50 text-xs font-bold transition-all">
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />Refresh
+          </button>
+        </div>
       </div>
 
       {/* ── Filtered Order Context ── */}
@@ -1349,6 +1547,7 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
               </span>
             )}
           </button>
+
           <button onClick={() => { setSection('home'); setFilter('ALL'); }}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${section === 'home' ? 'bg-indigo-500 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'
               }`}>
@@ -1356,6 +1555,28 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
             {todayVisits.length > 0 && (
               <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${section === 'home' ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-700'}`}>
                 {todayVisits.length}
+              </span>
+            )}
+          </button>
+
+          <button onClick={() => { setSection('quick_orders'); setFilter('ALL'); }}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${section === 'quick_orders' ? 'bg-orange-500 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'
+              }`}>
+            <ShoppingCart className="w-4 h-4" />Quick Delivery
+            {todayQuickOrders.length > 0 && (
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${section === 'quick_orders' ? 'bg-white/20 text-white' : 'bg-orange-100 text-orange-700'}`}>
+                {todayQuickOrders.length}
+              </span>
+            )}
+          </button>
+
+          <button onClick={() => { setSection('slots'); setFilter('ALL'); }}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${section === 'slots' ? 'bg-violet-500 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'
+              }`}>
+            <Clock className="w-4 h-4" />Slot Bookings
+            {todaySlots.length > 0 && (
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${section === 'slots' ? 'bg-white/20 text-white' : 'bg-violet-100 text-violet-700'}`}>
+                {todaySlots.length}
               </span>
             )}
           </button>
@@ -1375,7 +1596,7 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
         <div className="shrink-0 max-w-full overflow-x-auto">
           <DayNavigator value={selDate} onChange={setSelDate} />
         </div>
-        
+
         {!loading && (
           <div className="flex-1 w-full xl:w-auto">
             <StatsBar items={section === 'fittings' ? todayAppts : todayVisits} type={section} />
@@ -1387,7 +1608,9 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
       <div className="flex flex-wrap gap-2">
         {(section === 'fittings'
           ? ['ALL', 'PENDING', 'CONFIRMED', 'CONSULTED', 'ORDERED', 'COMPLETED', 'CANCELLED']
-          : ['ALL', 'PENDING', 'ASSIGNED', 'COMPLETED', 'CANCELLED']
+          : section === 'slots'
+            ? ['ALL', 'PENDING', 'CONFIRMED', 'CONSULTED', 'ORDERED', 'CANCELLED']
+            : ['ALL', 'PENDING', 'ASSIGNED', 'COMPLETED', 'CANCELLED']
         ).map(s => (
           <button key={s} onClick={() => setFilter(s)}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${filterStatus === s ? 'bg-slate-800 text-white border-slate-800 shadow-sm' : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50'
@@ -1405,6 +1628,200 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
         </div>
       ) : (
         <>
+          {section === 'quick_orders' && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2.5 mb-2">
+                <div className="w-8 h-8 rounded-xl bg-orange-100 flex items-center justify-center">
+                  <ShoppingCart className="w-4 h-4 text-orange-600" />
+                </div>
+                <div>
+                  <h2 className="text-base font-extrabold text-slate-800">Quick Delivery</h2>
+                  <p className="text-xs text-slate-400">{isToday ? "Today's quick deliveries" : fmtDate(selDate)} · {filtQuickOrders.length} deliveries</p>
+                </div>
+              </div>
+              {filtQuickOrders.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-4"><ShoppingCart className="w-7 h-7 text-slate-300" /></div>
+                  <p className="font-bold text-slate-700">No Quick Deliveries</p>
+                  <p className="text-sm text-slate-400 mt-1">{isToday ? 'No quick deliveries found for today' : `Nothing on ${fmtDate(selDate)}`}</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {filtQuickOrders.map(o => (
+                    <div key={o.id} className="rounded-2xl border bg-white shadow-sm hover:shadow-md transition-all overflow-hidden group border-orange-200">
+                      <div className="p-4 flex items-start gap-3">
+                        <div className="flex flex-col items-center justify-center bg-gradient-to-b from-orange-50 to-orange-100 border border-orange-200 rounded-xl px-3 py-2.5 min-w-[60px] shrink-0">
+                          <ShoppingCart className="w-3.5 h-3.5 text-orange-600 mb-1" />
+                          <span className="text-[11px] font-extrabold text-orange-700 leading-tight text-center">Quick</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-extrabold text-slate-800 truncate">{o.customerName || 'Customer'}</p>
+                            <Badge status={o.status} small />
+                          </div>
+                          <div className="flex items-center gap-1 mt-1 text-xs text-slate-500 font-bold">
+                            Invoice: <span className="text-slate-700">{o.invoiceNumber || 'N/A'}</span>
+                          </div>
+                          {o.quickOrderReason && (
+                            <p className="text-xs text-slate-500 mt-1.5 bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 leading-relaxed" style={{ maxHeight: 48, overflow: 'hidden' }}>
+                              <span className="font-bold text-slate-600">Reason:</span> {o.quickOrderReason}
+                            </p>
+                          )}
+                        </div>
+                        <button onClick={() => {
+                          if (setActiveTab) setActiveTab('orders');
+                          else window.location.href = '/admin/orders';
+                        }}
+                          className="p-2 rounded-xl border border-slate-200 hover:border-orange-300 hover:bg-orange-50 text-slate-400 hover:text-orange-600 transition-all shrink-0 opacity-0 group-hover:opacity-100">
+                          <ArrowRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {section === 'slots' && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2.5 mb-2">
+                <div className="w-8 h-8 rounded-xl bg-violet-100 flex items-center justify-center">
+                  <Clock className="w-4 h-4 text-violet-600" />
+                </div>
+                <div>
+                  <h2 className="text-base font-extrabold text-slate-800">Slot Bookings</h2>
+                  <p className="text-xs text-slate-400">{isToday ? "Today's slots" : fmtDate(selDate)} · {sortedSlots.length} slots</p>
+                </div>
+              </div>
+              {sortedSlots.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-4"><Clock className="w-7 h-7 text-slate-300" /></div>
+                  <p className="font-bold text-slate-700">No Slot Bookings</p>
+                  <p className="text-sm text-slate-400 mt-1">{isToday ? 'No slots booked for today' : `Nothing on ${fmtDate(selDate)}`}</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {sortedSlots.map(a => (
+                    <div key={a.id} className={`rounded-2xl border bg-white shadow-sm hover:shadow-md transition-all overflow-hidden group ${a.status === 'CONFIRMED' ? 'border-emerald-200' :
+                        a.status === 'CANCELLED' ? 'border-red-100 opacity-60' :
+                          a.status === 'CONSULTED' ? 'border-teal-200' :
+                            a.status === 'ORDERED' ? 'border-blue-200' : 'border-violet-200 hover:border-violet-300'
+                      }`}>
+                      <div className="p-4 flex items-start gap-3">
+                        {/* Time tile */}
+                        <div className="flex flex-col items-center justify-center bg-gradient-to-b from-violet-50 to-violet-100 border border-violet-200 rounded-xl px-3 py-2.5 min-w-[60px] shrink-0">
+                          <Clock className="w-3.5 h-3.5 text-violet-600 mb-1" />
+                          <span className="text-[11px] font-extrabold text-violet-700 leading-tight text-center">{a.timeSlot || '—'}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-extrabold text-slate-800 truncate">{a.userName || 'Walk-In Customer'}</p>
+                            <Badge status={a.status} small />
+                          </div>
+                          {a.user?.phoneNumber && <span className="text-[10px] text-slate-400 flex items-center gap-1 mt-1"><Phone className="w-3 h-3" />{a.user.phoneNumber}</span>}
+                          {a.notes && (
+                            <p className="text-xs text-slate-500 mt-1.5 bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 leading-relaxed" style={{ maxHeight: 48, overflow: 'hidden' }}>
+                              {a.notes}
+                            </p>
+                          )}
+                        </div>
+                        <button onClick={() => setDrawer({ type: 'appt', data: a })}
+                          className="p-2 rounded-xl border border-slate-200 hover:border-violet-300 hover:bg-violet-50 text-slate-400 hover:text-violet-600 transition-all shrink-0 opacity-0 group-hover:opacity-100">
+                          <SlidersHorizontal className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {/* Quick actions */}
+                      {!['CANCELLED', 'CONSULTED', 'ORDERED'].includes(a.status) && (
+                        <div className="px-4 pb-4 flex gap-2">
+                          {a.status === 'PENDING' && (
+                            <button
+                              onClick={async () => { try { await api.updateAppointmentStatus(a.id, 'CONFIRMED'); await load(true); } catch (e) { showError(e.message); } }}
+                              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold shadow-sm transition-all"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" />Confirm
+                            </button>
+                          )}
+                          {a.status === 'CONFIRMED' && (
+                            <>
+                              <button
+                                onClick={async () => { try { await api.updateAppointmentStatus(a.id, 'CONSULTED'); await load(true); } catch (e) { showError(e.message); } }}
+                                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-teal-500 hover:bg-teal-600 text-white text-xs font-bold shadow-sm transition-all"
+                              >
+                                <Sparkles className="w-3.5 h-3.5" />Consulted
+                              </button>
+                              <button
+                                onClick={async () => { try { await api.updateAppointmentStatus(a.id, 'ORDERED'); await load(true); } catch (e) { showError(e.message); } }}
+                                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold shadow-sm transition-all"
+                              >
+                                <ShoppingBag className="w-3.5 h-3.5" />Ordered
+                              </button>
+                            </>
+                          )}
+                          <button
+                            onClick={async () => { try { await api.updateAppointmentStatus(a.id, 'CANCELLED'); await load(true); } catch (e) { showError(e.message); } }}
+                            className="px-3 py-2 rounded-xl border border-red-200 hover:bg-red-50 text-red-400 text-xs font-bold transition-all"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                      {['CONSULTED', 'ORDERED', 'CANCELLED'].includes(a.status) && (
+                        <div className="px-4 pb-4">
+                          <button onClick={() => setDrawer({ type: 'appt', data: a })}
+                            className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 text-xs font-bold transition-all">
+                            <Eye className="w-3.5 h-3.5" />View Details
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* All slot bookings table */}
+              {appointments.filter(a => a.productType === 'SLOT_BOOKING').length > 0 && (
+                <div className="mt-8 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                  <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-violet-500" />
+                    <h3 className="text-sm font-extrabold text-slate-700">All Slot Bookings</h3>
+                    <span className="ml-auto text-[10px] text-slate-400 font-medium">Upcoming & active</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-50 border-b border-slate-100">
+                        <tr>{['Customer', 'Date', 'Time', 'Description', 'Status', 'Action'].map(h =>
+                          <th key={h} className="text-left py-3 px-4 font-bold text-slate-400 uppercase tracking-wider text-[10px]">{h}</th>
+                        )}</tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {appointments
+                          .filter(a => a.productType === 'SLOT_BOOKING' && !['CANCELLED'].includes(a.status))
+                          .sort((a, b) => new Date(a.date) - new Date(b.date))
+                          .slice(0, 25)
+                          .map(a => (
+                            <tr key={a.id} className="hover:bg-slate-50/70 transition-colors">
+                              <td className="py-3 px-4 font-bold text-slate-700">{a.userName || 'Walk-In'}</td>
+                              <td className="py-3 px-4 text-slate-600">{fmtDate(a.date)}</td>
+                              <td className="py-3 px-4 text-slate-500">{a.timeSlot}</td>
+                              <td className="py-3 px-4 text-slate-500 max-w-[160px] truncate">{a.notes || '—'}</td>
+                              <td className="py-3 px-4"><Badge status={a.status} small /></td>
+                              <td className="py-3 px-4">
+                                <button onClick={() => setDrawer({ type: 'appt', data: a })}
+                                  className="px-2.5 py-1 rounded-lg border border-violet-300 text-violet-600 text-[10px] font-bold hover:bg-violet-50 transition-all flex items-center gap-1">
+                                  Open <ArrowRight className="w-3 h-3" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {section === 'fittings' && (
             <div className="space-y-3">
               <div className="flex items-center gap-2.5 mb-2">
@@ -1573,6 +1990,353 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
           onRefresh={() => load(true)}
           setActiveTab={setActiveTab}
         />
+      )}
+
+      {/* ── Create Booking Drawer ─────────────────────────────────── */}
+      {createModal && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/60 backdrop-blur-sm transition-opacity">
+          <div className="w-full max-w-2xl bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+            {/* Drawer Header */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 shrink-0 bg-slate-50/80">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-brand-100 to-brand-200 flex items-center justify-center shadow-sm border border-brand-200/50">
+                  <Plus className="w-5 h-5 text-brand-700" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-slate-800 tracking-tight">Create Booking</h2>
+                  <p className="text-xs text-slate-400 font-medium">Schedule appointments, studio fittings, or home visits</p>
+                </div>
+              </div>
+              <button onClick={() => setCreateModal(false)} className="p-2 rounded-xl hover:bg-slate-200/60 border border-transparent hover:border-slate-200 text-slate-400 hover:text-slate-600 transition-all shadow-sm">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 p-6 space-y-6">
+
+              {/* ── Booking Type ── */}
+              <div>
+                <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider mb-3">Select Booking Type</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {[
+                    { key: 'slot', label: 'Slot Booking', desc: 'Simple time slot with notes', icon: Clock, activeStyle: 'border-violet-500 bg-violet-50/50 text-violet-950 ring-2 ring-violet-500/20' },
+                    { key: 'fitting', label: 'Studio Fitting', desc: 'In-store product appointment', icon: Scissors, activeStyle: 'border-brand-500 bg-brand-50/50 text-brand-950 ring-2 ring-brand-500/20' },
+                    { key: 'home', label: 'Home Visit', desc: 'At-home measurement & fitting', icon: Home, activeStyle: 'border-indigo-500 bg-indigo-50/50 text-indigo-950 ring-2 ring-indigo-500/20' },
+                  ].map(t => {
+                    const active = createType === t.key;
+                    const Icon = t.icon;
+                    return (
+                      <button key={t.key} type="button" onClick={() => { setCreateType(t.key); setCreateError(''); }}
+                        className={`relative flex flex-col p-4 rounded-2xl border text-left transition-all duration-200 ${active ? t.activeStyle : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/80 shadow-sm'
+                          }`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${active ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-500'}`}>
+                            <Icon className="w-5 h-5" />
+                          </div>
+                          {active && (
+                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-100 animate-pulse" />
+                          )}
+                        </div>
+                        <p className="text-sm font-extrabold text-slate-800">{t.label}</p>
+                        <p className="text-[11px] text-slate-400 font-medium leading-snug mt-1">{t.desc}</p>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* ── Customer Search ── */}
+              <div>
+                <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider mb-2.5">Customer Details</p>
+                {createCustomer ? (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between bg-emerald-50/70 border border-emerald-200/80 rounded-2xl px-4 py-3 shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center border border-emerald-200 shrink-0">
+                          <User className="w-5 h-5 text-emerald-700" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-extrabold text-emerald-900">{createCustomer.fullName}</p>
+                          <p className="text-xs text-emerald-600 font-medium">{createCustomer.phoneNumber || createCustomer.email}</p>
+                        </div>
+                      </div>
+                      <button type="button" onClick={() => { setCreateCustomer(null); setCreateCustomerSearch(''); }}
+                        className="text-emerald-600 hover:bg-emerald-100/80 p-2 rounded-xl transition-colors"><X className="w-4 h-4" /></button>
+                    </div>
+                    {/* Address Hint for Home Visit */}
+                    {createType === 'home' && createCustomer.address && (
+                      <div className="bg-blue-50/70 border border-blue-200/80 rounded-2xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+                        <div className="text-xs text-blue-900">
+                          <span className="font-extrabold uppercase text-[10px] text-blue-600 block">Saved Customer Address</span>
+                          <span className="font-semibold">{
+                            (() => {
+                              let addr = createCustomer.address;
+                              if (typeof addr === 'object' && addr !== null) {
+                                return Object.values(addr).filter(Boolean).join(', ');
+                              }
+                              try {
+                                const parsed = JSON.parse(addr);
+                                return typeof parsed === 'object' && parsed !== null ? Object.values(parsed).filter(Boolean).join(', ') : addr;
+                              } catch (e) { return String(addr); }
+                            })()
+                          }</span>
+                        </div>
+                        <button type="button" onClick={() => {
+                          let addr = createCustomer.address;
+                          if (typeof addr === 'object' && addr !== null) {
+                            addr = Object.values(addr).filter(Boolean).join(', ');
+                          } else {
+                            try {
+                              const parsed = JSON.parse(addr);
+                              if (typeof parsed === 'object' && parsed !== null) addr = Object.values(parsed).filter(Boolean).join(', ');
+                            } catch (e) { }
+                          }
+                          setCreateAddress(String(addr));
+                        }} className="shrink-0 text-[11px] font-extrabold uppercase tracking-wider bg-blue-600 text-white px-3.5 py-2 rounded-xl hover:bg-blue-700 transition-colors shadow-sm">
+                          Auto-fill Address
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <div className="flex items-center gap-2.5 border border-slate-200 rounded-2xl px-4 py-3 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/20 bg-white transition-all shadow-sm">
+                      <User className="w-4.5 h-4.5 text-slate-400 shrink-0" />
+                      <input
+                        type="text"
+                        value={createCustomerSearch}
+                        onChange={e => setCreateCustomerSearch(e.target.value)}
+                        placeholder="Search customer by name or phone number..."
+                        className="flex-1 text-sm bg-transparent focus:outline-none text-slate-800 placeholder-slate-400 font-medium"
+                      />
+                      {createSearching && <Loader2 className="w-4 h-4 text-brand-500 animate-spin shrink-0" />}
+                    </div>
+                    {createCustomerResults.length > 0 && (
+                      <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-20 overflow-hidden max-h-60 overflow-y-auto">
+                        {createCustomerResults.map(c => (
+                          <button key={c.id} type="button" onClick={async () => {
+                            try {
+                              const full = await api.getCustomerDetails(c.id);
+                              setCreateCustomer(full.user);
+                            } catch (e) {
+                              setCreateCustomer(c);
+                            }
+                            setCreateCustomerSearch('');
+                            setCreateCustomerResults([]);
+                          }}
+                            className="w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0 flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center text-xs font-black shrink-0">{c.fullName?.charAt(0).toUpperCase()}</div>
+                            <div>
+                              <p className="text-sm font-extrabold text-slate-800">{c.fullName}</p>
+                              <p className="text-xs text-slate-400 font-medium">{c.phoneNumber || c.email}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {createCustomerSearch.length >= 2 && !createSearching && createCustomerResults.length === 0 && (
+                      <p className="text-xs text-slate-400 mt-2 pl-2 flex items-center gap-1.5 font-medium"><AlertCircle className="w-3.5 h-3.5 text-slate-400" /> No matching customers found</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* ── Date Selection ── */}
+              <div>
+                <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider mb-2.5">Target Date</p>
+                <div className="relative">
+                  <Calendar className="w-4.5 h-4.5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="date"
+                    value={createDate}
+                    onChange={e => setCreateDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full text-sm font-semibold border border-slate-200 rounded-2xl py-3 pl-11 pr-4 bg-white focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 text-slate-800 transition-all shadow-sm"
+                  />
+                </div>
+              </div>
+
+              {/* ── Time Slot Selection (not for Home Visit) ── */}
+              {createType !== 'home' && (
+                <div>
+                  <div className="flex items-center justify-between mb-2.5">
+                    <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">Time Slot</p>
+                    {createTime && (
+                      <span className="text-xs font-extrabold text-brand-600 bg-brand-50 px-2.5 py-0.5 rounded-full border border-brand-200/60">
+                        Selected: {createTime}
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                    {fetchingSlots ? (
+                      <div className="col-span-full text-center py-6 text-xs font-semibold text-slate-400 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin text-brand-500" /> Fetching available time slots...
+                      </div>
+                    ) : availableSlots.length > 0 ? (
+                      availableSlots.map(s => {
+                        const isSelected = createTime === s;
+                        return (
+                          <button key={s} type="button" onClick={() => setCreateTime(s)}
+                            className={`py-3 px-2 rounded-xl text-xs font-extrabold border transition-all duration-200 shadow-sm ${isSelected
+                                ? 'bg-slate-900 text-white border-slate-900 ring-2 ring-slate-900/20 shadow-md scale-[1.02]'
+                                : 'border-slate-200 text-slate-700 hover:border-brand-300 hover:bg-brand-50/50 bg-white'
+                              }`}>
+                            {s}
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <div className="col-span-full text-center py-6 text-xs font-semibold text-slate-400 bg-slate-50 rounded-2xl border border-slate-100">
+                        {createDate ? 'No available slots for this date.' : 'Please select a date first to view time slots.'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Studio Fitting fields ── */}
+              {createType === 'fitting' && (
+                <div className="space-y-5 pt-3 border-t border-slate-100">
+                  <div>
+                    <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider mb-2.5">Appointment Category</p>
+                    <div className="flex gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200/60">
+                      {['MEASUREMENT', 'CONSULTATION', 'PRODUCT_SELECTION'].map(t => (
+                        <button key={t} type="button" onClick={() => setCreateApptType(t)}
+                          className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold transition-all ${createApptType === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                            }`}>
+                          {t.replace(/_/g, ' ')}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1">Product / Service Details <span className="text-red-500">*</span></p>
+                    <div className="relative">
+                      <div className="flex items-center gap-2.5 border border-slate-200 rounded-2xl px-4 py-3 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/20 bg-white transition-all shadow-sm">
+                        <ShoppingBag className="w-4.5 h-4.5 text-slate-400 shrink-0" />
+                        <input
+                          type="text"
+                          value={createProductType}
+                          onChange={e => {
+                            setCreateProductType(e.target.value);
+                            setCreateProductSearch(e.target.value);
+                          }}
+                          placeholder="Search catalog or enter custom outfit name..."
+                          className="flex-1 text-sm bg-transparent focus:outline-none text-slate-800 placeholder-slate-400 font-medium"
+                        />
+                        {createProductSearching && <Loader2 className="w-4 h-4 text-brand-500 animate-spin shrink-0" />}
+                      </div>
+
+                      {/* Product Suggestions Dropdown */}
+                      {createProductResults.length > 0 && createProductType.length > 0 && (
+                        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-20 overflow-hidden max-h-60 overflow-y-auto">
+                          <p className="text-[10px] font-extrabold text-slate-400 uppercase px-4 py-2 bg-slate-50 border-b border-slate-100 tracking-wider">Catalog Suggestions</p>
+                          {createProductResults.map(p => (
+                            <button key={p.id} type="button" onClick={() => { setCreateProductType(p.name); setCreateProductSearch(''); setCreateProductResults([]); }}
+                              className="w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0 flex items-center gap-3">
+                              {p.images && p.images[0] ? (
+                                <img src={p.images[0]} alt="" className="w-9 h-9 rounded-xl object-cover shrink-0 border border-slate-100" />
+                              ) : (
+                                <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center shrink-0"><Tag className="w-4 h-4 text-slate-400" /></div>
+                              )}
+                              <div>
+                                <p className="text-sm font-extrabold text-slate-800 line-clamp-1">{p.name}</p>
+                                <p className="text-xs text-slate-500 font-semibold">{p.category?.name}</p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Slot Booking Description ── */}
+              {createType === 'slot' && (
+                <div className="pt-2 border-t border-slate-100">
+                  <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider mb-2.5">Description <span className="text-slate-400 font-normal normal-case">(optional)</span></p>
+                  <textarea
+                    value={createNotes}
+                    onChange={e => setCreateNotes(e.target.value)}
+                    rows={3}
+                    placeholder="Purpose of slot — e.g. discuss embroidery details, fabric selection, fitting adjustments..."
+                    className="w-full text-sm font-medium border border-slate-200 rounded-2xl p-3.5 bg-white focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 resize-none text-slate-800 transition-all shadow-sm"
+                  />
+                </div>
+              )}
+
+              {/* ── Studio Fitting Notes ── */}
+              {createType === 'fitting' && (
+                <div>
+                  <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider mb-2.5">Additional Notes <span className="text-slate-400 font-normal normal-case">(optional)</span></p>
+                  <textarea
+                    value={createNotes}
+                    onChange={e => setCreateNotes(e.target.value)}
+                    rows={3}
+                    placeholder="Special instructions, studio preferences, fabric details..."
+                    className="w-full text-sm font-medium border border-slate-200 rounded-2xl p-3.5 bg-white focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 resize-none text-slate-800 transition-all shadow-sm"
+                  />
+                </div>
+              )}
+
+              {/* ── Home Visit fields ── */}
+              {createType === 'home' && (
+                <div className="space-y-5 pt-3 border-t border-slate-100">
+                  <div>
+                    <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider mb-2.5">Full Visit Address <span className="text-red-500">*</span></p>
+                    <textarea
+                      value={createAddress}
+                      onChange={e => setCreateAddress(e.target.value)}
+                      rows={3}
+                      placeholder="House/Apartment No., Building, Street, Landmark, City, Pincode..."
+                      className="w-full text-sm font-medium border border-slate-200 rounded-2xl p-3.5 bg-white focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 resize-none text-slate-800 transition-all shadow-sm"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider mb-2.5">Requirements / Visit Purpose <span className="text-red-500">*</span></p>
+                    <textarea
+                      value={createRequirements}
+                      onChange={e => setCreateRequirements(e.target.value)}
+                      rows={3}
+                      placeholder="Specify requirements — e.g. bridal measurement, fabric trial, suit fitting..."
+                      className="w-full text-sm font-medium border border-slate-200 rounded-2xl p-3.5 bg-white focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 resize-none text-slate-800 transition-all shadow-sm"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* ── Error Display ── */}
+              {createError && (
+                <div className="flex items-center gap-2.5 bg-red-50 border border-red-200 text-red-700 text-xs font-bold px-4 py-3.5 rounded-2xl animate-in fade-in shadow-sm">
+                  <AlertCircle className="w-4.5 h-4.5 shrink-0 text-red-500" />{createError}
+                </div>
+              )}
+
+            </div>
+
+            {/* Drawer Footer */}
+            <div className="border-t border-slate-100 px-6 py-4 bg-slate-50/80 flex items-center justify-between shrink-0">
+              <button type="button" onClick={() => setCreateModal(false)} className="px-5 py-2.5 rounded-xl text-slate-600 text-sm font-extrabold hover:bg-slate-200/60 transition-all">
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitCreateBooking}
+                disabled={createSubmitting}
+                className={`flex items-center gap-2 px-7 py-3 rounded-2xl text-sm font-extrabold shadow-lg transition-all active:scale-[0.98] disabled:opacity-60 ${createType === 'home' ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/25' :
+                    createType === 'fitting' ? 'bg-brand-500 hover:bg-brand-600 text-[#3D2E3D] shadow-brand-500/25' :
+                      'bg-violet-600 hover:bg-violet-700 text-white shadow-violet-600/25'
+                  }`}
+              >
+                {createSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
+                {createSubmitting ? 'Creating...' : `Create ${createType === 'slot' ? 'Slot' :
+                    createType === 'fitting' ? 'Fitting' : 'Visit'
+                  }`}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

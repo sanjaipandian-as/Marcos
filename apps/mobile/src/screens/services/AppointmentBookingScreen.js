@@ -85,17 +85,22 @@ export default function AppointmentBookingScreen({ navigation, route }) {
   const [rescheduleDate, setRescheduleDate] = useState(null);
   const [rescheduleTimeSlot, setRescheduleTimeSlot] = useState('');
   const [rescheduleNotes, setRescheduleNotes] = useState('');
-  const [calendarTarget, setCalendarTarget] = useState('BOOKING'); // 'BOOKING' or 'RESCHEDULE'
+  const [calendarTarget, setCalendarTarget] = useState('BOOKING'); // 'BOOKING', 'RESCHEDULE', or 'SLOT'
 
   const [bookedSlotsCounts, setBookedSlotsCounts] = useState({});
   const [maxBookingsPerSlot, setMaxBookingsPerSlot] = useState(5);
 
+  // ── Slot Booking States ──────────────────────────────────────
+  const [slotModalVisible, setSlotModalVisible] = useState(false);
+  const [slotDate, setSlotDate] = useState(null);
+  const [slotTime, setSlotTime] = useState('');
+  const [slotDescription, setSlotDescription] = useState('');
+  const [slotErrors, setSlotErrors] = useState({});
+  const [slotSubmitting, setSlotSubmitting] = useState(false);
+
   const scrollY = React.useRef(new Animated.Value(0)).current;
 
-  const availableSlots = [
-    '10:00 - 11:00', '11:00 - 12:00', '12:00 - 13:00', '14:00 - 15:00',
-    '15:00 - 16:00', '16:00 - 17:00', '17:00 - 18:00', '18:00 - 19:00'
-  ];
+  const [availableSlots, setAvailableSlots] = useState([]);
 
   const fetchSettings = async () => {
     // /system/settings/public is open to guests — safe to call always
@@ -111,8 +116,7 @@ export default function AppointmentBookingScreen({ navigation, route }) {
 
   const loadBookedSlots = async (targetDate) => {
     if (!targetDate) return;
-    // This endpoint requires auth — skip for guests
-    if (!user) return;
+
     try {
       const yearVal = targetDate.getFullYear();
       const monthVal = String(targetDate.getMonth() + 1).padStart(2, '0');
@@ -120,13 +124,16 @@ export default function AppointmentBookingScreen({ navigation, route }) {
       const formattedDate = `${yearVal}-${monthVal}-${dayVal}T12:00:00.000Z`;
       const res = await api.get(`/appointments/availability?date=${formattedDate}`);
       if (res.success && res.data) {
-        setBookedSlotsCounts(res.data);
+        setBookedSlotsCounts(res.data.counts || {});
+        setAvailableSlots(res.data.availableSlots || []);
       } else {
         setBookedSlotsCounts({});
+        setAvailableSlots([]);
       }
     } catch (err) {
       console.warn('Failed to load booked slots counts:', err.message);
       setBookedSlotsCounts({});
+      setAvailableSlots([]);
     }
   };
 
@@ -166,10 +173,8 @@ export default function AppointmentBookingScreen({ navigation, route }) {
 
   const getFilteredAvailableSlots = (dateObj) => {
     if (!dateObj) return availableSlots;
-    return availableSlots.filter(s => {
-      const count = bookedSlotsCounts[s] || 0;
-      return count < maxBookingsPerSlot;
-    });
+    // The backend now pre-filters full and past slots
+    return availableSlots;
   };
 
   const loadData = async (reset = false) => {
@@ -321,6 +326,50 @@ export default function AppointmentBookingScreen({ navigation, route }) {
     setErrors({});
   };
 
+  const resetSlotForm = () => {
+    setSlotDate(null);
+    setSlotTime('');
+    setSlotDescription('');
+    setSlotErrors({});
+  };
+
+  const handleSlotBooking = async () => {
+    requireAuth(async () => {
+      const newErrors = {};
+      if (!slotDate) newErrors.date = 'Please select a date';
+      if (!slotTime) newErrors.time = 'Please select a time slot';
+      setSlotErrors(newErrors);
+      if (Object.keys(newErrors).length > 0) return;
+
+      setSlotSubmitting(true);
+      try {
+        const yearVal = slotDate.getFullYear();
+        const monthVal = String(slotDate.getMonth() + 1).padStart(2, '0');
+        const dayVal = String(slotDate.getDate()).padStart(2, '0');
+        const formattedDate = `${yearVal}-${monthVal}-${dayVal}T12:00:00.000Z`;
+
+        const res = await api.post('/appointments', {
+          date: formattedDate,
+          timeSlot: slotTime,
+          productType: 'SLOT_BOOKING',
+          type: 'CONSULTATION',
+          notes: slotDescription.trim() || undefined,
+        });
+
+        if (res.success) {
+          Alert.alert('Slot Booked!', 'Your slot has been booked successfully.');
+          setSlotModalVisible(false);
+          resetSlotForm();
+          loadData(true);
+        }
+      } catch (err) {
+        Alert.alert('Error', err.message || 'Failed to book slot.');
+      } finally {
+        setSlotSubmitting(false);
+      }
+    });
+  };
+
   const handleReschedulePress = (item) => {
     const isVisit = !!item.address;
     setReschedulingItem(item);
@@ -466,6 +515,9 @@ export default function AppointmentBookingScreen({ navigation, route }) {
                     onPress={() => {
                       if (calendarTarget === 'RESCHEDULE') {
                         setRescheduleDate(item.date);
+                      } else if (calendarTarget === 'SLOT') {
+                        setSlotDate(item.date);
+                        loadBookedSlots(item.date);
                       } else {
                         setSelectedDate(item.date);
                       }
@@ -639,7 +691,17 @@ export default function AppointmentBookingScreen({ navigation, route }) {
         <Text style={[styles.headerTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
           Bookings
         </Text>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity
+          style={[styles.slotHeaderBtn, { backgroundColor: theme.brand[500] }, shadows.premium]}
+          onPress={() => {
+            setCalendarTarget('SLOT');
+            resetSlotForm();
+            setSlotModalVisible(true);
+          }}
+          activeOpacity={0.8}
+        >
+          <Plus size={20} color="#3D2E3D" />
+        </TouchableOpacity>
       </View>
 
       {/* Booking Type Selector */}
@@ -844,6 +906,129 @@ export default function AppointmentBookingScreen({ navigation, route }) {
           </View>
         </View>
       </Modal>
+
+      {/* ── Slot Booking Modal ──────────────────────────────────── */}
+      <Modal visible={slotModalVisible} animationType="slide" transparent>
+        <View style={styles.modalBgPremium}>
+          <View style={[styles.slotModalCard, { backgroundColor: theme.bg.main }]}>
+            <View style={styles.dragHandleContainer}>
+              <View style={styles.dragHandle} />
+            </View>
+            <View style={styles.slotModalHeader}>
+              <View>
+                <Text style={[styles.slotModalTitle, { color: theme.text.primary, fontFamily: fonts.bold }]}>Book a Slot</Text>
+                <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: theme.text.secondary, marginTop: 4 }}>Select your preferred time</Text>
+              </View>
+              <TouchableOpacity style={styles.closeSlotBtn} onPress={() => setSlotModalVisible(false)}>
+                <X size={20} color={theme.text.primary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={styles.slotModalScroll} showsVerticalScrollIndicator={false}>
+
+              {/* Date Picker */}
+              <TouchableOpacity
+                style={[styles.premiumInputContainer, { backgroundColor: theme.bg.card, borderColor: slotErrors.date ? '#ef4444' : theme.border }]}
+                onPress={() => {
+                  setCalendarTarget('SLOT');
+                  setShowCalendarModal(true);
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.premiumInputIcon}>
+                  <Calendar size={22} color={theme.brand[500]} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 11, color: theme.text.muted, fontFamily: fonts.medium, marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>Date</Text>
+                  <Text style={[styles.premiumInputText, { color: slotDate ? theme.text.primary : theme.text.muted, fontFamily: fonts.semiBold }]}>
+                    {slotDate ? slotDate.toDateString() : 'Select a date'}
+                  </Text>
+                </View>
+                <ChevronDown size={20} color={theme.text.muted} />
+              </TouchableOpacity>
+              {slotErrors.date && <Text style={styles.errorTextPremium}>{slotErrors.date}</Text>}
+
+              {/* Time Slots */}
+              <View style={{ marginTop: 24, marginBottom: 16 }}>
+                <Text style={{ fontFamily: fonts.semiBold, fontSize: 13, color: theme.text.primary, marginBottom: 12 }}>Available Times</Text>
+                {slotErrors.time && <Text style={[styles.errorTextPremium, { marginTop: -4, marginBottom: 8 }]}>{slotErrors.time}</Text>}
+                
+                {!slotDate ? (
+                  <View style={styles.noSlotsContainer}>
+                    <Calendar size={24} color={theme.text.muted} />
+                    <Text style={{ fontFamily: fonts.medium, color: theme.text.secondary, marginTop: 8 }}>Please select a date</Text>
+                  </View>
+                ) : getFilteredAvailableSlots(slotDate).length === 0 ? (
+                  <View style={styles.noSlotsContainer}>
+                    <Clock3 size={24} color={theme.text.muted} />
+                    <Text style={{ fontFamily: fonts.medium, color: theme.text.secondary, marginTop: 8 }}>No slots available</Text>
+                  </View>
+                ) : (
+                  <View style={styles.premiumSlotsGrid}>
+                    {getFilteredAvailableSlots(slotDate).map(s => (
+                      <TouchableOpacity
+                        key={s}
+                        style={[
+                          styles.premiumSlotOption, 
+                          { backgroundColor: theme.bg.card, borderColor: theme.border }, 
+                          slotTime === s && { backgroundColor: theme.brand[500], borderColor: theme.brand[500] }
+                        ]}
+                        onPress={() => setSlotTime(s)}
+                        activeOpacity={0.7}
+                      >
+                        {slotTime === s && <CheckCircle2 size={14} color="#ffffff" style={{ marginRight: 6 }} />}
+                        <Text style={[
+                          styles.premiumSlotText, 
+                          { color: theme.text.primary, fontFamily: fonts.medium }, 
+                          slotTime === s && { color: '#ffffff', fontFamily: fonts.bold }
+                        ]}>
+                          {s}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Description */}
+              <View style={[styles.premiumInputContainer, { backgroundColor: theme.bg.card, borderColor: theme.border, alignItems: 'flex-start', paddingVertical: 16 }]}>
+                <View style={[styles.premiumInputIcon, { marginTop: 2 }]}>
+                  <Info size={22} color={theme.text.muted} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 11, color: theme.text.muted, fontFamily: fonts.medium, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Note (Optional)</Text>
+                  <TextInput
+                    style={[styles.premiumTextInput, { color: theme.text.primary, fontFamily: fonts.regular }]}
+                    placeholder="E.g. discuss fabric fitting..."
+                    placeholderTextColor={theme.text.muted}
+                    multiline
+                    value={slotDescription}
+                    onChangeText={setSlotDescription}
+                  />
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.premiumSubmitBtn, { backgroundColor: theme.brand[500], marginTop: 32 }]}
+                onPress={handleSlotBooking}
+                disabled={slotSubmitting}
+                activeOpacity={0.8}
+              >
+                {slotSubmitting
+                  ? <ActivityIndicator color="#ffffff" />
+                  : (
+                    <>
+                      <Text style={[styles.premiumSubmitBtnText, { color: '#ffffff', fontFamily: fonts.bold }]}>Confirm Booking</Text>
+                      <ArrowRight size={20} color="#ffffff" />
+                    </>
+                  )
+                }
+              </TouchableOpacity>
+
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -937,6 +1122,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   fab: { position: 'absolute', bottom: 30, right: 24, width: 60, height: 60, borderRadius: 30, backgroundColor: '#d8bfd8', alignItems: 'center', justifyContent: 'center', elevation: 8 },
+  slotHeaderBtn: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalCard: { backgroundColor: '#ffffff', borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, paddingBottom: 0 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
@@ -1261,7 +1447,125 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
-    marginTop: 20,
+  },
+  modalBgPremium: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  slotModalCard: {
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    maxHeight: '90%',
+  },
+  dragHandleContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  dragHandle: {
+    width: 40,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#cbd5e1',
+  },
+  slotModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 24,
+  },
+  slotModalTitle: {
+    fontSize: 24,
+  },
+  closeSlotBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  slotModalScroll: {
+    paddingBottom: 20,
+  },
+  premiumInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  premiumInputIcon: {
+    marginRight: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.03)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  premiumInputText: {
+    fontSize: 16,
+  },
+  premiumTextInput: {
+    fontSize: 15,
+    padding: 0,
+    margin: 0,
+    minHeight: 60,
+    textAlignVertical: 'top',
+  },
+  errorTextPremium: {
+    color: '#ef4444',
+    fontSize: 12,
+    marginTop: 6,
+    marginLeft: 8,
+  },
+  premiumSlotsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  premiumSlotOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    minWidth: '30%',
+  },
+  premiumSlotText: {
+    fontSize: 14,
+  },
+  noSlotsContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 30,
+    backgroundColor: 'rgba(0,0,0,0.02)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+  },
+  premiumSubmitBtn: {
+    height: 60,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  premiumSubmitBtnText: {
+    fontSize: 16,
   },
   submitBtnText: {
     fontSize: 16,
