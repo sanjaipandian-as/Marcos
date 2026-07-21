@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Lock, Mail, AlertCircle, Loader2 } from 'lucide-react';
+import { PRODUCT_NAME } from '../config/productName';
 import api from '../utils/api';
 
 export default function Login({ onLoginSuccess }) {
@@ -47,9 +48,9 @@ export default function Login({ onLoginSuccess }) {
         <div className="text-center space-y-2">
           {/* Elegant Logo Accent */}
           <div className="mx-auto w-12 h-12 rounded-2xl bg-brand-500 flex items-center justify-center text-white shadow-lg shadow-brand-500/35 mb-4 animate-bounce">
-            <span className="font-black text-2xl">M</span>
+            <span className="font-black text-2xl">{PRODUCT_NAME.charAt(0)}</span>
           </div>
-          <h2 className="text-2xl font-black text-white tracking-tight">Welcome to MARCOS</h2>
+          <h2 className="text-2xl font-black text-white tracking-tight">Welcome to {PRODUCT_NAME}</h2>
           <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
             SuperAdmin Dashboard Control Panel
           </p>
@@ -119,7 +120,7 @@ export default function Login({ onLoginSuccess }) {
 
         <div className="pt-2 text-center">
           <p className="text-[10px] text-slate-500 font-bold tracking-wide">
-            MARCOS CUSTOM TAILORS &bull; MULTI-STORE MANAGEMENT
+            {PRODUCT_NAME} CUSTOM TAILORS &bull; MULTI-STORE MANAGEMENT
           </p>
         </div>
       </div>

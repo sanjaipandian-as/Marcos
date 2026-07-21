@@ -15,6 +15,6 @@ if (url.protocol === 'rediss:') {
   connectionOptions.tls = {};
 }
 
-export const QUEUE_NAME = 'marcos-jobs';
+export const QUEUE_NAME = `${env.APP_NAME.toLowerCase()}-jobs`;
 
 export default connectionOptions;

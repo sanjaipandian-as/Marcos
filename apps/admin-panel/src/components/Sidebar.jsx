@@ -30,6 +30,7 @@ import {
   Printer,
   PlayCircle
 } from 'lucide-react';
+import { PRODUCT_NAME, PRODUCT_VERSION } from '../config/productName';
 import api from '../utils/api';
 
 export default function Sidebar({
@@ -229,14 +230,14 @@ export default function Sidebar({
         <div className="h-16 flex items-center px-6 border-b border-[#F0E5F0] shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-brand-500 flex items-center justify-center text-[#3D2E3D] shadow-premium transition-all duration-300">
-              <span className="font-extrabold text-lg">M</span>
+              <span className="font-extrabold text-lg">{PRODUCT_NAME.charAt(0)}</span>
             </div>
             <div>
               <span className="font-bold text-[#3D2E3D] text-lg tracking-tight">
-                MARCOS
+                {PRODUCT_NAME}
               </span>
               <span className="text-[10px] block text-[#8F5C8F] font-semibold uppercase tracking-wider">
-                Admin Panel
+                Admin Panel v{PRODUCT_VERSION}
               </span>
             </div>
           </div>

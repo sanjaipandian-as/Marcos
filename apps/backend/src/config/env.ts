@@ -6,6 +6,8 @@ dotenv.config();
 const envSchema = z.object({
   PORT: z.coerce.number().default(5000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  APP_NAME: z.string().default('MARCOS'),
+  APP_VERSION: z.string().default('1.0.0'),
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
   JWT_ACCESS_SECRET: z.string().min(8),

@@ -167,15 +167,49 @@ export default function InventoryIntelligence() {
           </div>
         </div>
 
-        {/* Empty block instead of Price Change chart (due to no data available in schema) */}
-        <div className="bg-slate-50 rounded-xl border border-slate-200 border-dashed p-6 flex flex-col items-center justify-center text-center">
-          <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mb-4">
-             <AlertCircle className="w-8 h-8" />
+        {/* Price History Tracking Block */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+          <div className="mb-6 flex justify-between items-center">
+            <div>
+              <h4 className="text-slate-900 font-bold text-lg">Price History Tracking</h4>
+              <p className="text-sm text-slate-500">Historical price modifications &amp; audit log</p>
+            </div>
+            <span className="px-2.5 py-1 bg-brand-50 text-brand-700 border border-brand-200 rounded-full text-xs font-extrabold">
+              {data.priceHistory?.count || 0} Changes Recorded
+            </span>
           </div>
-          <h4 className="text-slate-700 font-bold text-lg mb-2">Price History Tracking</h4>
-          <p className="text-sm text-slate-500 max-w-sm">
-            Historical price tracking is currently unavailable in the database. "Price change vs sales impact" requires an audit table upgrade.
-          </p>
+
+          <div className="flex flex-col gap-3 max-h-96 overflow-y-auto pr-2">
+            {data.priceHistory?.items?.length > 0 ? (
+              data.priceHistory.items.map((item) => (
+                <div key={item.id} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-xl hover:bg-slate-100/50 transition-colors">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-extrabold text-slate-800 text-sm">{item.productName}</span>
+                    <span className="text-[10px] text-slate-400 font-semibold">
+                      Modified by {item.changedBy} • {new Date(item.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <div className="flex items-center gap-1 text-xs">
+                        <span className="text-slate-400 line-through">₹{item.oldPrice}</span>
+                        <span className="text-slate-400 font-bold">→</span>
+                        <span className="font-extrabold text-slate-800">₹{item.newPrice}</span>
+                      </div>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold ${item.diff > 0 ? 'bg-amber-100 text-amber-800' : item.diff < 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'}`}>
+                      {item.diffPercent}
+                    </span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                <p className="text-xs text-slate-500 font-bold">No price modifications recorded yet.</p>
+                <p className="text-[10px] text-slate-400 mt-1">Changes made to product prices in the catalogue will be automatically audited and tracked here.</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

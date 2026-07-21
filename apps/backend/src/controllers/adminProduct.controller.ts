@@ -73,6 +73,16 @@ export class AdminProductController {
         },
       });
 
+      // Log initial price in ProductPriceHistory
+      await (prisma as any).productPriceHistory.create({
+        data: {
+          productId: product.id,
+          oldPrice: price,
+          newPrice: price,
+          changedBy: req.user?.fullName || 'Admin',
+        },
+      }).catch((err: any) => console.error('Failed to log initial price history:', err));
+
       // Write AuditLog
       await prisma.auditLog.create({
         data: {
@@ -138,6 +148,18 @@ export class AdminProductController {
         where: { id },
         data: updateData,
       });
+
+      // Log price change if price was updated
+      if (price !== undefined && Number(price) !== Number(existingProduct.price)) {
+        await (prisma as any).productPriceHistory.create({
+          data: {
+            productId: id,
+            oldPrice: existingProduct.price,
+            newPrice: price,
+            changedBy: req.user?.fullName || 'Admin',
+          },
+        }).catch((err: any) => console.error('Failed to log price history:', err));
+      }
 
       // Write AuditLog
       await prisma.auditLog.create({

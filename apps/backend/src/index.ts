@@ -19,7 +19,7 @@ startAnalyticsFlushWorker();
 
 const port = env.PORT;
 server.listen(port, () => {
-  logger.info(`🚀 MARCOS Backend Engine running in ${env.NODE_ENV} mode on port ${port}`);
+  logger.info(`🚀 ${env.APP_NAME} Backend Engine v${env.APP_VERSION} running in ${env.NODE_ENV} mode on port ${port}`);
 });
 
 // Graceful shutdown handler

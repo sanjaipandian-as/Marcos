@@ -161,6 +161,9 @@ export default function RegisterScreen({ route, navigation, onLoginSuccess }) {
 
       if (res.success && res.accessToken) {
         await AsyncStorage.setItem('accessToken', res.accessToken);
+        if (res.refreshToken) {
+          await AsyncStorage.setItem('refreshToken', res.refreshToken);
+        }
         await AsyncStorage.setItem('userProfile', JSON.stringify(res.user));
         if (res.user.referredById) {
           await AsyncStorage.setItem('show_referral_success_popup', 'true');

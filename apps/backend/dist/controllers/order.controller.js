@@ -23,6 +23,13 @@ exports.orderStatusUpdateSchema = zod_1.z.object({
         measurementProfileId: zod_1.z.string().uuid().optional().nullable(),
         advancePayment: zod_1.z.coerce.number().optional(),
         deliveryDate: zod_1.z.string().optional().nullable(),
+        newPayment: zod_1.z.object({
+            id: zod_1.z.string(),
+            amount: zod_1.z.coerce.number(),
+            method: zod_1.z.string(),
+            date: zod_1.z.string(),
+            note: zod_1.z.string().optional()
+        }).optional(),
     }),
 });
 exports.orderCheckoutSchema = zod_1.z.object({
@@ -315,7 +322,7 @@ class OrderController {
      */
     static async adminUpdateOrderStatus(req, res, next) {
         const { id } = req.params;
-        const { status, paymentStatus, fabricType, customizations, tailorNotes, measurementProfileId } = req.body;
+        const { status, paymentStatus, fabricType, customizations, tailorNotes, measurementProfileId, newPayment } = req.body;
         try {
             const existing = await db_js_1.default.order.findUnique({ where: { id } });
             if (!existing) {
@@ -342,7 +349,22 @@ class OrderController {
             }
             if (req.body.advancePayment !== undefined) {
                 updateData.advancePayment = req.body.advancePayment;
-                updateData.balanceAmount = Math.max(0, Number(existing.payableAmount) - Number(req.body.advancePayment));
+            }
+            let currentPaymentHistory = [];
+            if (existing.paymentHistory) {
+                currentPaymentHistory = Array.isArray(existing.paymentHistory) ? existing.paymentHistory : [];
+            }
+            if (newPayment) {
+                currentPaymentHistory.push(newPayment);
+                updateData.paymentHistory = currentPaymentHistory;
+            }
+            // Recalculate balance
+            const advance = updateData.advancePayment !== undefined ? Number(updateData.advancePayment) : Number(existing.advancePayment || 0);
+            const sumSubsequent = currentPaymentHistory.reduce((sum, p) => sum + Number(p.amount), 0);
+            updateData.balanceAmount = Math.max(0, Number(existing.payableAmount) - advance - sumSubsequent);
+            // Auto update payment status if balance is 0
+            if (updateData.balanceAmount === 0 && Number(existing.payableAmount) > 0) {
+                updateData.paymentStatus = 'COMPLETED';
             }
             let deliveryDateChanged = false;
             let newDeliveryDateFormatted = '';

@@ -550,6 +550,11 @@ class APIClient {
 
   }
 
+  async getAvailability(date) {
+    const res = await this.request(`/appointments/availability?date=${date}`);
+    return res.data;
+  }
+
   async createAppointment(data) {
 
     const res = await this.request('/appointments', {
@@ -569,6 +574,14 @@ class APIClient {
     });
     return res.data;
 
+  }
+
+  async createStoreVisit(data) {
+    const res = await this.request('/visits', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return res.data;
   }
 
   // STORE VISITS
@@ -952,7 +965,6 @@ class APIClient {
   }
 
   async updateOrderDetails(id, updates) {
-
     const res = await this.request(`/orders/admin/${id}/status`, {
       method: 'PUT',
       body: JSON.stringify({
@@ -964,6 +976,7 @@ class APIClient {
         customizations: updates.customizations,
         tailorNotes: updates.tailorNotes,
         measurementProfileId: updates.measurementProfileId,
+        newPayment: updates.newPayment,
       }),
     });
     return res.data;
@@ -1031,9 +1044,7 @@ class APIClient {
       ],
       conversionRates: [
         { name: 'Overall Conversion', value: 3.2, change: '+0.5%' },
-        { name: 'Add to Cart', value: 12.5, change: '+1.2%' },
         { name: 'Checkout Initiated', value: 8.4, change: '-0.3%' },
-        { name: 'Cart Abandonment', value: 65.2, change: '-2.1%' },
         { name: 'Repeat Customer', value: 24.8, change: '+3.4%' }
       ],
       pendingVisits: 0

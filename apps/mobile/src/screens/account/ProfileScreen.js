@@ -26,6 +26,8 @@ import {
   Gift
 } from 'lucide-react-native';
 
+import { PRODUCT_NAME, PRODUCT_VERSION } from '../../config/productName';
+
 export default function ProfileScreen({ navigation }) {
   const { theme, fonts, shadows } = useTheme();
   const { user, logout, requireAuth } = useAuth();
@@ -241,7 +243,7 @@ export default function ProfileScreen({ navigation }) {
             () => {
               Alert.alert(
                 'Log Out',
-                'Are you sure you want to securely log out of MARCOS?',
+                `Are you sure you want to securely log out of ${PRODUCT_NAME}?`,
                 [
                   { text: 'Cancel', style: 'cancel' },
                   { text: 'Log Out', style: 'destructive', onPress: logout }
@@ -262,6 +264,10 @@ export default function ProfileScreen({ navigation }) {
             () => navigation.navigate('Support') // Customer ticketing ticketing desk
           )}
         </View>
+
+        <Text style={{ textAlign: 'center', fontSize: 11, color: theme.text.muted, marginTop: 12 }}>
+          {PRODUCT_NAME} v{PRODUCT_VERSION}
+        </Text>
 
       </ScrollView>
     </View>

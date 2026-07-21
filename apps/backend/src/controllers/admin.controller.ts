@@ -1857,7 +1857,8 @@ export class AdminController {
         totalProducts,
         deadStockCandidates,
         desireGapCandidates,
-        incompleteCandidates
+        incompleteCandidates,
+        priceHistoryRecords
       ] = await Promise.all([
         prisma.product.count(),
         prisma.product.findMany({
@@ -1908,7 +1909,16 @@ export class AdminController {
             description: true,
             price: true
           }
-        })
+        }),
+        (prisma as any).productPriceHistory.findMany({
+          take: 20,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            product: {
+              select: { name: true, price: true, salesCount: true }
+            }
+          }
+        }).catch(() => [])
       ]);
 
       const deadStockItems: any[] = [];
@@ -1919,9 +1929,9 @@ export class AdminController {
       let desireGapCount = 0;
       let incompleteCount = 0;
 
-      deadStockCandidates.forEach(p => {
+      deadStockCandidates.forEach((p: any) => {
         const successfulSales = p.orderItems;
-        const salesInLast90Days = successfulSales.filter(item => item.order.createdAt >= ninetyDaysAgo);
+        const salesInLast90Days = successfulSales.filter((item: any) => item.order.createdAt >= ninetyDaysAgo);
         const daysSinceCreated = Math.floor((now.getTime() - p.createdAt.getTime()) / (1000 * 60 * 60 * 24));
 
         if (salesInLast90Days.length === 0) {
@@ -1932,7 +1942,7 @@ export class AdminController {
 
           if (successfulSales.length > 0) {
             neverSold = false;
-            const latestSale = successfulSales.reduce((latest, item) => {
+            const latestSale = successfulSales.reduce((latest: any, item: any) => {
               return item.order.createdAt > latest ? item.order.createdAt : latest;
             }, new Date(0));
             daysSinceLastSale = Math.floor((now.getTime() - latestSale.getTime()) / (1000 * 60 * 60 * 24));
@@ -1949,8 +1959,8 @@ export class AdminController {
         }
       });
 
-      desireGapCandidates.forEach(p => {
-        const salesCount = p.orderItems.reduce((acc, item) => acc + item.quantity, 0);
+      desireGapCandidates.forEach((p: any) => {
+        const salesCount = p.orderItems.reduce((acc: number, item: any) => acc + item.quantity, 0);
         if (salesCount === 0 || p.favorites.length > salesCount * 5) {
           desireGapCount++;
           desireGapItems.push({
@@ -1961,7 +1971,7 @@ export class AdminController {
         }
       });
 
-      incompleteCandidates.forEach(p => {
+      incompleteCandidates.forEach((p: any) => {
         const missingFields = [];
         if (!p.images || p.images.length === 0) missingFields.push('No image');
         if (!p.description || p.description.length < 10) missingFields.push('No description');
@@ -1985,12 +1995,28 @@ export class AdminController {
         healthScore = Math.max(0, Math.round(((totalProducts - problematicCount) / totalProducts) * 100));
       }
 
+      const formattedPriceHistory = (priceHistoryRecords || []).map((h: any) => {
+        const diff = Number(h.newPrice) - Number(h.oldPrice);
+        const diffPercent = Number(h.oldPrice) > 0 ? ((diff / Number(h.oldPrice)) * 100).toFixed(1) : '0';
+        return {
+          id: h.id,
+          productName: h.product?.name || 'Product',
+          oldPrice: Number(h.oldPrice),
+          newPrice: Number(h.newPrice),
+          diff,
+          diffPercent: `${diff > 0 ? '+' : ''}${diffPercent}%`,
+          changedBy: h.changedBy || 'Admin',
+          createdAt: h.createdAt
+        };
+      });
+
       const responsePayload = {
         success: true,
         data: {
           deadStock: { count: deadStockCount, items: deadStockItems },
           desireGap: { count: desireGapCount, items: desireGapItems },
           incomplete: { count: incompleteCount, items: incompleteListings },
+          priceHistory: { count: formattedPriceHistory.length, items: formattedPriceHistory },
           healthScore
         }
       };

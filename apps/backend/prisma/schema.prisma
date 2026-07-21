@@ -120,6 +120,7 @@ model Product {
   cartItems           CartItem[]
   favorites           Favorite[]
   orderItems          OrderItem[]
+  priceHistory        ProductPriceHistory[]
   category            Category     @relation(fields: [categoryId], references: [id])
 
   @@index([categoryId])
@@ -129,6 +130,19 @@ model Product {
   @@index([createdAt])
   @@index([targetGender])
   @@index([salesCount])
+}
+
+model ProductPriceHistory {
+  id        String   @id @default(uuid())
+  productId String
+  oldPrice  Decimal  @db.Decimal(10, 2)
+  newPrice  Decimal  @db.Decimal(10, 2)
+  changedBy String?
+  createdAt DateTime @default(now())
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([createdAt])
 }
 
 model CartItem {
@@ -276,6 +290,7 @@ model Order {
   gatewayResponse        Json?
   advancePayment         Decimal           @default(0.00) @db.Decimal(10, 2)
   balanceAmount          Decimal           @default(0.00) @db.Decimal(10, 2)
+  paymentHistory         Json?
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt
   isQuickOrder           Boolean           @default(false)

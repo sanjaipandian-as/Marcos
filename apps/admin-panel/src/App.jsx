@@ -34,16 +34,21 @@ import api from './utils/api';
 export default function App() {
   const initialUser = api.getCurrentUser();
   const [currentUser, setCurrentUser] = useState(initialUser);
-  const [activeTab, setActiveTab] = useState(
-    initialUser && initialUser.role === 'STAFF' ? 'orders' : 'dashboard'
-  );
+
+  const getInitialTab = () => {
+    const saved = localStorage.getItem('admin_active_tab');
+    if (saved) return saved;
+    return initialUser && initialUser.role === 'STAFF' ? 'orders' : 'dashboard';
+  };
+
+  const [activeTab, setActiveTab] = useState(getInitialTab);
   const [theme, setTheme] = useState('oripiofin');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLiveFeedOpen, setIsLiveFeedOpen] = useState(false);
   const [hasUnreadAlerts, setHasUnreadAlerts] = useState(false);
   const [mountedTabs, setMountedTabs] = useState(() => {
     const initial = {};
-    let base = initialUser && initialUser.role === 'STAFF' ? 'orders' : 'dashboard';
+    let base = getInitialTab();
     if (base.startsWith('reports-')) base = 'reports';
     if (base.startsWith('orders-') || base === 'orders') base = 'orders';
     initial[base] = true;
@@ -55,7 +60,11 @@ export default function App() {
     if (base.startsWith('reports-')) base = 'reports';
     if (base.startsWith('orders-') || base === 'orders') base = 'orders';
     setMountedTabs(prev => prev[base] ? prev : { ...prev, [base]: true });
+    if (activeTab) {
+      localStorage.setItem('admin_active_tab', activeTab);
+    }
   }, [activeTab]);
+
   useEffect(() => {
     const user = api.getCurrentUser();
     if (user) {
@@ -250,6 +259,7 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    localStorage.removeItem('admin_active_tab');
     await api.logout();
     setCurrentUser(null);
   };

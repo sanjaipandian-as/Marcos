@@ -1,6 +1,9 @@
+import { PRODUCT_NAME, PRODUCT_VERSION, COMPANY_NAME } from './productName';
+
 export const APP_CONFIG = {
-  STORE_NAME: 'MARCOS Bespoke Tailoring',
-  VERSION: '1.0.0',
+  STORE_NAME: `${PRODUCT_NAME} Bespoke Tailoring`,
+  VERSION: PRODUCT_VERSION,
+  COMPANY_NAME,
   CONTACT_WHATSAPP: '+919876543210',
   CONTACT_PHONE: '+919876543210',
   CONTACT_EMAIL: 'support@marcosbespoke.com',
