@@ -7,6 +7,7 @@ import router from './routes/index.js';
 import errorMiddleware from './middlewares/error.middleware.js';
 import { globalRateLimiter } from './middlewares/rateLimit.middleware.js';
 import env from './config/env.js';
+import { isProduction, mode } from './config/environment.js';
 import logger from './utils/logger.js';
 
 const app = express();
@@ -53,9 +54,11 @@ app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (mobile apps, Postman, curl, Render health checks)
     if (!origin) return callback(null, true);
-    // Allow any localhost / 127.0.0.1 origin in development
-    if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
-      return callback(null, true);
+    // Allow any localhost / 127.0.0.1 origin ONLY in development
+    if (!isProduction) {
+      if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+        return callback(null, true);
+      }
     }
     // Allow all known production origins
     if (allowedOrigins.includes(origin)) {
@@ -260,7 +263,7 @@ app.get('/', (_req, res) => {
     <div class="meta-grid">
       <div class="meta-item">
         <div class="meta-label">Environment</div>
-        <div class="meta-value">${process.env.NODE_ENV ?? 'development'}</div>
+        <div class="meta-value">${mode}</div>
       </div>
       <div class="meta-item">
         <div class="meta-label">API Base</div>

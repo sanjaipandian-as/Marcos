@@ -9,11 +9,12 @@ import SmsService from '../services/sms.service.js';
 import NotificationService from '../services/notification.service.js';
 import JobsProducer from './jobs.producer.js';
 import { getIO } from '../socket/socket.handler.js';
+import { isDevelopment } from '../config/environment.js';
 
 let worker: Worker;
 
 export function initWorker() {
-  if (process.env.NODE_ENV === 'development') {
+  if (isDevelopment) {
     logger.info('BullMQ Background Worker disabled in development to save Redis limits.');
     return;
   }
@@ -44,6 +45,10 @@ export function initWorker() {
   );
 
   worker.on('error', (err) => {
+    if (err.message && (err.message.includes('ECONNRESET') || err.message.includes('closed'))) {
+      logger.warn('BullMQ Worker: Redis connection reset, reconnecting...');
+      return;
+    }
     logger.error('BullMQ Worker Error:', { metadata: { error: err.message } });
   });
 

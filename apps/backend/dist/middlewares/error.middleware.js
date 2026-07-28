@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.errorMiddleware = errorMiddleware;
 const logger_js_1 = __importDefault(require("../utils/logger.js"));
+const environment_js_1 = require("../config/environment.js");
 function errorMiddleware(err, req, res, next) {
     const statusCode = err.statusCode || 500;
     const message = err.message || 'Internal Server Error';
@@ -16,7 +17,7 @@ function errorMiddleware(err, req, res, next) {
         },
     });
     let cleanMessage = message;
-    if (process.env.NODE_ENV === 'production') {
+    if (environment_js_1.isProduction) {
         if (statusCode === 500) {
             cleanMessage = 'Internal Server Error';
         }
@@ -28,8 +29,8 @@ function errorMiddleware(err, req, res, next) {
     res.status(statusCode).json({
         success: false,
         message: cleanMessage,
-        ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
-        ...(err.details && { details: err.details }),
+        ...(!environment_js_1.isProduction && { stack: err.stack }),
+        ...(!environment_js_1.isProduction && err.details && { details: err.details }),
     });
 }
 exports.default = errorMiddleware;

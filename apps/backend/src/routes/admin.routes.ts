@@ -33,7 +33,7 @@ router.get('/revenue-intelligence', authorize(Role.ADMIN, Role.SUPERADMIN, Role.
 router.get('/promotions-intelligence', authorize(Role.ADMIN, Role.SUPERADMIN, Role.STAFF), AdminController.getPromotionsIntelligence);
 router.get('/inventory-intelligence', authorize(Role.ADMIN, Role.SUPERADMIN, Role.STAFF), AdminController.getInventoryIntelligence);
 router.post('/upload', authorize(Role.ADMIN, Role.SUPERADMIN, Role.STAFF), upload.single('image'), validateUpload(['image/jpeg', 'image/png', 'image/gif', 'image/webp'], 5 * 1024 * 1024), AdminController.uploadImage);
-router.post('/upload-video', authorize(Role.ADMIN, Role.SUPERADMIN), upload.single('video'), AdminController.uploadImage);
+router.post('/upload-video', authorize(Role.ADMIN, Role.SUPERADMIN), upload.single('video'), validateUpload(['video/mp4', 'video/webm', 'video/quicktime'], 50 * 1024 * 1024), AdminController.uploadImage);
 
 // Helper for other routes restricted to ADMIN & SUPERADMIN
 const restrictToAdmin = authorize(Role.ADMIN, Role.SUPERADMIN);

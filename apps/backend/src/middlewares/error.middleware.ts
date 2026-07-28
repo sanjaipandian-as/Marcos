@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import logger from '../utils/logger.js';
+import { isProduction } from '../config/environment.js';
 
 export interface CustomError extends Error {
   statusCode?: number;
@@ -25,7 +26,7 @@ export function errorMiddleware(
 
   let cleanMessage = message;
 
-  if (process.env.NODE_ENV === 'production') {
+  if (isProduction) {
     if (statusCode === 500) {
       cleanMessage = 'Internal Server Error';
     }
@@ -38,9 +39,10 @@ export function errorMiddleware(
   res.status(statusCode).json({
     success: false,
     message: cleanMessage,
-    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
-    ...(err.details && { details: err.details }),
+    ...(!isProduction && { stack: err.stack }),
+    ...(!isProduction && err.details && { details: err.details }),
   });
 }
 
 export default errorMiddleware;
+

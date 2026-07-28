@@ -219,7 +219,18 @@ export default function HomeScreen({ navigation }) {
     return 'Select your delivery location';
   };
 
+  const getGreetingText = () => {
+    if (userProfile?.fullName) {
+      const firstName = userProfile.fullName.trim().split(/\s+/)[0];
+      return `Hello ${firstName}`;
+    }
+    return 'Welcome';
+  };
+
   const getHeaderAddress = () => {
+    if (!userProfile) {
+      return 'Login to view address';
+    }
     let addr = '';
     if (customAddress) {
       addr = customAddress;
@@ -227,9 +238,17 @@ export default function HomeScreen({ navigation }) {
       addr = userProfile.address;
     }
     
-    if (!addr) return 'Select location';
+    if (!addr) return 'Select delivery address';
     const plain = parseAddressText(addr);
     return plain.replace(/^Deliver to:?\s*/i, '');
+  };
+
+  const handleHeaderAddressPress = () => {
+    if (!userProfile) {
+      navigation.navigate('LoginIdentifier');
+    } else {
+      setShowAddressModal(true);
+    }
   };
 
   const handleSelectAddressObject = async (addrObj) => {
@@ -418,7 +437,15 @@ export default function HomeScreen({ navigation }) {
         api.get('/promos/active').catch(() => ({ success: false, data: [] }))
       ]);
 
-      if (profileRes.success) setUserProfile(profileRes.data);
+      if (profileRes.success && profileRes.data) {
+        setUserProfile(profileRes.data);
+      } else {
+        setUserProfile(null);
+        setCustomAddress('');
+        setSavedAddressesList([]);
+        setFavorites(new Set());
+        setCartItems(new Set());
+      }
       if (productsRes.success) setProducts(productsRes.data || []);
       if (categoriesRes.success) setCategories(categoriesRes.data || []);
       if (favRes.success && favRes.data) {
@@ -1053,20 +1080,27 @@ export default function HomeScreen({ navigation }) {
         {/* Default Header */}
         <Animated.View style={[styles.absoluteHeader, { opacity: defaultHeaderOpacity, transform: [{ translateY: defaultHeaderTranslateY }] }]}>
           <View style={styles.profileContainer}>
-            <View style={[styles.avatar, shadows.premium]}>
+            <TouchableOpacity 
+              style={[styles.avatar, shadows.premium]} 
+              activeOpacity={0.8}
+              onPress={() => {
+                if (!userProfile) navigation.navigate('LoginIdentifier');
+                else navigation.navigate('Profile');
+              }}
+            >
               <Image
-                source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&q=80' }}
+                source={{ uri: userProfile?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&q=80' }}
                 style={styles.avatarImage}
               />
-            </View>
+            </TouchableOpacity>
             <View style={styles.greetingContainer}>
               <Text style={[styles.helloText, { fontFamily: fonts.regular, color: theme.text.secondary, marginBottom: 2 }]}>
-                Hello {getFirstName()}
+                {getGreetingText()}
               </Text>
               <TouchableOpacity 
                 style={styles.headerAddressBtn} 
                 activeOpacity={0.7} 
-                onPress={() => setShowAddressModal(true)}
+                onPress={handleHeaderAddressPress}
               >
                 <MapPin size={13} color={theme.brand[500]} style={{ marginRight: 3 }} />
                 <Text 

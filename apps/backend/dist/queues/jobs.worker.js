@@ -18,9 +18,10 @@ const sms_service_js_1 = __importDefault(require("../services/sms.service.js"));
 const notification_service_js_1 = __importDefault(require("../services/notification.service.js"));
 const jobs_producer_js_1 = __importDefault(require("./jobs.producer.js"));
 const socket_handler_js_1 = require("../socket/socket.handler.js");
+const environment_js_1 = require("../config/environment.js");
 let worker;
 function initWorker() {
-    if (process.env.NODE_ENV === 'development') {
+    if (environment_js_1.isDevelopment) {
         logger_js_1.default.info('BullMQ Background Worker disabled in development to save Redis limits.');
         return;
     }
@@ -45,6 +46,10 @@ function initWorker() {
         drainDelay: 30, // Wait 30 seconds between polls when queue is empty (saves Redis commands)
     });
     worker.on('error', (err) => {
+        if (err.message && (err.message.includes('ECONNRESET') || err.message.includes('closed'))) {
+            logger_js_1.default.warn('BullMQ Worker: Redis connection reset, reconnecting...');
+            return;
+        }
         logger_js_1.default.error('BullMQ Worker Error:', { metadata: { error: err.message } });
     });
     // Failure listener for DLQ handling

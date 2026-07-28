@@ -9,6 +9,7 @@ import { R2Service } from '../services/r2.service.js';
 import { CloudinaryService } from '../services/cloudinary.service.js';
 import redis from '../config/redis.js';
 import env from '../config/env.js';
+import { isDevelopment } from '../config/environment.js';
 import AuthService from '../services/auth.service.js';
 
 export const loyaltyAdjustSchema = z.object({
@@ -1254,7 +1255,7 @@ export class AdminController {
       const file = req.file;
       let url: string;
 
-      if (env.NODE_ENV === 'development') {
+      if (isDevelopment) {
         url = await CloudinaryService.uploadFile(file.buffer, 'marcos', file.mimetype);
       } else {
         const fileKey = `uploads/${Date.now()}-${file.originalname}`;

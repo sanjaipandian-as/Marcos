@@ -100,9 +100,17 @@ export class AdminProductController {
       }).catch(err => console.error('Failed to write audit log:', err));
 
       // Invalidate products cache
-      await redis.keys('cache:products:*').then(keys => {
-        if (keys.length > 0) return redis.del(...keys);
-      }).catch(err => console.error('Failed to invalidate product cache:', err));
+      try {
+        let cursor = '0';
+        do {
+          const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', 'cache:products:*', 'COUNT', '100');
+          cursor = nextCursor;
+          if (keys.length > 0) await redis.del(...keys);
+        } while (cursor !== '0');
+        await redis.del('cache:categories');
+      } catch (err: any) {
+        console.error('Failed to invalidate product cache:', err);
+      }
 
       return res.status(201).json({
         success: true,
@@ -176,9 +184,17 @@ export class AdminProductController {
       }).catch(err => console.error('Failed to write audit log:', err));
 
       // Invalidate products cache
-      await redis.keys('cache:products:*').then(keys => {
-        if (keys.length > 0) return redis.del(...keys);
-      }).catch(err => console.error('Failed to invalidate product cache:', err));
+      try {
+        let cursor = '0';
+        do {
+          const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', 'cache:products:*', 'COUNT', '100');
+          cursor = nextCursor;
+          if (keys.length > 0) await redis.del(...keys);
+        } while (cursor !== '0');
+        await redis.del('cache:categories');
+      } catch (err: any) {
+        console.error('Failed to invalidate product cache:', err);
+      }
 
       return res.status(200).json({
         success: true,
@@ -228,9 +244,17 @@ export class AdminProductController {
       }).catch(err => console.error('Failed to write audit log:', err));
 
       // Invalidate products cache
-      await redis.keys('cache:products:*').then(keys => {
-        if (keys.length > 0) return redis.del(...keys);
-      }).catch(err => console.error('Failed to invalidate product cache:', err));
+      try {
+        let cursor = '0';
+        do {
+          const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', 'cache:products:*', 'COUNT', '100');
+          cursor = nextCursor;
+          if (keys.length > 0) await redis.del(...keys);
+        } while (cursor !== '0');
+        await redis.del('cache:categories');
+      } catch (err: any) {
+        console.error('Failed to invalidate product cache:', err);
+      }
 
       return res.status(200).json({
         success: true,
@@ -276,9 +300,16 @@ export class AdminProductController {
       }).catch(err => console.error('Failed to write audit log:', err));
 
       // Invalidate products cache
-      await redis.keys('cache:products:*').then(keys => {
-        if (keys.length > 0) return redis.del(...keys);
-      }).catch(err => console.error('Failed to invalidate product cache:', err));
+      try {
+        let cursor = '0';
+        do {
+          const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', 'cache:products:*', 'COUNT', '100');
+          cursor = nextCursor;
+          if (keys.length > 0) await redis.del(...keys);
+        } while (cursor !== '0');
+      } catch (err: any) {
+        console.error('Failed to invalidate product cache:', err);
+      }
 
       return res.status(200).json({
         success: true,

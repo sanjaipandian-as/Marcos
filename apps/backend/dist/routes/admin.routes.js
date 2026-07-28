@@ -24,7 +24,7 @@ router.get('/revenue-intelligence', (0, auth_middleware_js_1.authorize)(client_1
 router.get('/promotions-intelligence', (0, auth_middleware_js_1.authorize)(client_1.Role.ADMIN, client_1.Role.SUPERADMIN, client_1.Role.STAFF), admin_controller_js_1.AdminController.getPromotionsIntelligence);
 router.get('/inventory-intelligence', (0, auth_middleware_js_1.authorize)(client_1.Role.ADMIN, client_1.Role.SUPERADMIN, client_1.Role.STAFF), admin_controller_js_1.AdminController.getInventoryIntelligence);
 router.post('/upload', (0, auth_middleware_js_1.authorize)(client_1.Role.ADMIN, client_1.Role.SUPERADMIN, client_1.Role.STAFF), upload_middleware_js_1.upload.single('image'), (0, upload_middleware_js_1.validateUpload)(['image/jpeg', 'image/png', 'image/gif', 'image/webp'], 5 * 1024 * 1024), admin_controller_js_1.AdminController.uploadImage);
-router.post('/upload-video', (0, auth_middleware_js_1.authorize)(client_1.Role.ADMIN, client_1.Role.SUPERADMIN), upload_middleware_js_1.upload.single('video'), admin_controller_js_1.AdminController.uploadImage);
+router.post('/upload-video', (0, auth_middleware_js_1.authorize)(client_1.Role.ADMIN, client_1.Role.SUPERADMIN), upload_middleware_js_1.upload.single('video'), (0, upload_middleware_js_1.validateUpload)(['video/mp4', 'video/webm', 'video/quicktime'], 50 * 1024 * 1024), admin_controller_js_1.AdminController.uploadImage);
 // Helper for other routes restricted to ADMIN & SUPERADMIN
 const restrictToAdmin = (0, auth_middleware_js_1.authorize)(client_1.Role.ADMIN, client_1.Role.SUPERADMIN);
 router.get('/dashboard', restrictToAdmin, admin_controller_js_1.AdminController.getDashboard);

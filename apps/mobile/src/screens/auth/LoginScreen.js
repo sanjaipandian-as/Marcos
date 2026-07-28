@@ -26,7 +26,16 @@ export default function LoginScreen({ route, navigation, onLoginSuccess }) {
   const { theme, fonts, shadows } = useTheme();
   
   // Get identifier passed from LoginIdentifierScreen
-  const identifier = route?.params?.identifier || '';
+  const identifier = route?.params?.identifier || 'User';
+  const fullName = route?.params?.fullName || '';
+
+  const getAvatarChar = () => {
+    if (fullName) {
+      return fullName.charAt(0).toUpperCase();
+    }
+    const cleaned = identifier.replace(/^[^a-zA-Z0-9]+/, '');
+    return cleaned ? cleaned.charAt(0).toUpperCase() : 'U';
+  };
   
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -87,12 +96,13 @@ export default function LoginScreen({ route, navigation, onLoginSuccess }) {
 
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.keyboardContainer}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        style={[styles.keyboardContainer, { backgroundColor: '#ffffff' }]}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <ScrollView style={{ backgroundColor: theme.brand[500] }} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           
           {/* Top Branding Section (Matches Welcome Screen) */}
-          <View style={styles.brandContainer}>
+          <View style={[styles.brandContainer, { backgroundColor: theme.brand[500] }]}>
             <Image 
               source={require('../../../assets/Marcos.png')} 
               style={styles.logo} 
@@ -116,12 +126,23 @@ export default function LoginScreen({ route, navigation, onLoginSuccess }) {
               <Text style={[styles.errorText, { fontFamily: fonts.medium }]}>{errorMsg}</Text>
             ) : null}
 
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { fontFamily: fonts.semiBold }]}>
-                {identifier}
-              </Text>
-              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.editBtn}>
-                <Text style={[styles.editBtnText, { color: theme.brand[500], fontFamily: fonts.bold }]}>Change</Text>
+            {/* Profile Avatar Card */}
+            <View style={[styles.profileCard, { borderColor: theme.border }]}>
+              <View style={styles.profileAvatar}>
+                <Text style={[styles.avatarText, { fontFamily: fonts.bold }]}>
+                  {getAvatarChar()}
+                </Text>
+              </View>
+              <View style={styles.profileInfo}>
+                <Text style={[styles.profileLabel, { fontFamily: fonts.medium, color: theme.text.muted }]}>
+                  Logging in as
+                </Text>
+                <Text style={[styles.profileValue, { fontFamily: fonts.bold, color: theme.text.primary }]} numberOfLines={1}>
+                  {identifier}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.changeBtn}>
+                <Text style={[styles.changeBtnText, { color: theme.brand[500], fontFamily: fonts.bold }]}>Change</Text>
               </TouchableOpacity>
             </View>
 
@@ -184,6 +205,26 @@ export default function LoginScreen({ route, navigation, onLoginSuccess }) {
                   Sign Up
                 </Text>
               </TouchableOpacity>
+            </View>
+
+            {/* Premium Brand Footer */}
+            <View style={styles.brandFooter}>
+              <View style={styles.hallmarkRow}>
+                <Text style={[styles.hallmarkItem, { fontFamily: fonts.medium, color: theme.text.muted }]}>
+                  ✦ Handcrafted Tailoring
+                </Text>
+                <Text style={styles.hallmarkDivider}>•</Text>
+                <Text style={[styles.hallmarkItem, { fontFamily: fonts.medium, color: theme.text.muted }]}>
+                  ✦ Precision Fitting
+                </Text>
+                <Text style={styles.hallmarkDivider}>•</Text>
+                <Text style={[styles.hallmarkItem, { fontFamily: fonts.medium, color: theme.text.muted }]}>
+                  ✦ Secure Encryption
+                </Text>
+              </View>
+              <Text style={[styles.versionText, { fontFamily: fonts.medium, color: theme.text.muted }]}>
+                {APP_CONFIG.STORE_NAME} • Version {APP_CONFIG.VERSION || '1.0.0'}
+              </Text>
             </View>
           </View>
 
@@ -253,12 +294,42 @@ const styles = StyleSheet.create({
   },
   bottomCard: {
     backgroundColor: '#ffffff',
-    borderTopLeftRadius: 36,
-    borderTopRightRadius: 36,
+    borderTopLeftRadius: 44,
+    borderTopRightRadius: 44,
     paddingHorizontal: 24,
     paddingTop: 32,
     paddingBottom: Platform.OS === 'ios' ? 32 : 44,
     width: '100%',
+  },
+  brandFooter: {
+    alignItems: 'center',
+    marginTop: 32,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F1EBF1',
+    gap: 8,
+  },
+  hallmarkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  hallmarkItem: {
+    fontSize: 9,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  hallmarkDivider: {
+    color: '#cbd5e1',
+    fontSize: 9,
+  },
+  versionText: {
+    fontSize: 9,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginTop: 4,
   },
   cardHeaderTitle: {
     fontSize: 20,
@@ -280,11 +351,49 @@ const styles = StyleSheet.create({
     color: '#334155',
     marginBottom: 6,
   },
-  editBtn: {
-    paddingVertical: 4,
+  profileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F6F8',
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    marginBottom: 24,
   },
-  editBtnText: {
-    fontSize: 13,
+  profileAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#EDE0ED',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  avatarText: {
+    fontSize: 16,
+    color: '#3D2E3D',
+  },
+  profileInfo: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  profileLabel: {
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  profileValue: {
+    fontSize: 14,
+  },
+  changeBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#EDE0ED',
+  },
+  changeBtnText: {
+    fontSize: 12,
   },
   inputWrapper: {
     flexDirection: 'row',

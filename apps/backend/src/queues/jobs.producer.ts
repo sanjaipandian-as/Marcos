@@ -1,10 +1,11 @@
 import { Queue } from 'bullmq';
 import { connectionOptions, QUEUE_NAME } from './queue.config.js';
 import logger from '../utils/logger.js';
+import { isDevelopment } from '../config/environment.js';
 
 let jobsQueue: Queue | null = null;
 
-if (process.env.NODE_ENV !== 'development') {
+if (!isDevelopment) {
   try {
     jobsQueue = new Queue(QUEUE_NAME, {
       connection: connectionOptions,

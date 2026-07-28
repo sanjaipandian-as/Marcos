@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import prisma from '../config/db.js';
 import env from '../config/env.js';
+import { isTest } from '../config/environment.js';
 import JobsProducer from '../queues/jobs.producer.js';
 import { computeStockStatus } from './product.controller.js';
 import { getIO } from '../socket/socket.handler.js';
@@ -232,7 +233,7 @@ export class BillingController {
         const sigHeader = req.headers['stripe-signature'] as string;
         const secret = env.STRIPE_WEBHOOK_SECRET;
 
-        if (!secret || secret === 'stripe-webhook-secret' || env.NODE_ENV === 'test') {
+        if (!secret || secret === 'stripe-webhook-secret' || isTest) {
           // Bypassed for tests
           isVerified = true;
           payloadJson = JSON.parse(rawBody.toString());
@@ -249,7 +250,7 @@ export class BillingController {
         const receivedSignature = req.headers['x-razorpay-signature'] as string;
         const secret = env.RAZORPAY_WEBHOOK_SECRET;
 
-        if (!secret || secret === 'razorpay-webhook-secret' || env.NODE_ENV === 'test') {
+        if (!secret || secret === 'razorpay-webhook-secret' || isTest) {
           isVerified = true;
           payloadJson = JSON.parse(rawBody.toString());
           orderId = payloadJson.orderId || 'mock-id';
@@ -326,10 +327,19 @@ export class BillingController {
           },
         });
 
-        // Invalidate admin cache
-        await redis.keys('cache:admin:*').then(keys => {
-          if (keys.length > 0) return redis.del(...keys);
-        }).catch(err => console.error('Failed to invalidate admin cache:', err));
+      // Invalidate admin cache using SCAN (non-blocking, unlike KEYS)
+      try {
+        let cursor = '0';
+        do {
+          const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', 'cache:admin:*', 'COUNT', '100');
+          cursor = nextCursor;
+          if (keys.length > 0) {
+            await redis.del(...keys);
+          }
+        } while (cursor !== '0');
+      } catch (err) {
+        console.error('Failed to invalidate admin cache:', err);
+      }
 
         // 3. Queue jobs
         await JobsProducer.queueInvoicePdf(order.id);

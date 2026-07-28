@@ -67,6 +67,15 @@ class AdminProductController {
                     targetGender,
                 },
             });
+            // Log initial price in ProductPriceHistory
+            await db_js_1.default.productPriceHistory.create({
+                data: {
+                    productId: product.id,
+                    oldPrice: price,
+                    newPrice: price,
+                    changedBy: req.user?.fullName || 'Admin',
+                },
+            }).catch((err) => console.error('Failed to log initial price history:', err));
             // Write AuditLog
             await db_js_1.default.auditLog.create({
                 data: {
@@ -83,10 +92,19 @@ class AdminProductController {
                 },
             }).catch(err => console.error('Failed to write audit log:', err));
             // Invalidate products cache
-            await redis_js_1.default.keys('cache:products:*').then(keys => {
-                if (keys.length > 0)
-                    return redis_js_1.default.del(...keys);
-            }).catch(err => console.error('Failed to invalidate product cache:', err));
+            try {
+                let cursor = '0';
+                do {
+                    const [nextCursor, keys] = await redis_js_1.default.scan(cursor, 'MATCH', 'cache:products:*', 'COUNT', '100');
+                    cursor = nextCursor;
+                    if (keys.length > 0)
+                        await redis_js_1.default.del(...keys);
+                } while (cursor !== '0');
+                await redis_js_1.default.del('cache:categories');
+            }
+            catch (err) {
+                console.error('Failed to invalidate product cache:', err);
+            }
             return res.status(201).json({
                 success: true,
                 message: 'Product created successfully',
@@ -127,6 +145,17 @@ class AdminProductController {
                 where: { id },
                 data: updateData,
             });
+            // Log price change if price was updated
+            if (price !== undefined && Number(price) !== Number(existingProduct.price)) {
+                await db_js_1.default.productPriceHistory.create({
+                    data: {
+                        productId: id,
+                        oldPrice: existingProduct.price,
+                        newPrice: price,
+                        changedBy: req.user?.fullName || 'Admin',
+                    },
+                }).catch((err) => console.error('Failed to log price history:', err));
+            }
             // Write AuditLog
             await db_js_1.default.auditLog.create({
                 data: {
@@ -141,10 +170,19 @@ class AdminProductController {
                 },
             }).catch(err => console.error('Failed to write audit log:', err));
             // Invalidate products cache
-            await redis_js_1.default.keys('cache:products:*').then(keys => {
-                if (keys.length > 0)
-                    return redis_js_1.default.del(...keys);
-            }).catch(err => console.error('Failed to invalidate product cache:', err));
+            try {
+                let cursor = '0';
+                do {
+                    const [nextCursor, keys] = await redis_js_1.default.scan(cursor, 'MATCH', 'cache:products:*', 'COUNT', '100');
+                    cursor = nextCursor;
+                    if (keys.length > 0)
+                        await redis_js_1.default.del(...keys);
+                } while (cursor !== '0');
+                await redis_js_1.default.del('cache:categories');
+            }
+            catch (err) {
+                console.error('Failed to invalidate product cache:', err);
+            }
             return res.status(200).json({
                 success: true,
                 message: 'Product updated successfully',
@@ -188,10 +226,19 @@ class AdminProductController {
                 },
             }).catch(err => console.error('Failed to write audit log:', err));
             // Invalidate products cache
-            await redis_js_1.default.keys('cache:products:*').then(keys => {
-                if (keys.length > 0)
-                    return redis_js_1.default.del(...keys);
-            }).catch(err => console.error('Failed to invalidate product cache:', err));
+            try {
+                let cursor = '0';
+                do {
+                    const [nextCursor, keys] = await redis_js_1.default.scan(cursor, 'MATCH', 'cache:products:*', 'COUNT', '100');
+                    cursor = nextCursor;
+                    if (keys.length > 0)
+                        await redis_js_1.default.del(...keys);
+                } while (cursor !== '0');
+                await redis_js_1.default.del('cache:categories');
+            }
+            catch (err) {
+                console.error('Failed to invalidate product cache:', err);
+            }
             return res.status(200).json({
                 success: true,
                 message: 'Product deleted successfully',
@@ -232,10 +279,18 @@ class AdminProductController {
                 },
             }).catch(err => console.error('Failed to write audit log:', err));
             // Invalidate products cache
-            await redis_js_1.default.keys('cache:products:*').then(keys => {
-                if (keys.length > 0)
-                    return redis_js_1.default.del(...keys);
-            }).catch(err => console.error('Failed to invalidate product cache:', err));
+            try {
+                let cursor = '0';
+                do {
+                    const [nextCursor, keys] = await redis_js_1.default.scan(cursor, 'MATCH', 'cache:products:*', 'COUNT', '100');
+                    cursor = nextCursor;
+                    if (keys.length > 0)
+                        await redis_js_1.default.del(...keys);
+                } while (cursor !== '0');
+            }
+            catch (err) {
+                console.error('Failed to invalidate product cache:', err);
+            }
             return res.status(200).json({
                 success: true,
                 message: 'Product trending status updated successfully',

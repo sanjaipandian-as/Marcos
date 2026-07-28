@@ -61,14 +61,14 @@ export function encryptText(text: string): string {
  * Decrypt a text field using AES-256-GCM
  */
 export function decryptText(encryptedText: string): string {
+  const key = getEncryptionKey();
+  const parts = encryptedText.split(':');
+  if (parts.length !== 3) {
+    // Not in iv:tag:encrypted format — assume it's already plain text (legacy/unencrypted)
+    return encryptedText;
+  }
+
   try {
-    const key = getEncryptionKey();
-    const parts = encryptedText.split(':');
-    if (parts.length !== 3) {
-      // Return plain text if it doesn't match GCM format (e.g., legacy or unencrypted fields)
-      return encryptedText;
-    }
-    
     const iv = Buffer.from(parts[0], 'hex');
     const tag = Buffer.from(parts[1], 'hex');
     const encrypted = parts[2];
@@ -81,7 +81,6 @@ export function decryptText(encryptedText: string): string {
     
     return decrypted;
   } catch (error) {
-    // Return original if decryption fails (safeguard)
-    return encryptedText;
+    throw new Error('Decryption failed: data integrity check failed. The encryption key may have changed or the data has been tampered with.');
   }
 }

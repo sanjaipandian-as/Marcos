@@ -231,7 +231,8 @@ export default function OtpVerifyScreen({ navigation, onLoginSuccess }) {
       </View>
 
       <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         style={styles.keyboardContainer}
       >
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
@@ -248,9 +249,22 @@ export default function OtpVerifyScreen({ navigation, onLoginSuccess }) {
           </View>
 
           {/* Footer Details */}
-          <View style={styles.footer}>
-            <Text style={[styles.versionText, { color: theme.text.muted, fontFamily: fonts.regular }]}>
-              {APP_CONFIG.STORE_NAME} v{APP_CONFIG.VERSION}
+          <View style={styles.brandFooter}>
+            <View style={styles.hallmarkRow}>
+              <Text style={[styles.hallmarkItem, { fontFamily: fonts.medium, color: theme.text.muted }]}>
+                ✦ Handcrafted Tailoring
+              </Text>
+              <Text style={styles.hallmarkDivider}>•</Text>
+              <Text style={[styles.hallmarkItem, { fontFamily: fonts.medium, color: theme.text.muted }]}>
+                ✦ Precision Fitting
+              </Text>
+              <Text style={styles.hallmarkDivider}>•</Text>
+              <Text style={[styles.hallmarkItem, { fontFamily: fonts.medium, color: theme.text.muted }]}>
+                ✦ Secure Encryption
+              </Text>
+            </View>
+            <Text style={[styles.versionText, { fontFamily: fonts.medium, color: theme.text.muted }]}>
+              {APP_CONFIG.STORE_NAME} • Version {APP_CONFIG.VERSION || '1.0.0'}
             </Text>
           </View>
         </ScrollView>

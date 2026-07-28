@@ -10,8 +10,8 @@ const envSchema = z.object({
   APP_VERSION: z.string().default('1.0.0'),
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
-  JWT_ACCESS_SECRET: z.string().min(8),
-  JWT_REFRESH_SECRET: z.string().min(8),
+  JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters (use: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))")'),
+  JWT_REFRESH_SECRET: z.string().min(32, 'JWT_REFRESH_SECRET must be at least 32 characters (use: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))")'),
   ALLOWED_ORIGINS: z.string().default(''),
   
   // Cloudflare R2

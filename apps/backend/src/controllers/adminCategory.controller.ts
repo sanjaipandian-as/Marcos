@@ -209,6 +209,11 @@ export class AdminCategoryController {
 
       const categories = await prisma.category.findMany({
         orderBy: { order: 'asc' },
+        include: {
+          _count: {
+            select: { products: true }
+          }
+        }
       });
 
       // Build tree
@@ -229,16 +234,28 @@ export class AdminCategoryController {
         }
       });
 
-      // Sort subcategories by order recursively
-      const sortTree = (nodes: any[]) => {
-        nodes.sort((a, b) => a.order - b.order);
-        nodes.forEach(n => {
-          if (n.subCategories && n.subCategories.length > 0) {
-            sortTree(n.subCategories);
-          }
-        });
+      // Sort subcategories by order recursively and compute product counts
+      const processTree = (node: any): number => {
+        const directCount = node._count?.products || 0;
+        node.directProductCount = directCount;
+        
+        let subCategoriesTotal = 0;
+        if (node.subCategories && node.subCategories.length > 0) {
+          node.subCategories.sort((a: any, b: any) => a.order - b.order);
+          node.subCategories.forEach((sub: any) => {
+            subCategoriesTotal += processTree(sub);
+          });
+        }
+        
+        node.totalProductCount = directCount + subCategoriesTotal;
+        return node.totalProductCount;
       };
-      sortTree(tree);
+      
+      tree.forEach(node => {
+        processTree(node);
+      });
+      
+      tree.sort((a, b) => a.order - b.order);
 
       await redis.set('cache:categories', JSON.stringify(tree), 'EX', 86400);
 

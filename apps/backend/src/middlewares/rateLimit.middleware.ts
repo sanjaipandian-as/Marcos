@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import redis from '../config/redis.js';
-import env from '../config/env.js';
+import { isDevOrTest } from '../config/environment.js';
 
 interface RateLimitOptions {
   windowMs: number; // Window size in milliseconds
@@ -9,10 +9,19 @@ interface RateLimitOptions {
   keyGenerator?: (req: Request) => string;
 }
 
+// In-memory fallback rate limiter for when Redis is unavailable
+const inMemoryCounters = new Map<string, { count: number; expiresAt: number }>();
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, val] of inMemoryCounters) {
+    if (now > val.expiresAt) inMemoryCounters.delete(key);
+  }
+}, 60_000);
+
 export function rateLimiter(options: RateLimitOptions) {
   return async (req: Request, res: Response, next: NextFunction) => {
     // Bypass rate limiting in test or development environment
-    if (env.NODE_ENV === 'test' || env.NODE_ENV === 'development') {
+    if (isDevOrTest) {
       return next();
     }
 
@@ -50,17 +59,28 @@ export function rateLimiter(options: RateLimitOptions) {
 
       next();
     } catch (error) {
-      // Fail open if Redis is down, but log
-      console.error('Rate limit error:', error);
+      // Fallback to in-memory rate limiting when Redis is unavailable
+      console.error('Rate limit Redis error (falling back to in-memory):', error);
+      const memKey = `${options.prefix}:${keyIdentifier}`;
+      const now = Date.now();
+      const entry = inMemoryCounters.get(memKey);
+      if (entry && now < entry.expiresAt) {
+        entry.count++;
+        if (entry.count > options.max) {
+          return res.status(429).json({ success: false, message: 'Too many requests. Please try again later.' });
+        }
+      } else {
+        inMemoryCounters.set(memKey, { count: 1, expiresAt: now + options.windowMs });
+      }
       next();
     }
   };
 }
 
-// 100 requests per 15 minutes per IP
+// 300 requests per 15 minutes per IP
 export const globalRateLimiter = rateLimiter({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 300,
   prefix: 'global',
   keyGenerator: (req) => req.ip || 'unknown-ip',
 });
@@ -96,3 +116,4 @@ export const identifyTargetLimiter = rateLimiter({
     return identifier;
   }
 });
+

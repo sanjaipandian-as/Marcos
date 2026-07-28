@@ -7,9 +7,10 @@ exports.jobsQueue = exports.JobsProducer = void 0;
 const bullmq_1 = require("bullmq");
 const queue_config_js_1 = require("./queue.config.js");
 const logger_js_1 = __importDefault(require("../utils/logger.js"));
+const environment_js_1 = require("../config/environment.js");
 let jobsQueue = null;
 exports.jobsQueue = jobsQueue;
-if (process.env.NODE_ENV !== 'development') {
+if (!environment_js_1.isDevelopment) {
     try {
         exports.jobsQueue = jobsQueue = new bullmq_1.Queue(queue_config_js_1.QUEUE_NAME, {
             connection: queue_config_js_1.connectionOptions,

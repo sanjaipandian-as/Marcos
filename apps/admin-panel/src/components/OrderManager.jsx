@@ -732,7 +732,7 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
           <div style="flex: 1; padding: 10px 12px; display: flex; flex-direction: column; justify-content: center; font-size: 9px; line-height: 1.4; color: #333;">
             <div style="margin-bottom: 3px;"><strong>Order ID:</strong> <span style="font-family: monospace; font-size: 9.5px; font-weight: 700;">${order.id.substring(0, 12).toUpperCase()}</span></div>
             <div style="margin-bottom: 3px;"><strong>Date:</strong> ${new Date(order.createdAt).toLocaleDateString('en-IN', {day: '2-digit', month: 'short', year: 'numeric'})}</div>
-            <div style="margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;"><strong>Item:</strong> ${order.orderItems?.[0]?.product?.name || 'Apparel Item'}</div>
+            <div style="margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;"><strong>Item:</strong> ${order.orderItems?.[0]?.product?.name || order.orderItems?.[0]?.productName || order.product?.name || order.productName || 'Apparel Item'}</div>
             <div><strong>Qty:</strong> ${order.orderItems?.reduce((sum, item) => sum + item.quantity, 0) || 1} item(s)</div>
           </div>
         </div>
@@ -782,15 +782,39 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
       return;
     }
 
-    const itemsHTML = (order.orderItems || []).map((item, idx) => `
-      <tr>
-        <td style="padding: 10px; border-bottom: 1px solid #eee;">${idx + 1}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: bold;">${item.productName}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;">${item.quantity}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right;">₹${Number(order.payableAmount / item.quantity).toFixed(2)}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold;">₹${Number(order.payableAmount).toFixed(2)}</td>
-      </tr>
-    `).join('');
+    const rawItems = (order.orderItems && order.orderItems.length > 0)
+      ? order.orderItems
+      : (order.items && order.items.length > 0)
+        ? order.items
+        : (order.product ? [{ product: order.product, quantity: 1, price: order.payableAmount }] : []);
+
+    const itemsList = rawItems.length > 0 ? rawItems : [{
+      productName: order.productName || 'Custom Apparel Item',
+      quantity: 1,
+      price: order.payableAmount
+    }];
+
+    const itemsHTML = itemsList.map((item, idx) => {
+      const name = item.productName || item.product?.name || item.name || order.product?.name || 'Custom Garment';
+      const qty = Number(item.quantity || 1);
+      const unitPrice = Number(item.price || (order.payableAmount / qty));
+      const totalAmount = unitPrice * qty;
+      const fabricInfo = item.fabricType || item.product?.materialInfo || order.fabricType;
+      const detailsStr = fabricInfo ? `<div style="font-size: 10px; color: #666; font-weight: normal; margin-top: 2px;">Fabric / Material: ${fabricInfo}</div>` : '';
+
+      return `
+        <tr>
+          <td style="padding: 10px; border-bottom: 1px solid #eee; vertical-align: top;">${idx + 1}</td>
+          <td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: bold; vertical-align: top;">
+            <div>${name}</div>
+            ${detailsStr}
+          </td>
+          <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center; vertical-align: top;">${qty}</td>
+          <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right; vertical-align: top;">₹${unitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+          <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold; vertical-align: top;">₹${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        </tr>
+      `;
+    }).join('');
 
     let addressObj = parseUserAddress(order.user);
     if (!addressObj) {
@@ -943,8 +967,49 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
   useEffect(() => {
     if (isActive) {
       loadOrders(true);
+      
+      const statusFilterNav = sessionStorage.getItem('admin_order_status_filter');
+      if (statusFilterNav) {
+        setStatusFilter(statusFilterNav);
+        sessionStorage.removeItem('admin_order_status_filter');
+      }
+
+      const apptStatusFilterNav = sessionStorage.getItem('admin_appt_status_filter');
+      if (apptStatusFilterNav) {
+        setApptStatusFilter(apptStatusFilterNav);
+        sessionStorage.removeItem('admin_appt_status_filter');
+      }
+
+      const delivPromisedDate = sessionStorage.getItem('admin_order_delivery_promised_date');
+      if (delivPromisedDate) {
+        setDateFrom(delivPromisedDate);
+        setDateTo(delivPromisedDate);
+        setDateFilterType('DELIVERY_DATE');
+        setShowAdvancedFilters(true);
+        sessionStorage.removeItem('admin_order_delivery_promised_date');
+      }
+
+      const orderDateNav = sessionStorage.getItem('admin_order_date_filter');
+      if (orderDateNav) {
+        setDateFrom(orderDateNav);
+        setDateTo(orderDateNav);
+        setDateFilterType('ORDER_DATE');
+        setShowAdvancedFilters(true);
+        sessionStorage.removeItem('admin_order_date_filter');
+      }
     }
   }, [isActive]);
+
+  useEffect(() => {
+    const selectedOrderId = sessionStorage.getItem('admin_selected_order_id');
+    if (selectedOrderId && orders.length > 0) {
+      const matched = orders.find(o => o.id === selectedOrderId || o.invoiceNumber === selectedOrderId);
+      if (matched) {
+        setSelectedOrder(matched);
+      }
+      sessionStorage.removeItem('admin_selected_order_id');
+    }
+  }, [orders, isActive]);
 
   const loadOrders = async (quiet = false) => {
     try {
@@ -1491,7 +1556,8 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
     const matchesSearch =
       (order.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'ALL' || order.status === statusFilter;
+    const matchesStatus = statusFilter === 'ALL' || order.status === statusFilter || 
+      (statusFilter === 'PROCEEDED' && ['PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.status));
     
     let matchesDateFrom = true;
     let matchesDateTo = true;

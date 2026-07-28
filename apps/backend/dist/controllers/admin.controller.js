@@ -11,7 +11,7 @@ const audit_js_1 = require("../utils/audit.js");
 const r2_service_js_1 = require("../services/r2.service.js");
 const cloudinary_service_js_1 = require("../services/cloudinary.service.js");
 const redis_js_1 = __importDefault(require("../config/redis.js"));
-const env_js_1 = __importDefault(require("../config/env.js"));
+const environment_js_1 = require("../config/environment.js");
 const auth_service_js_1 = __importDefault(require("../services/auth.service.js"));
 exports.loyaltyAdjustSchema = zod_1.z.object({
     body: zod_1.z.object({
@@ -1145,7 +1145,7 @@ class AdminController {
             }
             const file = req.file;
             let url;
-            if (env_js_1.default.NODE_ENV === 'development') {
+            if (environment_js_1.isDevelopment) {
                 url = await cloudinary_service_js_1.CloudinaryService.uploadFile(file.buffer, 'marcos', file.mimetype);
             }
             else {
@@ -1671,7 +1671,7 @@ class AdminController {
                 return res.status(200).json(JSON.parse(cached));
             const now = new Date();
             const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-            const [totalProducts, deadStockCandidates, desireGapCandidates, incompleteCandidates] = await Promise.all([
+            const [totalProducts, deadStockCandidates, desireGapCandidates, incompleteCandidates, priceHistoryRecords] = await Promise.all([
                 db_js_1.default.product.count(),
                 db_js_1.default.product.findMany({
                     where: {
@@ -1721,7 +1721,16 @@ class AdminController {
                         description: true,
                         price: true
                     }
-                })
+                }),
+                db_js_1.default.productPriceHistory.findMany({
+                    take: 20,
+                    orderBy: { createdAt: 'desc' },
+                    include: {
+                        product: {
+                            select: { name: true, price: true, salesCount: true }
+                        }
+                    }
+                }).catch(() => [])
             ]);
             const deadStockItems = [];
             const desireGapItems = [];
@@ -1729,9 +1738,9 @@ class AdminController {
             let deadStockCount = 0;
             let desireGapCount = 0;
             let incompleteCount = 0;
-            deadStockCandidates.forEach(p => {
+            deadStockCandidates.forEach((p) => {
                 const successfulSales = p.orderItems;
-                const salesInLast90Days = successfulSales.filter(item => item.order.createdAt >= ninetyDaysAgo);
+                const salesInLast90Days = successfulSales.filter((item) => item.order.createdAt >= ninetyDaysAgo);
                 const daysSinceCreated = Math.floor((now.getTime() - p.createdAt.getTime()) / (1000 * 60 * 60 * 24));
                 if (salesInLast90Days.length === 0) {
                     deadStockCount++;
@@ -1754,7 +1763,7 @@ class AdminController {
                     });
                 }
             });
-            desireGapCandidates.forEach(p => {
+            desireGapCandidates.forEach((p) => {
                 const salesCount = p.orderItems.reduce((acc, item) => acc + item.quantity, 0);
                 if (salesCount === 0 || p.favorites.length > salesCount * 5) {
                     desireGapCount++;
@@ -1765,7 +1774,7 @@ class AdminController {
                     });
                 }
             });
-            incompleteCandidates.forEach(p => {
+            incompleteCandidates.forEach((p) => {
                 const missingFields = [];
                 if (!p.images || p.images.length === 0)
                     missingFields.push('No image');
@@ -1788,12 +1797,27 @@ class AdminController {
                 const problematicCount = new Set([...deadStockItems, ...desireGapItems, ...incompleteListings].map(i => i.name)).size;
                 healthScore = Math.max(0, Math.round(((totalProducts - problematicCount) / totalProducts) * 100));
             }
+            const formattedPriceHistory = (priceHistoryRecords || []).map((h) => {
+                const diff = Number(h.newPrice) - Number(h.oldPrice);
+                const diffPercent = Number(h.oldPrice) > 0 ? ((diff / Number(h.oldPrice)) * 100).toFixed(1) : '0';
+                return {
+                    id: h.id,
+                    productName: h.product?.name || 'Product',
+                    oldPrice: Number(h.oldPrice),
+                    newPrice: Number(h.newPrice),
+                    diff,
+                    diffPercent: `${diff > 0 ? '+' : ''}${diffPercent}%`,
+                    changedBy: h.changedBy || 'Admin',
+                    createdAt: h.createdAt
+                };
+            });
             const responsePayload = {
                 success: true,
                 data: {
                     deadStock: { count: deadStockCount, items: deadStockItems },
                     desireGap: { count: desireGapCount, items: desireGapItems },
                     incomplete: { count: incompleteCount, items: incompleteListings },
+                    priceHistory: { count: formattedPriceHistory.length, items: formattedPriceHistory },
                     healthScore
                 }
             };

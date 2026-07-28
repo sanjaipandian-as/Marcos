@@ -6,11 +6,20 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.identifyTargetLimiter = exports.identifyIpLimiter = exports.sensitiveRateLimiter = exports.globalRateLimiter = void 0;
 exports.rateLimiter = rateLimiter;
 const redis_js_1 = __importDefault(require("../config/redis.js"));
-const env_js_1 = __importDefault(require("../config/env.js"));
+const environment_js_1 = require("../config/environment.js");
+// In-memory fallback rate limiter for when Redis is unavailable
+const inMemoryCounters = new Map();
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, val] of inMemoryCounters) {
+        if (now > val.expiresAt)
+            inMemoryCounters.delete(key);
+    }
+}, 60_000);
 function rateLimiter(options) {
     return async (req, res, next) => {
         // Bypass rate limiting in test or development environment
-        if (env_js_1.default.NODE_ENV === 'test' || env_js_1.default.NODE_ENV === 'development') {
+        if (environment_js_1.isDevOrTest) {
             return next();
         }
         const generator = options.keyGenerator || ((r) => r.ip || 'unknown-ip');
@@ -43,16 +52,28 @@ function rateLimiter(options) {
             next();
         }
         catch (error) {
-            // Fail open if Redis is down, but log
-            console.error('Rate limit error:', error);
+            // Fallback to in-memory rate limiting when Redis is unavailable
+            console.error('Rate limit Redis error (falling back to in-memory):', error);
+            const memKey = `${options.prefix}:${keyIdentifier}`;
+            const now = Date.now();
+            const entry = inMemoryCounters.get(memKey);
+            if (entry && now < entry.expiresAt) {
+                entry.count++;
+                if (entry.count > options.max) {
+                    return res.status(429).json({ success: false, message: 'Too many requests. Please try again later.' });
+                }
+            }
+            else {
+                inMemoryCounters.set(memKey, { count: 1, expiresAt: now + options.windowMs });
+            }
             next();
         }
     };
 }
-// 100 requests per 15 minutes per IP
+// 300 requests per 15 minutes per IP
 exports.globalRateLimiter = rateLimiter({
     windowMs: 15 * 60 * 1000,
-    max: 100,
+    max: 300,
     prefix: 'global',
     keyGenerator: (req) => req.ip || 'unknown-ip',
 });

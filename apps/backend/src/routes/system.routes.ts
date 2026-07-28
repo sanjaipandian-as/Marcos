@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import prisma from '../config/db.js';
 import redis from '../config/redis.js';
+import { isProduction } from '../config/environment.js';
 
 const router = Router();
 
@@ -19,7 +20,7 @@ router.get('/health', async (req, res) => {
     healthStatus.services.database = 'UP';
   } catch (dbError: any) {
     healthStatus.status = 'DEGRADED';
-    healthStatus.services.database = `DOWN: ${dbError.message}`;
+    healthStatus.services.database = isProduction ? 'DOWN' : `DOWN: ${dbError.message}`;
   }
 
   try {
@@ -32,7 +33,7 @@ router.get('/health', async (req, res) => {
     }
   } catch (redisError: any) {
     healthStatus.status = 'DEGRADED';
-    healthStatus.services.redis = `DOWN: ${redisError.message}`;
+    healthStatus.services.redis = isProduction ? 'DOWN' : `DOWN: ${redisError.message}`;
   }
 
   const statusCode = healthStatus.status === 'UP' ? 200 : 500;

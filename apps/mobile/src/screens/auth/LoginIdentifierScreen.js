@@ -13,6 +13,7 @@ import {
   StatusBar
 } from 'react-native';
 import { useTheme } from '../../styles/ThemeContext';
+import { APP_CONFIG } from '../../config/app.config';
 import api from '../../utils/api';
 import { ChevronLeft } from 'lucide-react-native';
 
@@ -41,10 +42,10 @@ export default function LoginIdentifierScreen({ navigation }) {
           navigation.navigate('Register', { identifier: trimmedIdentifier });
         } else if (res.status === 'PASSWORD_REQUIRED') {
           // Go to login password
-          navigation.navigate('Login', { identifier: trimmedIdentifier });
+          navigation.navigate('Login', { identifier: trimmedIdentifier, fullName: res.fullName });
         } else if (res.status === 'SETUP_REQUIRED') {
           // Go to setup password
-          navigation.navigate('SetupPassword', { identifier: trimmedIdentifier });
+          navigation.navigate('SetupPassword', { identifier: trimmedIdentifier, fullName: res.fullName });
         }
       } else {
         setErrorMsg('Verification failed.');
@@ -71,12 +72,13 @@ export default function LoginIdentifierScreen({ navigation }) {
       </View>
 
       <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.keyboardContainer}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        style={[styles.keyboardContainer, { backgroundColor: '#ffffff' }]}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <ScrollView style={{ backgroundColor: theme.brand[500] }} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           
-          <View style={styles.brandContainer}>
+          <View style={[styles.brandContainer, { backgroundColor: theme.brand[500] }]}>
             <Image 
               source={require('../../../assets/Marcos.png')} 
               style={styles.logo} 
@@ -138,11 +140,37 @@ export default function LoginIdentifierScreen({ navigation }) {
               <Text style={[styles.signUpText, { fontFamily: fonts.regular }]}>
                 By continuing, you agree to our{' '}
               </Text>
-              <TouchableOpacity onPress={() => {}}>
+              <TouchableOpacity onPress={() => navigation.navigate('TermsOfService')}>
                 <Text style={[styles.signUpLink, { color: theme.brand[500], fontFamily: fonts.bold }]}>
-                  Terms
+                  Terms of Service
                 </Text>
               </TouchableOpacity>
+              <Text style={[styles.signUpText, { fontFamily: fonts.regular }]}> and </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('PrivacyPolicy')}>
+                <Text style={[styles.signUpLink, { color: theme.brand[500], fontFamily: fonts.bold }]}>
+                  Privacy Policy
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Premium Brand Footer */}
+            <View style={styles.brandFooter}>
+              <View style={styles.hallmarkRow}>
+                <Text style={[styles.hallmarkItem, { fontFamily: fonts.medium, color: theme.text.muted }]}>
+                  ✦ Handcrafted Tailoring
+                </Text>
+                <Text style={styles.hallmarkDivider}>•</Text>
+                <Text style={[styles.hallmarkItem, { fontFamily: fonts.medium, color: theme.text.muted }]}>
+                  ✦ Precision Fitting
+                </Text>
+                <Text style={styles.hallmarkDivider}>•</Text>
+                <Text style={[styles.hallmarkItem, { fontFamily: fonts.medium, color: theme.text.muted }]}>
+                  ✦ Secure Encryption
+                </Text>
+              </View>
+              <Text style={[styles.versionText, { fontFamily: fonts.medium, color: theme.text.muted }]}>
+                {APP_CONFIG.STORE_NAME} • Version {APP_CONFIG.VERSION || '1.0.0'}
+              </Text>
             </View>
           </View>
 
@@ -173,12 +201,42 @@ const styles = StyleSheet.create({
   brandSubtitle: { fontSize: 12, letterSpacing: 4, textAlign: 'center', marginTop: 4, textTransform: 'uppercase' },
   bottomCard: {
     backgroundColor: '#ffffff',
-    borderTopLeftRadius: 36,
-    borderTopRightRadius: 36,
+    borderTopLeftRadius: 44,
+    borderTopRightRadius: 44,
     paddingHorizontal: 24,
     paddingTop: 32,
     paddingBottom: Platform.OS === 'ios' ? 32 : 44,
     width: '100%',
+  },
+  brandFooter: {
+    alignItems: 'center',
+    marginTop: 32,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F1EBF1',
+    gap: 8,
+  },
+  hallmarkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  hallmarkItem: {
+    fontSize: 9,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  hallmarkDivider: {
+    color: '#cbd5e1',
+    fontSize: 9,
+  },
+  versionText: {
+    fontSize: 9,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginTop: 4,
   },
   cardHeaderTitle: { fontSize: 24, color: '#0f172a', marginBottom: 8, textAlign: 'center' },
   cardHeaderSubtitle: { fontSize: 14, marginBottom: 24, textAlign: 'center' },

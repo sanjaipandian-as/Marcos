@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const db_js_1 = __importDefault(require("../config/db.js"));
 const redis_js_1 = __importDefault(require("../config/redis.js"));
+const environment_js_1 = require("../config/environment.js");
 const router = (0, express_1.Router)();
 router.get('/health', async (req, res) => {
     const healthStatus = {
@@ -22,7 +23,7 @@ router.get('/health', async (req, res) => {
     }
     catch (dbError) {
         healthStatus.status = 'DEGRADED';
-        healthStatus.services.database = `DOWN: ${dbError.message}`;
+        healthStatus.services.database = environment_js_1.isProduction ? 'DOWN' : `DOWN: ${dbError.message}`;
     }
     try {
         const pingResult = await redis_js_1.default.ping();
@@ -36,7 +37,7 @@ router.get('/health', async (req, res) => {
     }
     catch (redisError) {
         healthStatus.status = 'DEGRADED';
-        healthStatus.services.redis = `DOWN: ${redisError.message}`;
+        healthStatus.services.redis = environment_js_1.isProduction ? 'DOWN' : `DOWN: ${redisError.message}`;
     }
     const statusCode = healthStatus.status === 'UP' ? 200 : 500;
     return res.status(statusCode).json(healthStatus);

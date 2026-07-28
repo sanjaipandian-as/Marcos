@@ -11,7 +11,7 @@ const storage = multer_1.default.memoryStorage();
 exports.upload = (0, multer_1.default)({
     storage,
     limits: {
-        fileSize: 10 * 1024 * 1024, // 10MB absolute maximum buffer size
+        fileSize: 50 * 1024 * 1024, // 50MB absolute maximum buffer size (videos need more)
     },
 });
 /**
@@ -46,6 +46,18 @@ function detectMimeFromBuffer(buffer) {
     // BMP: 42 4D
     if (buffer[0] === 0x42 && buffer[1] === 0x4D) {
         return 'image/bmp';
+    }
+    // MP4/MOV (ftyp box): 00 00 00 xx 66 74 79 70
+    if (buffer.length >= 12 && buffer[4] === 0x66 && buffer[5] === 0x74 && buffer[6] === 0x79 && buffer[7] === 0x70) {
+        // Check for MOV (qt) vs MP4 subtypes
+        const subtype = buffer.slice(8, 12).toString('ascii');
+        if (subtype === 'qt  ')
+            return 'video/quicktime';
+        return 'video/mp4';
+    }
+    // WebM: 1A 45 DF A3 (EBML header)
+    if (buffer[0] === 0x1A && buffer[1] === 0x45 && buffer[2] === 0xDF && buffer[3] === 0xA3) {
+        return 'video/webm';
     }
     return null;
 }

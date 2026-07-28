@@ -13,6 +13,7 @@ const index_js_1 = __importDefault(require("./routes/index.js"));
 const error_middleware_js_1 = __importDefault(require("./middlewares/error.middleware.js"));
 const rateLimit_middleware_js_1 = require("./middlewares/rateLimit.middleware.js");
 const env_js_1 = __importDefault(require("./config/env.js"));
+const environment_js_1 = require("./config/environment.js");
 const logger_js_1 = __importDefault(require("./utils/logger.js"));
 const app = (0, express_1.default)();
 exports.app = app;
@@ -54,9 +55,11 @@ app.use((0, cors_1.default)({
         // Allow requests with no origin (mobile apps, Postman, curl, Render health checks)
         if (!origin)
             return callback(null, true);
-        // Allow any localhost / 127.0.0.1 origin in development
-        if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
-            return callback(null, true);
+        // Allow any localhost / 127.0.0.1 origin ONLY in development
+        if (!environment_js_1.isProduction) {
+            if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+                return callback(null, true);
+            }
         }
         // Allow all known production origins
         if (allowedOrigins.includes(origin)) {
@@ -258,7 +261,7 @@ app.get('/', (_req, res) => {
     <div class="meta-grid">
       <div class="meta-item">
         <div class="meta-label">Environment</div>
-        <div class="meta-value">${process.env.NODE_ENV ?? 'development'}</div>
+        <div class="meta-value">${environment_js_1.mode}</div>
       </div>
       <div class="meta-item">
         <div class="meta-label">API Base</div>

@@ -13,6 +13,7 @@ const product_controller_js_1 = require("./product.controller.js");
 const jobs_producer_js_1 = __importDefault(require("../queues/jobs.producer.js"));
 const socket_handler_js_1 = require("../socket/socket.handler.js");
 const redis_js_1 = __importDefault(require("../config/redis.js"));
+const pdf_service_js_1 = __importDefault(require("../services/pdf.service.js"));
 exports.orderStatusUpdateSchema = zod_1.z.object({
     body: zod_1.z.object({
         status: zod_1.z.enum(['PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED']).optional(),
@@ -379,10 +380,7 @@ class OrderController {
                     }
                 }
             }
-            // If status is CANCELLED and payment was COMPLETED, auto refund
-            if (status === 'CANCELLED' && paymentStatus === undefined && existing.paymentStatus === 'COMPLETED') {
-                updateData.paymentStatus = 'REFUNDED';
-            }
+            // Do not auto-set paymentStatus to REFUNDED. Admin manually marks as REFUNDED.
             const order = await db_js_1.default.order.update({
                 where: { id },
                 data: updateData,
@@ -420,10 +418,18 @@ class OrderController {
                 }).catch(err => console.error('Failed to queue delivery date update notification:', err));
             }
             // Invalidate admin cache
-            await redis_js_1.default.keys('cache:admin:*').then(keys => {
-                if (keys.length > 0)
-                    return redis_js_1.default.del(...keys);
-            }).catch(err => console.error('Failed to invalidate admin cache:', err));
+            try {
+                let cursor = '0';
+                do {
+                    const [nextCursor, keys] = await redis_js_1.default.scan(cursor, 'MATCH', 'cache:admin:*', 'COUNT', '100');
+                    cursor = nextCursor;
+                    if (keys.length > 0)
+                        await redis_js_1.default.del(...keys);
+                } while (cursor !== '0');
+            }
+            catch (err) {
+                console.error('Failed to invalidate admin cache:', err);
+            }
             // Audit Log for order status change
             if (status !== undefined && status !== existing.status) {
                 await (0, audit_js_1.createAuditLog)({
@@ -542,6 +548,42 @@ class OrderController {
                 success: true,
                 data: slip,
             });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    /**
+     * GET /orders/:id/invoice-pdf
+     * Generate and stream PDF Invoice on demand.
+     */
+    static async downloadInvoicePdf(req, res, next) {
+        try {
+            const { id } = req.params;
+            const order = await db_js_1.default.order.findUnique({
+                where: { id },
+                include: {
+                    orderItems: {
+                        include: { product: true },
+                    },
+                    user: true,
+                },
+            });
+            if (!order) {
+                return res.status(404).json({ success: false, message: 'Order not found' });
+            }
+            if (req.user.role === client_1.Role.CUSTOMER && order.userId !== req.user.id) {
+                return res.status(403).json({ success: false, message: 'Forbidden' });
+            }
+            const customer = order.user || {
+                fullName: order.gatewayResponse?.guestCustomerName || 'Bespoke Customer',
+                email: 'customer@marcosapp.com',
+                phoneNumber: 'N/A',
+            };
+            const pdfBuffer = await pdf_service_js_1.default.generateInvoicePdf(order, customer);
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `inline; filename="invoice-${order.invoiceNumber}.pdf"`);
+            return res.send(pdfBuffer);
         }
         catch (error) {
             next(error);
@@ -765,10 +807,18 @@ class OrderController {
                 });
             }
             // Invalidate admin cache
-            await redis_js_1.default.keys('cache:admin:*').then(keys => {
-                if (keys.length > 0)
-                    return redis_js_1.default.del(...keys);
-            }).catch(err => console.error('Failed to invalidate admin cache:', err));
+            try {
+                let cursor = '0';
+                do {
+                    const [nextCursor, keys] = await redis_js_1.default.scan(cursor, 'MATCH', 'cache:admin:*', 'COUNT', '100');
+                    cursor = nextCursor;
+                    if (keys.length > 0)
+                        await redis_js_1.default.del(...keys);
+                } while (cursor !== '0');
+            }
+            catch (err) {
+                console.error('Failed to invalidate admin cache:', err);
+            }
             return res.status(201).json({
                 success: true,
                 message: 'Order placed successfully and processing',
@@ -819,7 +869,6 @@ class OrderController {
                     where: { id },
                     data: {
                         status: 'CANCELLED',
-                        ...(refundTriggered && { paymentStatus: 'REFUNDED' }),
                     },
                 });
                 // 2. Restore inventory for each order item using atomic increment
@@ -865,10 +914,18 @@ class OrderController {
                 });
             }
             // Invalidate admin cache
-            await redis_js_1.default.keys('cache:admin:*').then(keys => {
-                if (keys.length > 0)
-                    return redis_js_1.default.del(...keys);
-            }).catch(err => console.error('Failed to invalidate admin cache:', err));
+            try {
+                let cursor = '0';
+                do {
+                    const [nextCursor, keys] = await redis_js_1.default.scan(cursor, 'MATCH', 'cache:admin:*', 'COUNT', '100');
+                    cursor = nextCursor;
+                    if (keys.length > 0)
+                        await redis_js_1.default.del(...keys);
+                } while (cursor !== '0');
+            }
+            catch (err) {
+                console.error('Failed to invalidate admin cache:', err);
+            }
             return res.status(200).json({
                 success: true,
                 message: refundTriggered
@@ -1045,10 +1102,18 @@ class OrderController {
                 }
             }
             // Invalidate admin cache
-            await redis_js_1.default.keys('cache:admin:*').then(keys => {
-                if (keys.length > 0)
-                    return redis_js_1.default.del(...keys);
-            }).catch(err => console.error('Failed to invalidate admin cache:', err));
+            try {
+                let cursor = '0';
+                do {
+                    const [nextCursor, keys] = await redis_js_1.default.scan(cursor, 'MATCH', 'cache:admin:*', 'COUNT', '100');
+                    cursor = nextCursor;
+                    if (keys.length > 0)
+                        await redis_js_1.default.del(...keys);
+                } while (cursor !== '0');
+            }
+            catch (err) {
+                console.error('Failed to invalidate admin cache:', err);
+            }
             return res.status(200).json({
                 success: true,
                 message: `Quick order ${quickOrderStatus.toLowerCase()} successfully`,
@@ -1152,10 +1217,18 @@ class OrderController {
                 }
             }
             // Invalidate admin cache
-            await redis_js_1.default.keys('cache:admin:*').then(keys => {
-                if (keys.length > 0)
-                    return redis_js_1.default.del(...keys);
-            }).catch(err => console.error('Failed to invalidate admin cache:', err));
+            try {
+                let cursor = '0';
+                do {
+                    const [nextCursor, keys] = await redis_js_1.default.scan(cursor, 'MATCH', 'cache:admin:*', 'COUNT', '100');
+                    cursor = nextCursor;
+                    if (keys.length > 0)
+                        await redis_js_1.default.del(...keys);
+                } while (cursor !== '0');
+            }
+            catch (err) {
+                console.error('Failed to invalidate admin cache:', err);
+            }
             return res.status(200).json({
                 success: true,
                 message: `Quick order date change request ${action.toLowerCase()}ed successfully`,

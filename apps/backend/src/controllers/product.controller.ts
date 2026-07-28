@@ -10,6 +10,7 @@ export const productQuerySchema = z.object({
     page: z.coerce.number().int().min(1).default(1),
     limit: z.coerce.number().int().min(1).max(1000).default(200),
     category: z.string().optional(),
+    categoryId: z.string().optional(),
     search: z.string().optional(),
     sortBy: z.enum(['price', 'createdAt', 'name']).default('createdAt'),
     sortOrder: z.enum(['asc', 'desc']).default('desc'),
@@ -63,10 +64,10 @@ export class ProductController {
    * GET /products
    */
   static async getProducts(req: Request, res: Response, next: NextFunction) {
-    const { page, limit, category, search, sortBy, sortOrder } = req.query as any;
+    const { page, limit, category, categoryId, search, sortBy, sortOrder } = req.query as any;
     const safeLimit = Math.min(Number(limit) || 20, 1000); // clamp pagination limit
     const skip = (Number(page) - 1) * safeLimit;
-    const cacheKey = `cache:products:page-${page}-limit-${safeLimit}-cat-${category || 'all'}-search-${search || 'none'}-sort-${sortBy}-${sortOrder}`;
+    const cacheKey = `cache:products:page-${page}-limit-${safeLimit}-cat-${category || 'all'}-catId-${categoryId || 'all'}-search-${search || 'none'}-sort-${sortBy}-${sortOrder}`;
 
     try {
       const cached = await redis.get(cacheKey);
@@ -77,9 +78,41 @@ export class ProductController {
       const where: any = {};
 
       if (category) {
-        where.category = {
-          slug: category,
+        const targetCategory = await prisma.category.findUnique({
+          where: { slug: category },
+        });
+
+        if (targetCategory) {
+          const allCategories = await prisma.category.findMany();
+          const getDescendants = (parentId: string): string[] => {
+            const list = [parentId];
+            allCategories.forEach(c => {
+              if (c.parentId === parentId) {
+                list.push(...getDescendants(c.id));
+              }
+            });
+            return list;
+          };
+          const descendantIds = getDescendants(targetCategory.id);
+          where.categoryId = { in: descendantIds };
+        } else {
+          where.category = {
+            slug: category,
+          };
+        }
+      } else if (categoryId) {
+        const allCategories = await prisma.category.findMany();
+        const getDescendants = (parentId: string): string[] => {
+          const list = [parentId];
+          allCategories.forEach(c => {
+            if (c.parentId === parentId) {
+              list.push(...getDescendants(c.id));
+            }
+          });
+          return list;
         };
+        const descendantIds = getDescendants(categoryId);
+        where.categoryId = { in: descendantIds };
       }
 
       if (search) {

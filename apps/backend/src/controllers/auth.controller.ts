@@ -12,6 +12,7 @@ import env from '../config/env.js';
 import { validatePassword } from '../validators/password.validator.js';
 import { createAuditLog } from '../utils/audit.js';
 import logger from '../utils/logger.js';
+import { secureCookieOptions } from '../config/environment.js';
 
 export function normalizePhoneNumber(phone: string): string {
   const cleaned = phone.replace(/[\s\-()]/g, '');
@@ -35,12 +36,11 @@ export const registerSchema = z.object({
   body: z.object({
     email: z.string().email(),
     phoneNumber: z.string(),
-    password: z.string().min(6),
+    password: z.string().min(10),
     fullName: z.string(),
     registrationToken: z.string().min(1, "Registration token is required"),
     referredById: z.string().uuid().optional().nullable(),
     referredByCode: z.string().optional().nullable(),
-    role: z.enum(['CUSTOMER', 'STAFF', 'ADMIN']).optional(),
   }),
 });
 
@@ -165,7 +165,7 @@ export class AuthController {
    */
   static async register(req: Request, res: Response, next: NextFunction) {
     try {
-      let { email, phoneNumber, password, fullName, registrationToken, referredById, referredByCode, role } = req.body;
+      let { email, phoneNumber, password, fullName, registrationToken, referredById, referredByCode } = req.body;
 
       const normalizedPhone = normalizePhoneNumber(phoneNumber);
       const cleanDigits = phoneNumber.replace(/[\s\-()]/g, '');
@@ -224,7 +224,7 @@ export class AuthController {
             fullName,
             referralCode,
             referredById,
-            role: (email === 'marcos@admin.com' || email === 'marcos@zippy.com') ? 'SUPERADMIN' : (role || 'CUSTOMER'),
+            role: 'CUSTOMER',
             pointsBalance: referredById ? 100 : 0,
           },
         });
@@ -284,13 +284,7 @@ export class AuthController {
           user: responseUser,
         });
       } else {
-        res.cookie('refreshToken', refreshToken, {
-          path: '/',
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-          maxAge: 7 * 24 * 60 * 60 * 1000,
-        });
+        res.cookie('refreshToken', refreshToken, secureCookieOptions);
 
         return res.status(201).json({
           success: true,
@@ -353,7 +347,11 @@ export class AuthController {
         await new Promise(resolve => setTimeout(resolve, 150 - elapsedMs));
       }
 
-      return res.status(200).json({ success: true, status: state });
+      return res.status(200).json({ 
+        success: true, 
+        status: state,
+        fullName: user ? user.fullName : null 
+      });
     } catch (error) {
       next(error);
     }
@@ -410,13 +408,7 @@ export class AuthController {
       if (clientType === 'mobile') {
         return res.status(200).json({ success: true, accessToken, refreshToken, user: payload, message: 'Password configured successfully' });
       } else {
-        res.cookie('refreshToken', refreshToken, {
-          path: '/',
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-          maxAge: 7 * 24 * 60 * 60 * 1000,
-        });
+        res.cookie('refreshToken', refreshToken, secureCookieOptions);
         return res.status(200).json({ success: true, accessToken, user: payload, message: 'Password configured successfully' });
       }
     } catch (error) {
@@ -498,14 +490,7 @@ export class AuthController {
           user: payload,
         });
       } else {
-        // Set secure Cookie for Web Clients / Admin Panel
-        res.cookie('refreshToken', refreshToken, {
-          path: '/',
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-          maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-        });
+        res.cookie('refreshToken', refreshToken, secureCookieOptions);
 
         return res.status(200).json({
           success: true,
@@ -808,13 +793,7 @@ export class AuthController {
       if (clientType === 'mobile') {
         return res.status(200).json({ success: true, accessToken, refreshToken, user: payload });
       } else {
-        res.cookie('refreshToken', refreshToken, {
-          path: '/',
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-          maxAge: 7 * 24 * 60 * 60 * 1000,
-        });
+        res.cookie('refreshToken', refreshToken, secureCookieOptions);
 
         return res.status(200).json({ success: true, accessToken, user: payload });
       }
@@ -840,13 +819,7 @@ export class AuthController {
       if (clientType === 'mobile') {
         return res.status(200).json({ success: true, accessToken, refreshToken: newRefreshToken, user });
       } else {
-        res.cookie('refreshToken', newRefreshToken, {
-          path: '/',
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-          maxAge: 7 * 24 * 60 * 60 * 1000,
-        });
+        res.cookie('refreshToken', newRefreshToken, secureCookieOptions);
 
         return res.status(200).json({ success: true, accessToken, user });
       }

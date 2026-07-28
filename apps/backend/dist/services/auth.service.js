@@ -112,7 +112,7 @@ class AuthService {
             if (tokens.length === 0)
                 return;
             const pipeline = redis_js_1.default.pipeline();
-            tokens.forEach(token => {
+            tokens.forEach((token) => {
                 pipeline.del(`reftoken:${token}`);
                 // Add all active tokens to blacklist immediately
                 pipeline.set(`blacklist:${token}`, 'logged_out', 'EX', this.REFRESH_TOKEN_TTL);
@@ -194,7 +194,7 @@ class AuthService {
                 const tokens = await redis_js_1.default.smembers(`reffamily:${familyId}`);
                 if (tokens.length > 0) {
                     const pipeline = redis_js_1.default.pipeline();
-                    tokens.forEach(token => {
+                    tokens.forEach((token) => {
                         pipeline.del(`reftoken:${token}`);
                         pipeline.set(`blacklist:${token}`, 'logged_out', 'EX', this.REFRESH_TOKEN_TTL);
                     });
