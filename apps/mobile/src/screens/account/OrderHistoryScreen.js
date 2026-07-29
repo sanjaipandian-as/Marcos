@@ -150,12 +150,20 @@ export default function OrderHistoryScreen({ navigation }) {
     return list;
   }, [orders, activeTab, searchQuery]);
 
-  const handleInvoice = url => {
-    if (!url) {
+  const handleInvoice = (url, order) => {
+    if (url) {
+      Linking.openURL(url).catch(() => {
+        if (order?.id) {
+          navigation.navigate('OrderTracking', { orderId: order.id, autoOpenInvoice: true });
+        } else {
+          Alert.alert('Error', 'Could not open invoice.');
+        }
+      });
+    } else if (order?.id) {
+      navigation.navigate('OrderTracking', { orderId: order.id, autoOpenInvoice: true });
+    } else {
       Alert.alert('Invoice Pending', 'Your invoice is being prepared and will be available shortly.');
-      return;
     }
-    Linking.openURL(url).catch(() => Alert.alert('Error', 'Could not open invoice.'));
   };
 
   const handleReorder = async (order) => {
@@ -271,9 +279,9 @@ export default function OrderHistoryScreen({ navigation }) {
   };
 
   /* ─── Order card ───────────────────────────────────────── */
+  /* ─── Order card ───────────────────────────────────────── */
   const renderOrderItem = ({ item }) => {
     const cfg = getStatusConfig(item);
-    const { Icon } = cfg;
     const mainItem = item.orderItems?.[0];
     const extra = (item.orderItems?.length || 0) - 1;
     const date = new Date(item.createdAt).toLocaleDateString('en-IN', {
@@ -287,102 +295,85 @@ export default function OrderHistoryScreen({ navigation }) {
         activeOpacity={0.92}
         onPress={() => navigation.navigate('OrderTracking', { orderId: item.id })}
       >
-        {/* Header row: ID + Status */}
+        {/* Header row: ID + Status Dot */}
         <View style={styles.cardTopRow}>
           <View>
             <Text style={[styles.orderId, { fontFamily: fonts.bold, color: theme.text.primary }]}>
               Order #{shortId}
             </Text>
-            <Text style={[styles.orderDate, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
+            <Text style={[styles.orderDate, { fontFamily: fonts.regular, color: theme.text.muted }]}>
               {date}
             </Text>
           </View>
-          <View style={[styles.badge, { backgroundColor: cfg.bg }]}>
-            <Icon size={12} color={cfg.color} />
-            <Text style={[styles.badgeText, { fontFamily: fonts.bold, color: cfg.color }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: cfg.color }} />
+            <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: cfg.color }}>
               {cfg.label}
             </Text>
           </View>
         </View>
-
-        {/* Divider */}
-        <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
         {/* Product row */}
         <View style={styles.productRow}>
           <View style={[styles.imgBox, { backgroundColor: theme.bg.input }]}>
             {mainItem?.product?.images?.[0]
               ? <Image source={{ uri: mainItem.product.images[0] }} style={styles.productImg} />
-              : <View style={styles.imgPlaceholder}><Package size={26} color={theme.text.muted} /></View>
+              : <View style={styles.imgPlaceholder}><Package size={24} color={theme.text.muted} /></View>
             }
           </View>
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1, justifyContent: 'center' }}>
             <Text style={[styles.productName, { fontFamily: fonts.bold, color: theme.text.primary }]} numberOfLines={1}>
               {mainItem?.product?.name || 'Bespoke Item'}
             </Text>
-            <Text style={[styles.productSub, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
+            <Text style={[styles.productSub, { fontFamily: fonts.regular, color: theme.text.muted, marginTop: 2 }]}>
               {extra > 0 ? `+${extra} more · Custom Fit` : 'Custom Fit Tailoring'}
             </Text>
-            <Text style={[styles.productPrice, { fontFamily: fonts.bold, color: theme.brand[500] }]}>
-              ₹{Number(item.payableAmount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+            <Text style={{ fontSize: 12, fontFamily: fonts.regular, color: theme.text.secondary, marginTop: 4 }} numberOfLines={2}>
+              {getStatusDescription(item)}
             </Text>
           </View>
-          <View style={[styles.arrowBtn, { backgroundColor: theme.bg.input }]}>
-            <ChevronRight size={16} color={theme.text.secondary} />
-          </View>
-        </View>
-
-        {/* Delivery Status Row */}
-        <View style={[styles.deliveryStatusRow, { backgroundColor: cfg.bg }]}>
-          <View style={[styles.statusIndicator, { backgroundColor: cfg.color }]} />
-          <Text style={[styles.deliveryStatusText, { fontFamily: fonts.medium, color: theme.text.primary }]}>
-            <Text style={{ fontFamily: fonts.bold, color: cfg.color }}>{cfg.label}</Text> · {getStatusDescription(item)}
+          <Text style={{ fontSize: 16, fontFamily: fonts.bold, color: theme.text.primary, alignSelf: 'center', marginLeft: 12 }}>
+            ₹{Number(item.payableAmount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
           </Text>
         </View>
 
-        {/* Booking Details Row */}
+        {/* Booking Details Line (Sleek minimalist style) */}
         {item.booking && (
-          <View style={[styles.bookingHistoryRow, { borderColor: theme.border }]}>
-            <View style={styles.bookingRowHeader}>
-              <Clock size={12} color={theme.brand[500]} />
-              <Text style={[styles.bookingHistoryTitle, { fontFamily: fonts.bold, color: theme.brand[500] }]}>
-                FITTING SESSION SCHEDULED
-              </Text>
-            </View>
-            <Text style={[styles.bookingHistoryText, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
-              Type: {item.booking.type === 'STUDIO' ? 'Bespoke Studio Visit' : 'Tailor Home Visit'}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, marginBottom: 8, padding: 10, backgroundColor: theme.bg.input, borderRadius: 12 }}>
+            <Clock size={12} color={theme.brand[500]} />
+            <Text style={{ fontSize: 11.5, fontFamily: fonts.medium, color: theme.text.secondary, flex: 1 }} numberOfLines={1}>
+              Fitting: {formatBookingDateUTC(item.booking.date)} · {item.booking.timeSlot} ({item.booking.status})
             </Text>
-            <Text style={[styles.bookingHistoryTime, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-              {formatBookingDateUTC(item.booking.date)} | {item.booking.timeSlot}
-            </Text>
-            <View style={styles.bookingStatusRow}>
-              <Text style={[styles.bookingStatusLabel, { fontFamily: fonts.regular, color: theme.text.muted }]}>Booking Status:</Text>
-              <Text style={[styles.bookingStatusValue, { fontFamily: fonts.bold, color: item.booking.status === 'CONFIRMED' || item.booking.status === 'COMPLETED' ? '#16a34a' : '#f59e0b' }]}>
-                {item.booking.status}
-              </Text>
-            </View>
           </View>
         )}
 
-        {/* Footer action buttons */}
-        <View style={[styles.footerRow, { borderTopColor: theme.border }]}>
-          <TouchableOpacity style={styles.footerBtn} onPress={() => handleInvoice(item.invoice?.pdfUrl)} activeOpacity={0.7}>
-            <FileText size={15} color={theme.text.primary} />
-            <Text style={[styles.footerBtnText, { fontFamily: fonts.semiBold, color: theme.text.primary }]}>Invoice</Text>
-          </TouchableOpacity>
-          <View style={[styles.footerSep, { backgroundColor: theme.border }]} />
-          <TouchableOpacity style={styles.footerBtn} onPress={() => handleReorder(item)} activeOpacity={0.7}>
-            <RotateCcw size={15} color={theme.text.primary} />
-            <Text style={[styles.footerBtnText, { fontFamily: fonts.semiBold, color: theme.text.primary }]}>Reorder</Text>
-          </TouchableOpacity>
-          <View style={[styles.footerSep, { backgroundColor: theme.border }]} />
+        {/* Action buttons (Clean minimalism: horizontal row, primary button on right, others on left) */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 12 }}>
+          {/* Secondary links on the left */}
+          <View style={{ flexDirection: 'row', gap: 16 }}>
+            <TouchableOpacity onPress={() => handleInvoice(item.invoice?.pdfUrl, item)} activeOpacity={0.7}>
+              <Text style={{ fontSize: 12.5, fontFamily: fonts.bold, color: theme.text.secondary }}>Invoice</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => handleReorder(item)} activeOpacity={0.7}>
+              <Text style={{ fontSize: 12.5, fontFamily: fonts.bold, color: theme.text.secondary }}>Reorder</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('Support', { orderId: item.id })} activeOpacity={0.7}>
+              <Text style={{ fontSize: 12.5, fontFamily: fonts.bold, color: theme.text.secondary }}>Help</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Primary Track button on the right */}
           <TouchableOpacity
-            style={styles.footerBtn}
-            onPress={() => navigation.navigate('Support', { orderId: item.id })}
-            activeOpacity={0.7}
+            style={{
+              paddingHorizontal: 16,
+              paddingVertical: 8,
+              borderRadius: 10,
+              backgroundColor: theme.brand[500],
+            }}
+            onPress={() => navigation.navigate('OrderTracking', { orderId: item.id })}
+            activeOpacity={0.8}
           >
-            <Headphones size={15} color={theme.text.primary} />
-            <Text style={[styles.footerBtnText, { fontFamily: fonts.semiBold, color: theme.text.primary }]}>Help</Text>
+            <Text style={{ fontSize: 12, fontFamily: fonts.bold, color: '#fff' }}>Track Order</Text>
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -566,12 +557,6 @@ const styles = StyleSheet.create({
   },
   orderId: { fontSize: 15, letterSpacing: 0.1 },
   orderDate: { fontSize: 11.5, marginTop: 3 },
-  badge: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20,
-  },
-  badgeText: { fontSize: 11.5 },
-
   divider: { height: 1, marginBottom: 14 },
 
   /* Product */
@@ -579,47 +564,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     gap: 14, marginBottom: 16,
   },
-  deliveryStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    marginBottom: 16,
-    gap: 8,
-  },
-  statusIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  deliveryStatusText: {
-    fontSize: 12,
-    flex: 1,
-  },
   imgBox: { width: 68, height: 68, borderRadius: 14, overflow: 'hidden' },
   productImg: { width: '100%', height: '100%' },
   imgPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   productName: { fontSize: 14.5, marginBottom: 3 },
   productSub: { fontSize: 12, lineHeight: 17 },
   productPrice: { fontSize: 16, marginTop: 5 },
-  arrowBtn: {
-    width: 30, height: 30, borderRadius: 15,
-    alignItems: 'center', justifyContent: 'center',
-  },
-
-  /* Footer */
-  footerRow: {
-    flexDirection: 'row',
-    borderTopWidth: 1, paddingTop: 14,
-    justifyContent: 'space-around',
-  },
-  footerBtn: {
-    flex: 1, flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'center', gap: 6,
-  },
-  footerBtnText: { fontSize: 12.5 },
-  footerSep: { width: 1, height: 18, alignSelf: 'center' },
 
   /* Empty */
   emptyWrap: {
@@ -642,42 +592,4 @@ const styles = StyleSheet.create({
 
   /* Skeleton */
   skel: { backgroundColor: '#ebebeb', borderRadius: 8 },
-
-  /* Booking Info in History */
-  bookingHistoryRow: {
-    borderTopWidth: 1,
-    paddingTop: 12,
-    marginTop: 4,
-    marginBottom: 6,
-    gap: 3,
-  },
-  bookingRowHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 2,
-  },
-  bookingHistoryTitle: {
-    fontSize: 9.5,
-    letterSpacing: 0.5,
-  },
-  bookingHistoryText: {
-    fontSize: 12.5,
-  },
-  bookingHistoryTime: {
-    fontSize: 13,
-  },
-  bookingStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 2,
-  },
-  bookingStatusLabel: {
-    fontSize: 11,
-  },
-  bookingStatusValue: {
-    fontSize: 11,
-    textTransform: 'uppercase',
-  },
 });

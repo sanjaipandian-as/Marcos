@@ -1,5 +1,5 @@
 import winston from 'winston';
-import env from '../config/env.js';
+import { isProduction } from '../config/environment.js';
 
 const levels = {
   error: 0,
@@ -21,7 +21,7 @@ winston.addColors(colors);
 
 const format = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
-  env.NODE_ENV === 'production'
+  isProduction
     ? winston.format.json()
     : winston.format.combine(
         winston.format.colorize({ all: true }),
@@ -36,10 +36,11 @@ const transports = [
 ];
 
 export const logger = winston.createLogger({
-  level: env.NODE_ENV === 'production' ? 'info' : 'debug',
+  level: isProduction ? 'info' : 'debug',
   levels,
   format,
   transports,
 });
 
 export default logger;
+

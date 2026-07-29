@@ -20,6 +20,7 @@ router.get('/admin/:id/packing-slip', authorize(Role.ADMIN, Role.SUPERADMIN, Rol
 
 // Dynamic /:id routes — MUST be after all static paths
 router.get('/:id', OrderController.getOrderById);
+router.get('/:id/invoice-pdf', OrderController.downloadInvoicePdf);
 router.post('/:id/cancel', OrderController.cancelOrder);
 router.post('/:id/quick-respond', OrderController.customerRespondToQuickOrderProposedDate);
 

@@ -6,8 +6,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.redis = void 0;
 const ioredis_1 = __importDefault(require("ioredis"));
 const env_js_1 = __importDefault(require("./env.js"));
+const environment_js_1 = require("./environment.js");
 let redis;
-if (env_js_1.default.NODE_ENV === 'test' || env_js_1.default.NODE_ENV === 'development') {
+if (environment_js_1.isDevOrTest) {
     // If we are in test or dev mode, use ioredis-mock to save real Redis commands
     // and prevent Upstash rate limiting issues.
     try {

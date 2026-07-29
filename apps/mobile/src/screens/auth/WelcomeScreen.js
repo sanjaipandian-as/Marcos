@@ -68,13 +68,13 @@ export default function WelcomeScreen({ navigation }) {
               By continuing, you agree to {APP_CONFIG.STORE_NAME}'s
             </Text>
             <View style={styles.linksRow}>
-              <TouchableOpacity activeOpacity={0.7}>
+              <TouchableOpacity activeOpacity={0.7} onPress={() => navigation.navigate('PrivacyPolicy')}>
                 <Text style={[styles.linkText, { fontFamily: fonts.semiBold }]}>
                   Privacy Policy
                 </Text>
               </TouchableOpacity>
               <Text style={[styles.agreementText, { fontFamily: fonts.regular }]}> and </Text>
-              <TouchableOpacity activeOpacity={0.7}>
+              <TouchableOpacity activeOpacity={0.7} onPress={() => navigation.navigate('TermsOfService')}>
                 <Text style={[styles.linkText, { fontFamily: fonts.semiBold }]}>
                   Terms of Use
                 </Text>

@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { 
-  StyleSheet, 
-  Text, 
-  View, 
-  Image, 
-  TextInput, 
-  TouchableOpacity, 
-  ActivityIndicator, 
-  KeyboardAvoidingView, 
-  Platform, 
+import {
+  StyleSheet,
+  Text,
+  View,
+  Image,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   SafeAreaView,
   StatusBar,
@@ -25,15 +25,15 @@ const { width } = Dimensions.get('window');
 
 export default function ForgotPasswordScreen({ navigation }) {
   const { theme, fonts, shadows } = useTheme();
-  
+
   // Steps: 'EMAIL' (Reset Password Step 1) -> 'VERIFY' (OTP Code) -> 'RESET' (New Password)
-  const [step, setStep] = useState('EMAIL'); 
+  const [step, setStep] = useState('EMAIL');
   const [email, setEmail] = useState('');
-  
+
   const [code, setCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  
+
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -166,7 +166,7 @@ export default function ForgotPasswordScreen({ navigation }) {
       </View>
 
       {/* Action Button */}
-      <TouchableOpacity 
+      <TouchableOpacity
         style={[styles.primaryBtn, { backgroundColor: theme.brand[500] }]}
         onPress={handleEmailStepContinue}
         disabled={loading}
@@ -218,7 +218,7 @@ export default function ForgotPasswordScreen({ navigation }) {
       </View>
 
       {/* Action Button */}
-      <TouchableOpacity 
+      <TouchableOpacity
         style={[styles.primaryBtn, { backgroundColor: theme.brand[500] }]}
         onPress={handleVerifyOtp}
         disabled={loading}
@@ -258,7 +258,7 @@ export default function ForgotPasswordScreen({ navigation }) {
             value={newPassword}
             onChangeText={setNewPassword}
           />
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.eyeBtn}
             onPress={() => setShowPassword(!showPassword)}
           >
@@ -285,7 +285,7 @@ export default function ForgotPasswordScreen({ navigation }) {
       </View>
 
       {/* Action Button */}
-      <TouchableOpacity 
+      <TouchableOpacity
         style={[styles.primaryBtn, { backgroundColor: theme.brand[500] }]}
         onPress={handleResetPassword}
         disabled={loading}
@@ -305,11 +305,11 @@ export default function ForgotPasswordScreen({ navigation }) {
   return (
     <View style={[styles.container, { backgroundColor: theme.brand[500] }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-      
+
       {/* Header Bar */}
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backBtn} 
+        <TouchableOpacity
+          style={styles.backBtn}
           onPress={() => {
             if (step === 'VERIFY') setStep('EMAIL');
             else if (step === 'RESET') setStep('VERIFY');
@@ -322,17 +322,18 @@ export default function ForgotPasswordScreen({ navigation }) {
         <View style={styles.headerPlaceholder} />
       </View>
 
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.keyboardContainer}
+      <KeyboardAvoidingView
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        style={[styles.keyboardContainer, { backgroundColor: '#ffffff' }]}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          
+        <ScrollView style={{ backgroundColor: theme.brand[500] }} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+
           {/* Top Branding Section (Matches Welcome Screen) */}
-          <View style={styles.brandContainer}>
-            <Image 
-              source={require('../../../assets/Marcos.png')} 
-              style={styles.logo} 
+          <View style={[styles.brandContainer, { backgroundColor: theme.brand[500] }]}>
+            <Image
+              source={require('../../../assets/Marcos.png')}
+              style={styles.logo}
               resizeMode="contain"
             />
             <Text style={[styles.brandTitle, { fontFamily: fonts.extraBold }]}>
@@ -352,6 +353,25 @@ export default function ForgotPasswordScreen({ navigation }) {
             {step === 'EMAIL' && renderEmailStep()}
             {step === 'VERIFY' && renderVerifyStep()}
             {step === 'RESET' && renderResetStep()}
+            {/* Premium Brand Footer */}
+            <View style={styles.brandFooter}>
+              <View style={styles.hallmarkRow}>
+                <Text style={[styles.hallmarkItem, { fontFamily: fonts.medium, color: theme.text.muted }]}>
+                  ✦ Handcrafted Tailoring
+                </Text>
+                <Text style={styles.hallmarkDivider}>•</Text>
+                <Text style={[styles.hallmarkItem, { fontFamily: fonts.medium, color: theme.text.muted }]}>
+                  ✦ Precision Fitting
+                </Text>
+                <Text style={styles.hallmarkDivider}>•</Text>
+                <Text style={[styles.hallmarkItem, { fontFamily: fonts.medium, color: theme.text.muted }]}>
+                  ✦ Secure Encryption
+                </Text>
+              </View>
+              <Text style={[styles.versionText, { fontFamily: fonts.medium, color: theme.text.muted }]}>
+                {APP_CONFIG.STORE_NAME} • Version {APP_CONFIG.VERSION || '1.0.0'}
+              </Text>
+            </View>
           </View>
 
         </ScrollView>
@@ -362,7 +382,7 @@ export default function ForgotPasswordScreen({ navigation }) {
         animationType="fade"
         transparent={true}
         visible={successModalVisible}
-        onRequestClose={() => {}}
+        onRequestClose={() => { }}
       >
         <View style={styles.modalBg}>
           <View style={[styles.modalCard, shadows.premium]}>
@@ -445,12 +465,42 @@ const styles = StyleSheet.create({
   },
   bottomCard: {
     backgroundColor: '#ffffff',
-    borderTopLeftRadius: 36,
-    borderTopRightRadius: 36,
+    borderTopLeftRadius: 44,
+    borderTopRightRadius: 44,
     paddingHorizontal: 24,
     paddingTop: 32,
     paddingBottom: Platform.OS === 'ios' ? 32 : 44,
     width: '100%',
+  },
+  brandFooter: {
+    alignItems: 'center',
+    marginTop: 32,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F1EBF1',
+    gap: 8,
+  },
+  hallmarkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  hallmarkItem: {
+    fontSize: 9,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  hallmarkDivider: {
+    color: '#cbd5e1',
+    fontSize: 9,
+  },
+  versionText: {
+    fontSize: 9,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginTop: 4,
   },
   cardContent: {
     width: '100%',

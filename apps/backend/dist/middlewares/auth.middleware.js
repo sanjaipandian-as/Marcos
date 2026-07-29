@@ -69,24 +69,29 @@ async function authenticate(req, res, next) {
             }
         }
         const decoded = jsonwebtoken_1.default.verify(token, env_js_1.default.JWT_ACCESS_SECRET);
-        // Verify user exists in database to prevent stale token/foreign key violations
+        // Verify user exists in database and fetch fresh role to prevent stale token/privilege issues
         const userCacheKey = decoded.id;
         const cachedUser = userExistsCache.get(userCacheKey);
         const nowTime = Date.now();
         if (cachedUser && nowTime < cachedUser.expiresAt) {
-            if (!cachedUser.exists) {
+            if (!cachedUser.exists || !cachedUser.role) {
                 return res.status(401).json({ success: false, message: 'User account no longer exists' });
             }
+            // Use cached fresh role instead of JWT-embedded role
+            decoded.role = cachedUser.role;
         }
         else {
-            const userExists = await db_js_1.default.user.findUnique({ where: { id: decoded.id }, select: { id: true } });
+            const userExists = await db_js_1.default.user.findUnique({ where: { id: decoded.id }, select: { id: true, role: true } });
             userExistsCache.set(userCacheKey, {
                 exists: !!userExists,
+                role: userExists?.role || null,
                 expiresAt: nowTime + USER_CACHE_TTL,
             });
             if (!userExists) {
                 return res.status(401).json({ success: false, message: 'User account no longer exists' });
             }
+            // Use fresh DB role instead of JWT-embedded role
+            decoded.role = userExists.role;
         }
         req.user = decoded;
         next();

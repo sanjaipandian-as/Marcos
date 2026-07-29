@@ -21,8 +21,15 @@ function validate(schema) {
         }
         catch (error) {
             if (error instanceof zod_1.ZodError) {
+                const SENSITIVE_FIELDS = ['password', 'newPassword', 'currentPassword', 'code', 'otp', 'registrationToken', 'verifyToken'];
+                const redactedBody = { ...req.body };
+                for (const field of SENSITIVE_FIELDS) {
+                    if (field in redactedBody) {
+                        redactedBody[field] = '[REDACTED]';
+                    }
+                }
                 console.log('Validation error in schema:', req.originalUrl);
-                console.log('Payload:', JSON.stringify({ body: req.body, query: req.query, params: req.params }));
+                console.log('Payload:', JSON.stringify({ body: redactedBody, query: req.query, params: req.params }));
                 console.log('Errors:', JSON.stringify(error.errors, null, 2));
                 return res.status(400).json({
                     success: false,

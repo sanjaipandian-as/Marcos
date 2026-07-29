@@ -2,6 +2,7 @@ import { Server, Socket } from 'socket.io';
 import { Server as HttpServer } from 'http';
 import jwt from 'jsonwebtoken';
 import env from '../config/env.js';
+import { isProduction } from '../config/environment.js';
 import redis from '../config/redis.js';
 import logger from '../utils/logger.js';
 import { createRedisAdapter } from './socket.adapter.js';
@@ -23,7 +24,7 @@ export function getIO(): Server | null {
 export function initSocket(server: HttpServer) {
   io = new Server(server, {
     cors: {
-      origin: env.NODE_ENV === 'production'
+      origin: isProduction
         ? ['https://marcos-admin-panel.vercel.app', 'https://marcos.app'] // Restrict to known origins in production
         : '*',
       methods: ['GET', 'POST'],
@@ -33,7 +34,7 @@ export function initSocket(server: HttpServer) {
 
   // Attach Redis adapter for horizontal scaling ONLY in production
   // In development, the in-memory adapter works fine and avoids thousands of Redis commands/min
-  if (env.NODE_ENV === 'production') {
+  if (isProduction) {
     try {
       const adapter = createRedisAdapter();
       io.adapter(adapter);

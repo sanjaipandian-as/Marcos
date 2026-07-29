@@ -29,6 +29,7 @@ export default function WishlistScreen({ navigation }) {
   const [favorites, setFavorites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isGuest, setIsGuest] = useState(false);
 
   const loadFavorites = async () => {
     try {
@@ -39,9 +40,14 @@ export default function WishlistScreen({ navigation }) {
 
       if (favRes.success) {
         setFavorites(favRes.data || []);
+        setIsGuest(false);
       }
     } catch (err) {
-      console.error('Error fetching favorites data:', err);
+      console.log('[Wishlist] Auth check failed:', err?.message || err);
+      // Set guest mode if unauthorized or refresh token is not found
+      if (err?.message?.includes('No refresh token') || err?.status === 401 || err?.statusCode === 401) {
+        setIsGuest(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -52,7 +58,7 @@ export default function WishlistScreen({ navigation }) {
       loadFavorites();
     });
     return unsubscribe;
-  }, [navigation, favorites]);
+  }, [navigation]);
 
   const handleToggleFavorite = async (productId) => {
     try {
@@ -114,6 +120,41 @@ export default function WishlistScreen({ navigation }) {
       </TouchableOpacity>
     );
   };
+
+  if (isGuest) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.bg.main }]}>
+        {/* Header Bar */}
+        <View style={styles.headerBar}>
+          <TouchableOpacity style={[styles.headerBtn, shadows.premium]} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+            <ChevronLeft size={20} color="#1e1e1e" />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: theme.text.primary, fontFamily: fonts.bold }]}>
+            My Wishlist
+          </Text>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <View style={styles.emptyContainer}>
+          <View style={[styles.emptyIconContainer, { backgroundColor: theme.bg.card }]}>
+            <WishlistIcon size={40} color={theme.brand[300]} />
+          </View>
+          <Text style={[styles.emptyTitle, { color: theme.text.primary, fontFamily: fonts.bold }]}>
+            Please Login
+          </Text>
+          <Text style={[styles.emptySubtitle, { color: theme.text.secondary, fontFamily: fonts.medium }]}>
+            Log in to your account to view and manage your personal wishlist collection.
+          </Text>
+          <TouchableOpacity 
+            style={[styles.shopBtn, { backgroundColor: theme.brand[500] }]}
+            onPress={() => navigation.navigate('AuthStack', { screen: 'LoginIdentifier' })}
+          >
+            <Text style={[styles.shopBtnText, { color: '#3D2E3D', fontFamily: fonts.bold }]}>LOGIN</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg.main }]}>

@@ -14,6 +14,7 @@ exports.productQuerySchema = zod_1.z.object({
         page: zod_1.z.coerce.number().int().min(1).default(1),
         limit: zod_1.z.coerce.number().int().min(1).max(1000).default(200),
         category: zod_1.z.string().optional(),
+        categoryId: zod_1.z.string().optional(),
         search: zod_1.z.string().optional(),
         sortBy: zod_1.z.enum(['price', 'createdAt', 'name']).default('createdAt'),
         sortOrder: zod_1.z.enum(['asc', 'desc']).default('desc'),
@@ -63,10 +64,10 @@ class ProductController {
      * GET /products
      */
     static async getProducts(req, res, next) {
-        const { page, limit, category, search, sortBy, sortOrder } = req.query;
+        const { page, limit, category, categoryId, search, sortBy, sortOrder } = req.query;
         const safeLimit = Math.min(Number(limit) || 20, 1000); // clamp pagination limit
         const skip = (Number(page) - 1) * safeLimit;
-        const cacheKey = `cache:products:page-${page}-limit-${safeLimit}-cat-${category || 'all'}-search-${search || 'none'}-sort-${sortBy}-${sortOrder}`;
+        const cacheKey = `cache:products:page-${page}-limit-${safeLimit}-cat-${category || 'all'}-catId-${categoryId || 'all'}-search-${search || 'none'}-sort-${sortBy}-${sortOrder}`;
         try {
             const cached = await redis_js_1.default.get(cacheKey);
             if (cached) {
@@ -74,9 +75,42 @@ class ProductController {
             }
             const where = {};
             if (category) {
-                where.category = {
-                    slug: category,
+                const targetCategory = await db_js_1.default.category.findUnique({
+                    where: { slug: category },
+                });
+                if (targetCategory) {
+                    const allCategories = await db_js_1.default.category.findMany();
+                    const getDescendants = (parentId) => {
+                        const list = [parentId];
+                        allCategories.forEach(c => {
+                            if (c.parentId === parentId) {
+                                list.push(...getDescendants(c.id));
+                            }
+                        });
+                        return list;
+                    };
+                    const descendantIds = getDescendants(targetCategory.id);
+                    where.categoryId = { in: descendantIds };
+                }
+                else {
+                    where.category = {
+                        slug: category,
+                    };
+                }
+            }
+            else if (categoryId) {
+                const allCategories = await db_js_1.default.category.findMany();
+                const getDescendants = (parentId) => {
+                    const list = [parentId];
+                    allCategories.forEach(c => {
+                        if (c.parentId === parentId) {
+                            list.push(...getDescendants(c.id));
+                        }
+                    });
+                    return list;
                 };
+                const descendantIds = getDescendants(categoryId);
+                where.categoryId = { in: descendantIds };
             }
             if (search) {
                 where.OR = [

@@ -16,6 +16,8 @@ import {
   TextInput,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system';
 import { useTheme } from '../../styles/ThemeContext';
 import api from '../../utils/api';
 import { getSocket } from '../../utils/socket';
@@ -36,6 +38,9 @@ import {
   Calendar,
   Scissors,
   Phone,
+  X,
+  Download,
+  ShieldCheck,
 } from 'lucide-react-native';
 
 // ─── Stepper config ──────────────────────────────────────────────────────────
@@ -68,32 +73,28 @@ function getStatusLabelText(status) {
   }
 }
 
-function getCombinedStatusLabelText(order) {
-  if (order.status === 'CANCELLED') return 'Cancelled';
+function getPaymentStatusLabel(order) {
+  if (order.status === 'CANCELLED') return null;
+  if (order.paymentStatus === 'COMPLETED') return null;
   
-  let paymentLabel = 'Non-Paid';
-  if (order.paymentStatus === 'COMPLETED') {
-    paymentLabel = 'Fully Paid';
-  } else if (Number(order.advancePayment) > 0) {
-    paymentLabel = 'Advance Paid';
-  }
-
-  let orderLabel = getStatusLabelText(order.status);
-  if (order.status === 'PENDING') orderLabel = 'Ordered';
-  if (order.status === 'PAID') orderLabel = 'Measurement';
-  if (order.status === 'PROCESSING') orderLabel = 'Stitching';
-  if (order.status === 'SHIPPED') orderLabel = 'Completed';
-  if (order.status === 'OUT_FOR_DELIVERY') orderLabel = 'Out for Delivery';
-  if (order.status === 'DELIVERED') orderLabel = 'Delivered';
-
-  return `${paymentLabel} - ${orderLabel}`;
+  const history = Array.isArray(order.paymentHistory) ? order.paymentHistory : [];
+  const hasAdvance = Number(order.advancePayment) > 0 || history.length > 0;
+  if (hasAdvance) return 'Advance Paid';
+  
+  return 'Unpaid';
 }
 
-function getCombinedStatusStyle(order) {
-  if (order.status === 'CANCELLED') return { bg: '#fef2f2', text: '#ef4444' };
-  if (order.paymentStatus === 'COMPLETED') return { bg: '#ecfdf5', text: '#10b981' };
-  if (Number(order.advancePayment) > 0) return { bg: '#fffbeb', text: '#f59e0b' };
-  return { bg: '#f8fafc', text: '#64748b' };
+function getOrderStatusLabel(status) {
+  switch (status) {
+    case 'CANCELLED': return 'Cancelled';
+    case 'PENDING': return 'Order Placed';
+    case 'PAID': return 'Measurement';
+    case 'PROCESSING': return 'In Stitching';
+    case 'SHIPPED': return 'Product Completed';
+    case 'OUT_FOR_DELIVERY': return 'Ready for Delivery';
+    case 'DELIVERED': return 'Delivered';
+    default: return status;
+  }
 }
 
 function addDays(dateStr, days) {
@@ -292,14 +293,26 @@ export default function OrderTrackingScreen({ route, navigation }) {
     );
   };
 
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  useEffect(() => {
+    if (route?.params?.autoOpenInvoice) {
+      setShowInvoiceModal(true);
+      navigation.setParams({ autoOpenInvoice: undefined });
+    }
+  }, [route?.params]);
+
   // ── Invoice handler ───────────────────────────────────────────────────────
   const handleInvoice = () => {
     const url = order?.invoice?.pdfUrl;
-    if (!url) {
-      Alert.alert('Invoice Pending', 'Your invoice is being prepared and will be available shortly.');
-      return;
+    if (url) {
+      Linking.openURL(url).catch(() => {
+        setShowInvoiceModal(true);
+      });
+    } else {
+      setShowInvoiceModal(true);
     }
-    Linking.openURL(url).catch(() => Alert.alert('Error', 'Could not open invoice.'));
   };
 
   // ─── Header (always rendered) ─────────────────────────────────────────────
@@ -595,7 +608,7 @@ export default function OrderTrackingScreen({ route, navigation }) {
 
   // ─── Progress stepper ─────────────────────────────────────────────────────
   const renderStepper = () => (
-    <View style={[styles.stepperCard, shadows.premium, { backgroundColor: theme.bg.card }]}>
+    <View style={[styles.stepperCard, shadows.premium, { backgroundColor: theme.bg.card, borderWidth: 1, borderColor: theme.border }]}>
       <Text style={[styles.stepperTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
         Order Progress
       </Text>
@@ -605,7 +618,6 @@ export default function OrderTrackingScreen({ route, navigation }) {
           const isDone = idx < currentStepIdx;
           const isCurrent = idx === currentStepIdx;
           const isFuture = idx > currentStepIdx;
-          const color = isDone || isCurrent ? theme.brand[500] : '#cbd5e1';
           const textColor = isFuture ? theme.text.muted : theme.text.primary;
           const estDate = addDays(order.createdAt, step.offsetDays);
 
@@ -627,8 +639,8 @@ export default function OrderTrackingScreen({ route, navigation }) {
                     <CheckCircle2 size={14} color="#fff" />
                   </View>
                 ) : (
-                  <View style={[styles.stepCircle, { backgroundColor: '#f1f5f9', borderWidth: 2, borderColor: '#e2e8f0' }]}>
-                    <Circle size={10} color="#cbd5e1" />
+                  <View style={[styles.stepCircle, { backgroundColor: theme.bg.input, borderWidth: 1.5, borderColor: theme.border }]}>
+                    <Circle size={10} color={theme.text.muted} />
                   </View>
                 )}
                 <Text
@@ -637,14 +649,13 @@ export default function OrderTrackingScreen({ route, navigation }) {
                 >
                   {step.label}
                 </Text>
-                {/* PLACEHOLDER: hardcoded estimates */}
                 <Text style={[styles.stepDate, { fontFamily: fonts.regular, color: theme.text.muted }]}>
                   {isDone || isCurrent ? estDate : '—'}
                 </Text>
               </View>
               {/* Connector line */}
               {idx < STEPS.length - 1 && (
-                <View style={[styles.connector, { backgroundColor: idx < currentStepIdx ? theme.brand[500] : '#e2e8f0' }]} />
+                <View style={[styles.connector, { backgroundColor: idx < currentStepIdx ? theme.brand[500] : theme.border }]} />
               )}
             </React.Fragment>
           );
@@ -775,27 +786,18 @@ export default function OrderTrackingScreen({ route, navigation }) {
   const renderActions = () => (
     <View style={styles.actionsRow}>
       <TouchableOpacity
-        style={[styles.actionBtn, shadows.premium, { backgroundColor: theme.bg.card }]}
-        onPress={handleInvoice}
-        activeOpacity={0.8}
-      >
-        <FileText size={18} color={theme.brand[500]} />
-        <Text style={[styles.actionBtnText, { fontFamily: fonts.semiBold, color: theme.text.primary }]}>Invoice</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.actionBtn, shadows.premium, { backgroundColor: theme.bg.card }]}
+        style={[styles.actionBtn, shadows.premium, { backgroundColor: theme.bg.card, borderWidth: 1, borderColor: theme.border }]}
         onPress={() => navigation.navigate('Support', { orderId: order.id })}
         activeOpacity={0.8}
       >
-        <Headphones size={18} color={theme.brand[500]} />
-        <Text style={[styles.actionBtnText, { fontFamily: fonts.semiBold, color: theme.text.primary }]}>Help</Text>
+        <Headphones size={18} color={theme.text.primary} />
+        <Text style={[styles.actionBtnText, { fontFamily: fonts.bold, color: theme.text.primary }]}>Need Support / Help</Text>
       </TouchableOpacity>
 
       {/* Cancel button: only rendered for PENDING or PAID — not shown for other statuses */}
       {canCancel && (
         <TouchableOpacity
-          style={[styles.actionBtn, shadows.premium, { backgroundColor: '#fef2f2' }]}
+          style={[styles.actionBtn, shadows.premium, { backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca', flex: 0.6 }]}
           onPress={handleCancel}
           disabled={cancelling}
           activeOpacity={0.8}
@@ -805,7 +807,7 @@ export default function OrderTrackingScreen({ route, navigation }) {
           ) : (
             <XCircle size={18} color="#ef4444" />
           )}
-          <Text style={[styles.actionBtnText, { fontFamily: fonts.semiBold, color: '#ef4444' }]}>Cancel</Text>
+          <Text style={[styles.actionBtnText, { fontFamily: fonts.bold, color: '#ef4444' }]}>Cancel Order</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -1165,27 +1167,96 @@ export default function OrderTrackingScreen({ route, navigation }) {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Order meta */}
-        <View style={[styles.metaCard, shadows.premium, { backgroundColor: theme.bg.card }]}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.metaInvoice, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-              {order.invoiceNumber}
-            </Text>
-            <Text style={[styles.metaDate, { fontFamily: fonts.regular, color: theme.text.muted }]}>
-              Placed on {new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
-            </Text>
-            {order.deliveryDate && (
-              <Text style={[styles.metaDate, { fontFamily: fonts.bold, color: theme.brand[500], marginTop: 4 }]}>
-                Expected Delivery: {new Date(order.deliveryDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+        {/* 1. Order Status & Prominent Delivery Date Box */}
+        <View style={[styles.metaCard, shadows.premium, { backgroundColor: theme.bg.card, borderWidth: 1, borderColor: theme.border, gap: 14, flexDirection: 'column', alignItems: 'stretch' }]}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 9.5, fontFamily: fonts.bold, color: theme.text.muted, textTransform: 'uppercase', letterSpacing: 1 }}>
+                CURRENT ORDER STATUS
               </Text>
-            )}
+              <Text style={{ fontSize: 18, fontFamily: fonts.bold, color: theme.text.primary, marginTop: 4 }}>
+                {getOrderStatusLabel(order.status)}
+              </Text>
+              <Text style={{ fontSize: 12, fontFamily: fonts.regular, color: theme.text.muted, marginTop: 3 }}>
+                Placed on {new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </Text>
+            </View>
+
+            {getPaymentStatusLabel(order) ? (
+              <View style={{
+                paddingHorizontal: 10,
+                paddingVertical: 5,
+                borderRadius: 12,
+                backgroundColor: theme.bg.input,
+                borderWidth: 1,
+                borderColor: theme.border
+              }}>
+                <Text style={{ fontSize: 10, fontFamily: fonts.bold, color: theme.text.secondary }}>
+                  {getPaymentStatusLabel(order)}
+                </Text>
+              </View>
+            ) : null}
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: getCombinedStatusStyle(order).bg }]}>
-            <Clock size={11} color={getCombinedStatusStyle(order).text} />
-            <Text style={[styles.statusBadgeText, { fontFamily: fonts.bold, color: getCombinedStatusStyle(order).text }]}>
-              {getCombinedStatusLabelText(order)}
+
+          {/* Prominent Expected Delivery Highlight Banner */}
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            padding: 14,
+            borderRadius: 16,
+            backgroundColor: theme.bg.input,
+            borderWidth: 1,
+            borderColor: theme.border
+          }}>
+            <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: theme.bg.card, alignItems: 'center', justifyContent: 'center' }}>
+              <Calendar size={20} color={theme.brand[500]} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 9.5, fontFamily: fonts.bold, color: theme.text.muted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                EXPECTED DELIVERY DATE
+              </Text>
+              <Text style={{ fontSize: 14, fontFamily: fonts.bold, color: theme.text.primary, marginTop: 2 }}>
+                {order.deliveryDate
+                  ? new Date(order.deliveryDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+                  : addDays(order.createdAt, 7) + ' (Estimated)'}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* 2. Separate Invoice Box (View Invoice button cleanly positioned BELOW Invoice Number) */}
+        <View style={[styles.metaCard, shadows.premium, { backgroundColor: theme.bg.card, borderWidth: 1, borderColor: theme.border, gap: 14, flexDirection: 'column', alignItems: 'stretch' }]}>
+          <View>
+            <Text style={{ fontSize: 9.5, fontFamily: fonts.bold, color: theme.text.muted, textTransform: 'uppercase', letterSpacing: 1 }}>
+              INVOICE NUMBER
+            </Text>
+            <Text style={[styles.metaInvoice, { fontFamily: fonts.bold, color: theme.text.primary, marginTop: 4, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }]} numberOfLines={2}>
+              {order.invoiceNumber || `INV-${order.id.slice(-8).toUpperCase()}`}
             </Text>
           </View>
+
+          <TouchableOpacity
+            style={{
+              paddingVertical: 12,
+              paddingHorizontal: 16,
+              borderRadius: 12,
+              backgroundColor: theme.bg.input,
+              borderWidth: 1,
+              borderColor: theme.border,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8
+            }}
+            onPress={handleInvoice}
+            activeOpacity={0.75}
+          >
+            <FileText size={16} color={theme.text.primary} />
+            <Text style={{ fontSize: 12.5, fontFamily: fonts.bold, color: theme.text.primary, letterSpacing: 0.3 }}>
+              View Official Tax Invoice
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* CANCELLED banner, quick order card, and stepper */}
@@ -1204,8 +1275,349 @@ export default function OrderTrackingScreen({ route, navigation }) {
         {renderActions()}
       </ScrollView>
       {renderRescheduleModal()}
+      {renderInvoiceModal()}
     </View>
   );
+
+  function formatUserAddress(rawAddr) {
+    if (!rawAddr) return '';
+    try {
+      let parsed = typeof rawAddr === 'string' ? JSON.parse(rawAddr) : rawAddr;
+      if (Array.isArray(parsed)) {
+        parsed = parsed.find(a => a.selected) || parsed[0];
+      }
+      if (parsed && typeof parsed === 'object') {
+        const parts = [
+          parsed.address,
+          parsed.area,
+          parsed.landmark ? `(Near ${parsed.landmark})` : '',
+          parsed.city,
+          parsed.pincode ? `- ${parsed.pincode}` : ''
+        ].filter(Boolean);
+        return parts.join(', ');
+      }
+    } catch (e) {
+      // Fallback if not JSON
+    }
+    return String(rawAddr);
+  }
+
+  function renderInvoiceModal() {
+    if (!order) return null;
+
+    const rawItems = (order.orderItems && order.orderItems.length > 0)
+      ? order.orderItems
+      : (order.items && order.items.length > 0)
+        ? order.items
+        : (order.product ? [{ product: order.product, quantity: 1, price: order.payableAmount }] : []);
+
+    const itemsList = rawItems.length > 0 ? rawItems : [{
+      product: { name: order.productName || 'Custom Apparel Item' },
+      quantity: 1,
+      price: order.payableAmount
+    }];
+
+    const handleDownloadPdf = async () => {
+      setDownloadingPdf(true);
+      try {
+        const token = await AsyncStorage.getItem('accessToken');
+        const downloadUrl = order?.invoice?.pdfUrl || `${api.defaults.baseURL}/orders/${order.id}/invoice-pdf`;
+        const filename = `MARCOS_Invoice_${(order.invoiceNumber || order.id).replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
+        const fileUri = `${FileSystem.documentDirectory}${filename}`;
+
+        const downloadResult = await FileSystem.downloadAsync(
+          downloadUrl,
+          fileUri,
+          {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          }
+        );
+
+        if (downloadResult.status === 200) {
+          Alert.alert(
+            'Invoice Saved Successfully!',
+            `Official Tax Invoice stored on your device:\n${filename}`,
+            [
+              {
+                text: 'View / Open PDF',
+                onPress: async () => {
+                  try {
+                    if (Platform.OS === 'android') {
+                      const contentUri = await FileSystem.getContentUriAsync(downloadResult.uri);
+                      await Linking.openURL(contentUri);
+                    } else if (Platform.OS === 'ios') {
+                      const supported = await Linking.canOpenURL(downloadResult.uri);
+                      if (supported) {
+                        await Linking.openURL(downloadResult.uri);
+                      } else {
+                        await Linking.openURL(downloadUrl);
+                      }
+                    } else {
+                      await Linking.openURL(downloadUrl);
+                    }
+                  } catch (openErr) {
+                    await Linking.openURL(downloadUrl).catch(() => {
+                      Alert.alert('Invoice Saved', 'PDF file is saved safely in your app documents directory.');
+                    });
+                  }
+                }
+              },
+              { text: 'Done', style: 'cancel' }
+            ]
+          );
+        } else {
+          await Linking.openURL(downloadUrl);
+        }
+      } catch (err) {
+        console.warn('PDF Download Error:', err);
+        const downloadUrl = order?.invoice?.pdfUrl || `${api.defaults.baseURL}/orders/${order.id}/invoice-pdf`;
+        Linking.openURL(downloadUrl).catch(() => {
+          Alert.alert('Notice', 'Invoice document saved locally.');
+        });
+      } finally {
+        setDownloadingPdf(false);
+      }
+    };
+
+    const formattedAddress = formatUserAddress(order.user?.address || order.address);
+
+    return (
+      <Modal visible={showInvoiceModal} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setShowInvoiceModal(false)}>
+        <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
+          <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+          
+          {/* Minimalist Top Header Bar */}
+          <View style={{
+            paddingTop: Platform.OS === 'ios' ? 54 : (StatusBar.currentHeight || 20) + 10,
+            paddingBottom: 16,
+            paddingHorizontal: 20,
+            backgroundColor: '#ffffff',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderBottomWidth: 1,
+            borderBottomColor: '#f1f5f9'
+          }}>
+            <TouchableOpacity
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 12,
+                backgroundColor: '#f8fafc',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderWidth: 1,
+                borderColor: '#e2e8f0'
+              }}
+              onPress={() => setShowInvoiceModal(false)}
+              activeOpacity={0.7}
+            >
+              <X size={20} color="#0f172a" />
+            </TouchableOpacity>
+
+            <View style={{ alignItems: 'center' }}>
+              <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: '#0f172a', letterSpacing: 1.5, textTransform: 'uppercase' }}>
+                Tax Invoice
+              </Text>
+              <Text style={{ fontSize: 11, fontFamily: fonts.regular, color: '#64748b', marginTop: 1 }}>
+                {order.invoiceNumber || `INV-${order.id.slice(-8).toUpperCase()}`}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 12,
+                backgroundColor: '#0f172a',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onPress={handleDownloadPdf}
+              disabled={downloadingPdf}
+              activeOpacity={0.7}
+            >
+              {downloadingPdf ? <ActivityIndicator size="small" color="#ffffff" /> : <Download size={18} color="#ffffff" />}
+            </TouchableOpacity>
+          </View>
+
+          {/* Clean Scrollable Content */}
+          <ScrollView
+            contentContainerStyle={{ padding: 24, paddingBottom: 60, gap: 24 }}
+            showsVerticalScrollIndicator={false}
+            style={{ backgroundColor: '#ffffff' }}
+          >
+            {/* Minimal Brand Header */}
+            <View style={{ gap: 4 }}>
+              <Text style={{ fontSize: 24, fontFamily: fonts.bold, color: '#0f172a', letterSpacing: 3 }}>
+                MARCOS
+              </Text>
+              <Text style={{ fontSize: 10, fontFamily: fonts.medium, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1.5 }}>
+                Couture & Tailoring Studio
+              </Text>
+            </View>
+
+            {/* Key Meta Grid */}
+            <View style={{
+              gap: 12,
+              paddingVertical: 14,
+              borderTopWidth: 1,
+              borderBottomWidth: 1,
+              borderColor: '#f1f5f9'
+            }}>
+              {/* Full width row for long Invoice Number */}
+              <View>
+                <Text style={{ fontSize: 9.5, fontFamily: fonts.bold, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>Invoice Number</Text>
+                <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: '#0f172a', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', marginTop: 3 }} numberOfLines={2}>
+                  {order.invoiceNumber || `INV-${order.id.slice(-8).toUpperCase()}`}
+                </Text>
+              </View>
+
+              {/* Side-by-side row for Date & Payment Mode */}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 9.5, fontFamily: fonts.bold, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>Issue Date</Text>
+                  <Text style={{ fontSize: 12.5, fontFamily: fonts.semiBold, color: '#0f172a', marginTop: 3 }}>
+                    {new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </Text>
+                </View>
+
+                <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                  <Text style={{ fontSize: 9.5, fontFamily: fonts.bold, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>Payment Mode</Text>
+                  <Text style={{ fontSize: 12.5, fontFamily: fonts.semiBold, color: '#0f172a', marginTop: 3 }}>
+                    {order.paymentMethod || 'ONLINE'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Billed To & Merchant Info */}
+            <View style={{ gap: 16 }}>
+              <View>
+                <Text style={{ fontSize: 10, fontFamily: fonts.bold, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>Billed / Shipped To</Text>
+                <Text style={{ fontSize: 14, fontFamily: fonts.bold, color: '#0f172a' }}>
+                  {order.user?.fullName || order.customerName || 'Bespoke Customer'}
+                </Text>
+                {order.user?.phoneNumber && <Text style={{ fontSize: 12, fontFamily: fonts.regular, color: '#475569', marginTop: 2 }}>Phone: {order.user.phoneNumber}</Text>}
+                {order.user?.email && <Text style={{ fontSize: 12, fontFamily: fonts.regular, color: '#475569', marginTop: 1 }}>Email: {order.user.email}</Text>}
+                {formattedAddress ? <Text style={{ fontSize: 12, fontFamily: fonts.regular, color: '#475569', marginTop: 2, lineHeight: 18 }}>Address: {formattedAddress}</Text> : null}
+              </View>
+
+              <View>
+                <Text style={{ fontSize: 10, fontFamily: fonts.bold, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>Issued By</Text>
+                <Text style={{ fontSize: 12.5, fontFamily: fonts.bold, color: '#1e293b' }}>MARCOS Studio</Text>
+                <Text style={{ fontSize: 11, fontFamily: fonts.regular, color: '#64748b', marginTop: 1 }}>GSTIN: 33ABCDE1234F1Z5 · Aruppukottai, Tamil Nadu</Text>
+              </View>
+            </View>
+
+            {/* Clean Minimal Table */}
+            <View style={{ borderTopWidth: 1, borderColor: '#0f172a' }}>
+              <View style={{ flexDirection: 'row', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' }}>
+                <Text style={{ flex: 2, fontSize: 10, fontFamily: fonts.bold, color: '#0f172a', textTransform: 'uppercase', letterSpacing: 0.5 }}>Item</Text>
+                <Text style={{ width: 35, fontSize: 10, fontFamily: fonts.bold, color: '#0f172a', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.5 }}>Qty</Text>
+                <Text style={{ width: 70, fontSize: 10, fontFamily: fonts.bold, color: '#0f172a', textAlign: 'right', textTransform: 'uppercase', letterSpacing: 0.5 }}>Price</Text>
+                <Text style={{ width: 75, fontSize: 10, fontFamily: fonts.bold, color: '#0f172a', textAlign: 'right', textTransform: 'uppercase', letterSpacing: 0.5 }}>Total</Text>
+              </View>
+
+              {itemsList.map((item, idx) => {
+                const name = item.productName || item.product?.name || item.name || order.productName || 'Bespoke Garment';
+                const qty = Number(item.quantity || 1);
+                const price = Number(item.price || (order.payableAmount / qty));
+                const lineTotal = price * qty;
+                const fabricInfo = item.fabricType || item.product?.materialInfo || order.fabricType;
+
+                return (
+                  <View key={idx} style={{ flexDirection: 'row', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', alignItems: 'center' }}>
+                    <View style={{ flex: 2, paddingRight: 8 }}>
+                      <Text style={{ fontSize: 13, fontFamily: fonts.semiBold, color: '#0f172a' }}>{name}</Text>
+                      {fabricInfo && (
+                        <Text style={{ fontSize: 11, fontFamily: fonts.regular, color: '#64748b', marginTop: 1 }}>
+                          Fabric: {fabricInfo}
+                        </Text>
+                      )}
+                    </View>
+                    <Text style={{ width: 35, fontSize: 12, fontFamily: fonts.regular, color: '#334155', textAlign: 'center' }}>{qty}</Text>
+                    <Text style={{ width: 70, fontSize: 12, fontFamily: fonts.regular, color: '#475569', textAlign: 'right' }}>₹{price.toLocaleString('en-IN')}</Text>
+                    <Text style={{ width: 75, fontSize: 12.5, fontFamily: fonts.bold, color: '#0f172a', textAlign: 'right' }}>₹{lineTotal.toLocaleString('en-IN')}</Text>
+                  </View>
+                );
+              })}
+            </View>
+
+            {/* Calculations Breakdown */}
+            <View style={{ gap: 8, paddingTop: 4 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ fontSize: 12.5, fontFamily: fonts.regular, color: '#64748b' }}>Subtotal</Text>
+                <Text style={{ fontSize: 12.5, fontFamily: fonts.medium, color: '#0f172a' }}>₹{Number(order.totalAmount).toLocaleString('en-IN')}</Text>
+              </View>
+              {Number(order.discountAmount) > 0 && (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ fontSize: 12.5, fontFamily: fonts.regular, color: '#475569' }}>Discount</Text>
+                  <Text style={{ fontSize: 12.5, fontFamily: fonts.medium, color: '#0f172a' }}>-₹{Number(order.discountAmount).toLocaleString('en-IN')}</Text>
+                </View>
+              )}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ fontSize: 12.5, fontFamily: fonts.regular, color: '#64748b' }}>GST ({order.gstPercentage !== undefined && order.gstPercentage !== null ? order.gstPercentage : 18}%)</Text>
+                <Text style={{ fontSize: 12.5, fontFamily: fonts.medium, color: '#0f172a' }}>₹{Number(order.taxAmount).toLocaleString('en-IN')}</Text>
+              </View>
+
+              <View style={{ height: 1, backgroundColor: '#0f172a', marginVertical: 6 }} />
+
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={{ fontSize: 14, fontFamily: fonts.bold, color: '#0f172a' }}>Grand Total</Text>
+                <Text style={{ fontSize: 18, fontFamily: fonts.bold, color: '#0f172a' }}>
+                  ₹{Number(order.payableAmount).toLocaleString('en-IN')}
+                </Text>
+              </View>
+
+              {Number(order.advancePayment) > 0 && (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4, paddingTop: 6, borderTopWidth: 1, borderTopColor: '#f1f5f9' }}>
+                  <Text style={{ fontSize: 12, fontFamily: fonts.regular, color: '#64748b' }}>Advance Paid</Text>
+                  <Text style={{ fontSize: 12, fontFamily: fonts.medium, color: '#0f172a' }}>-₹{Number(order.advancePayment).toLocaleString('en-IN')}</Text>
+                </View>
+              )}
+
+              {Number(order.balanceAmount) > 0 && (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 }}>
+                  <Text style={{ fontSize: 12.5, fontFamily: fonts.bold, color: '#0f172a' }}>Balance Due</Text>
+                  <Text style={{ fontSize: 12.5, fontFamily: fonts.bold, color: '#0f172a' }}>₹{Number(order.balanceAmount).toLocaleString('en-IN')}</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Minimal Monochrome Download PDF Button */}
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#0f172a',
+                height: 52,
+                borderRadius: 12,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 10,
+                marginTop: 12,
+              }}
+              onPress={handleDownloadPdf}
+              disabled={downloadingPdf}
+              activeOpacity={0.85}
+            >
+              {downloadingPdf ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <>
+                  <Download size={18} color="#ffffff" />
+                  <Text style={{ fontFamily: fonts.bold, color: '#ffffff', fontSize: 13, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                    Download PDF Invoice
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+          </ScrollView>
+        </View>
+      </Modal>
+    );
+  }
 }
 
 
@@ -1279,7 +1691,7 @@ const styles = StyleSheet.create({
   },
 
   /* Section cards */
-  sectionCard: { padding: 20, borderRadius: 20 },
+  sectionCard: { padding: 20, borderRadius: 20, borderWidth: 1, borderColor: '#f1f5f9' },
   sectionTitle: { fontSize: 14, marginBottom: 16 },
 
   /* Items */

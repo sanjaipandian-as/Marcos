@@ -10,10 +10,12 @@ dotenv_1.default.config();
 const envSchema = zod_1.z.object({
     PORT: zod_1.z.coerce.number().default(5000),
     NODE_ENV: zod_1.z.enum(['development', 'production', 'test']).default('development'),
+    APP_NAME: zod_1.z.string().default('MARCOS'),
+    APP_VERSION: zod_1.z.string().default('1.0.0'),
     DATABASE_URL: zod_1.z.string().url(),
     REDIS_URL: zod_1.z.string().url(),
-    JWT_ACCESS_SECRET: zod_1.z.string().min(8),
-    JWT_REFRESH_SECRET: zod_1.z.string().min(8),
+    JWT_ACCESS_SECRET: zod_1.z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters (use: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))")'),
+    JWT_REFRESH_SECRET: zod_1.z.string().min(32, 'JWT_REFRESH_SECRET must be at least 32 characters (use: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))")'),
     ALLOWED_ORIGINS: zod_1.z.string().default(''),
     // Cloudflare R2
     CLOUDFLARE_R2_ACCESS_KEY: zod_1.z.string().optional(),

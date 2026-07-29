@@ -18,8 +18,9 @@ import {
 } from '../controllers/auth.controller.js';
 import { VoucherPlanController } from '../controllers/voucherPlan.controller.js';
 import { validate } from '../middlewares/validate.middleware.js';
-import { authenticate } from '../middlewares/auth.middleware.js';
+import { authenticate, authorize } from '../middlewares/auth.middleware.js';
 import { sensitiveRateLimiter, identifyIpLimiter, identifyTargetLimiter } from '../middlewares/rateLimit.middleware.js';
+import { Role } from '@prisma/client';
 
 const router = Router();
 
@@ -29,7 +30,7 @@ router.post('/login', sensitiveRateLimiter, validate(loginSchema), AuthControlle
 router.post('/setup-password', sensitiveRateLimiter, validate(setupPasswordSchema), AuthController.setupPassword);
 router.post('/otp/send', sensitiveRateLimiter, validate(otpSendSchema), AuthController.sendOtp);
 router.post('/otp/verify', sensitiveRateLimiter, validate(otpVerifySchema), AuthController.verifyOtp);
-router.post('/refresh', AuthController.refresh);
+router.post('/refresh', sensitiveRateLimiter, AuthController.refresh);
 router.post('/logout', authenticate, AuthController.logout);
 
 // New Password Reset and Profile management routes
@@ -49,8 +50,8 @@ router.get('/loyalty/coupons', authenticate, AuthController.listUserCoupons);
 
 // Voucher Plans Management routes
 router.get('/loyalty/voucher-plans', authenticate, VoucherPlanController.listVoucherPlans);
-router.get('/admin/loyalty/voucher-plans', authenticate, VoucherPlanController.adminListVoucherPlans);
-router.post('/admin/loyalty/voucher-plans', authenticate, VoucherPlanController.adminCreateVoucherPlan);
-router.delete('/admin/loyalty/voucher-plans/:id', authenticate, VoucherPlanController.adminDeactivateVoucherPlan);
+router.get('/admin/loyalty/voucher-plans', authenticate, authorize(Role.ADMIN, Role.SUPERADMIN), VoucherPlanController.adminListVoucherPlans);
+router.post('/admin/loyalty/voucher-plans', authenticate, authorize(Role.ADMIN, Role.SUPERADMIN), VoucherPlanController.adminCreateVoucherPlan);
+router.delete('/admin/loyalty/voucher-plans/:id', authenticate, authorize(Role.ADMIN, Role.SUPERADMIN), VoucherPlanController.adminDeactivateVoucherPlan);
 
 export default router;

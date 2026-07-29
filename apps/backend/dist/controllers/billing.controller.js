@@ -7,6 +7,7 @@ exports.BillingController = exports.invoiceCreateSchema = void 0;
 const zod_1 = require("zod");
 const db_js_1 = __importDefault(require("../config/db.js"));
 const env_js_1 = __importDefault(require("../config/env.js"));
+const environment_js_1 = require("../config/environment.js");
 const jobs_producer_js_1 = __importDefault(require("../queues/jobs.producer.js"));
 const product_controller_js_1 = require("./product.controller.js");
 const socket_handler_js_1 = require("../socket/socket.handler.js");
@@ -212,7 +213,7 @@ class BillingController {
             if (gateway === 'stripe') {
                 const sigHeader = req.headers['stripe-signature'];
                 const secret = env_js_1.default.STRIPE_WEBHOOK_SECRET;
-                if (!secret || secret === 'stripe-webhook-secret' || env_js_1.default.NODE_ENV === 'test') {
+                if (!secret || secret === 'stripe-webhook-secret' || environment_js_1.isTest) {
                     // Bypassed for tests
                     isVerified = true;
                     payloadJson = JSON.parse(rawBody.toString());
@@ -230,7 +231,7 @@ class BillingController {
             else if (gateway === 'razorpay') {
                 const receivedSignature = req.headers['x-razorpay-signature'];
                 const secret = env_js_1.default.RAZORPAY_WEBHOOK_SECRET;
-                if (!secret || secret === 'razorpay-webhook-secret' || env_js_1.default.NODE_ENV === 'test') {
+                if (!secret || secret === 'razorpay-webhook-secret' || environment_js_1.isTest) {
                     isVerified = true;
                     payloadJson = JSON.parse(rawBody.toString());
                     orderId = payloadJson.orderId || 'mock-id';
@@ -300,11 +301,20 @@ class BillingController {
                         gatewayResponse: payloadJson,
                     },
                 });
-                // Invalidate admin cache
-                await redis_js_1.default.keys('cache:admin:*').then(keys => {
-                    if (keys.length > 0)
-                        return redis_js_1.default.del(...keys);
-                }).catch(err => console.error('Failed to invalidate admin cache:', err));
+                // Invalidate admin cache using SCAN (non-blocking, unlike KEYS)
+                try {
+                    let cursor = '0';
+                    do {
+                        const [nextCursor, keys] = await redis_js_1.default.scan(cursor, 'MATCH', 'cache:admin:*', 'COUNT', '100');
+                        cursor = nextCursor;
+                        if (keys.length > 0) {
+                            await redis_js_1.default.del(...keys);
+                        }
+                    } while (cursor !== '0');
+                }
+                catch (err) {
+                    console.error('Failed to invalidate admin cache:', err);
+                }
                 // 3. Queue jobs
                 await jobs_producer_js_1.default.queueInvoicePdf(order.id);
                 if (order.userId) {

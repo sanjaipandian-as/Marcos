@@ -3,25 +3,24 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const http_1 = __importDefault(require("http"));
 const app_js_1 = __importDefault(require("./app.js"));
 const env_js_1 = __importDefault(require("./config/env.js"));
+const environment_js_1 = require("./config/environment.js");
 const logger_js_1 = __importDefault(require("./utils/logger.js"));
 const socket_handler_js_1 = require("./socket/socket.handler.js");
 const jobs_worker_js_1 = require("./queues/jobs.worker.js");
 const analytics_worker_js_1 = require("./services/analytics.worker.js");
 const db_js_1 = __importDefault(require("./config/db.js"));
 const redis_js_1 = __importDefault(require("./config/redis.js"));
-const server = http_1.default.createServer(app_js_1.default);
+const port = env_js_1.default.PORT || 5000;
+const server = app_js_1.default.listen(port, () => {
+    logger_js_1.default.info(`🚀 ${env_js_1.default.APP_NAME} Backend Engine v${env_js_1.default.APP_VERSION} running in ${environment_js_1.mode} mode on port ${port}`);
+});
 // 1. Initialize Real-Time WebSockets
 (0, socket_handler_js_1.initSocket)(server);
 // 2. Initialize Background Task Workers
 (0, jobs_worker_js_1.initWorker)();
 (0, analytics_worker_js_1.startAnalyticsFlushWorker)();
-const port = env_js_1.default.PORT;
-server.listen(port, () => {
-    logger_js_1.default.info(`🚀 MARCOS Backend Engine running in ${env_js_1.default.NODE_ENV} mode on port ${port}`);
-});
 // Graceful shutdown handler
 async function gracefulShutdown(signal) {
     logger_js_1.default.info(`${signal} received. Starting graceful shutdown...`);

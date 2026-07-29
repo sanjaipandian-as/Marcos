@@ -343,9 +343,12 @@ function CategoryNode({ category, depth, index, total, loadCategories }) {
                 </div>
               )}
               <div className="flex flex-col">
-                <span className="text-xs font-bold text-slate-800 flex items-center gap-2">
-                  {category.name}
-                  {hasChildren && <span className="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md text-[9px] font-bold">{category.subCategories.length}</span>}
+                <span className="text-xs font-bold text-slate-800 flex items-center gap-2 flex-wrap">
+                  <span>{category.name}</span>
+                  {hasChildren && <span className="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md text-[9px] font-bold" title="Subcategories count">{category.subCategories.length} sub</span>}
+                  <span className="bg-brand-50 text-brand-600 border border-brand-100/80 px-1.5 py-0.5 rounded-md text-[9px] font-semibold" title="Direct / Total products count">
+                    {category.directProductCount || 0} direct / {category.totalProductCount || 0} total
+                  </span>
                 </span>
                 <span className="text-[10px] text-slate-400">/{category.slug}</span>
               </div>

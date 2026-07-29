@@ -11,7 +11,7 @@ class CloudinaryService {
     /**
      * Uploads a file buffer to Cloudinary using their REST API (base64 JSON payload).
      */
-    static async uploadFile(buffer, folder = 'marcos', mimeType = 'image/jpeg') {
+    static async uploadFile(buffer, folder = env_js_1.default.APP_NAME.toLowerCase(), mimeType = 'image/jpeg') {
         if (!env_js_1.default.CLOUDINARY_CLOUD_NAME || !env_js_1.default.CLOUDINARY_API_KEY || !env_js_1.default.CLOUDINARY_API_SECRET) {
             throw new Error('Cloudinary credentials are not configured.');
         }

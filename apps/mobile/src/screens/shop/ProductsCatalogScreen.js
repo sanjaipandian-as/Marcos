@@ -56,6 +56,8 @@ export default function ProductsCatalogScreen({ navigation, route }) {
   const [subCategories, setSubCategories] = useState([]);
   const [selectedSubCategory, setSelectedSubCategory] = useState(null);
   const [expandedCategories, setExpandedCategories] = useState(new Set());
+  const [showCategoryHierarchyModal, setShowCategoryHierarchyModal] = useState(false);
+  const [activePopupSubCategory, setActivePopupSubCategory] = useState(null);
 
   const toggleExpand = (catId) => {
     setExpandedCategories(prev => {
@@ -154,6 +156,7 @@ export default function ProductsCatalogScreen({ navigation, route }) {
   const [sliderWidth, setSliderWidth] = useState(1);
   const [modalVisible, setModalVisible] = useState(false);
   const slideAnim = useRef(new Animated.Value(width)).current;
+  const hierarchySlideAnim = useRef(new Animated.Value(width)).current;
 
   const openFilters = () => {
     setModalVisible(true);
@@ -171,6 +174,25 @@ export default function ProductsCatalogScreen({ navigation, route }) {
       duration: 250,
       useNativeDriver: true,
     }).start(() => setModalVisible(false));
+  };
+
+  const openHierarchyDrawer = () => {
+    setShowCategoryHierarchyModal(true);
+    hierarchySlideAnim.setValue(width);
+    Animated.spring(hierarchySlideAnim, {
+      toValue: 0,
+      useNativeDriver: true,
+      bounciness: 0,
+      speed: 14
+    }).start();
+  };
+
+  const closeHierarchyDrawer = () => {
+    Animated.timing(hierarchySlideAnim, {
+      toValue: width,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => setShowCategoryHierarchyModal(false));
   };
 
   const minPriceRef = useRef(Number(minPrice) || 0);
@@ -252,6 +274,9 @@ export default function ProductsCatalogScreen({ navigation, route }) {
     }
     if (route?.params?.categoryId) {
       setSelectedCategory(route.params.categoryId);
+      if (route.params.categoryId !== 'All') {
+        setShowCategoryHierarchyModal(true);
+      }
     } else if (!route?.params?.categoryId && !route?.params?.searchQuery) {
       setSelectedCategory('All');
     }
@@ -261,6 +286,37 @@ export default function ProductsCatalogScreen({ navigation, route }) {
     }
   }, [route?.params]);
 
+  // Set the default Level 2 subcategory and auto-expand all dropdowns when category changes
+  useEffect(() => {
+    if (selectedCategory && selectedCategory !== 'All' && categories.length > 0) {
+      const activeCat = categories.find(c => c.id === selectedCategory);
+      if (activeCat && activeCat.subCategories && activeCat.subCategories.length > 0) {
+        setActivePopupSubCategory(activeCat.subCategories[0].id);
+        
+        // Populate set with all category + subcategory IDs to expand them by default
+        const idsToExpand = [activeCat.id];
+        activeCat.subCategories.forEach(sub => {
+          idsToExpand.push(sub.id);
+          if (sub.subCategories) {
+            sub.subCategories.forEach(child => idsToExpand.push(child.id));
+          }
+        });
+        setExpandedCategories(new Set(idsToExpand));
+      } else {
+        setActivePopupSubCategory(null);
+      }
+    }
+  }, [selectedCategory, categories]);
+
+  // Reload products from server when category filter changes
+  useEffect(() => {
+    if (categories.length > 0) {
+      setCurrentPage(1);
+      setHasMore(true);
+      loadData(1, false);
+    }
+  }, [selectedCategory]);
+
   const loadData = async (page = 1, append = false) => {
     try {
       if (!append) {
@@ -269,8 +325,12 @@ export default function ProductsCatalogScreen({ navigation, route }) {
         setLoadingMore(true);
       }
 
+      const productsUrl = selectedCategory !== 'All'
+        ? `/products?page=${page}&limit=${PAGE_SIZE}&categoryId=${selectedCategory}`
+        : `/products?page=${page}&limit=${PAGE_SIZE}`;
+
       const requests = [
-        api.get(`/products?page=${page}&limit=${PAGE_SIZE}`).catch(() => ({ success: false, data: [], pagination: {} })),
+        api.get(productsUrl).catch(() => ({ success: false, data: [], pagination: {} })),
       ];
 
       // Only fetch meta data on first load
@@ -439,8 +499,14 @@ export default function ProductsCatalogScreen({ navigation, route }) {
         return null;
       };
       const selectedNode = findNode(categories, selectedCategory);
+      
+      // Determine valid category IDs (selected category itself + all its descendants)
       const validIds = selectedNode ? getAllDescendantIds(selectedNode) : [selectedCategory];
-      result = result.filter(product => validIds.includes(product.categoryId));
+      const filtered = result.filter(product => validIds.includes(product.categoryId));
+      
+      if (filtered.length > 0) {
+        result = filtered;
+      }
     }
 
     // Filter by Price Range
@@ -519,6 +585,132 @@ export default function ProductsCatalogScreen({ navigation, route }) {
       </View>
     );
   }
+
+  const renderPopupCategoryNode = (node, depth = 0) => {
+    const isChecked = selectedCategory === node.id;
+    const hasSub = node.subCategories && node.subCategories.length > 0;
+    const isExpanded = expandedCategories.has(node.id);
+    const indentLeft = depth * 16;
+
+    return (
+      <View key={node.id}>
+        <View style={[styles.popupTreeRow, { paddingLeft: indentLeft }]}>
+          <TouchableOpacity
+            style={styles.popupTreeExpandIcon}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            onPress={() => { if (hasSub) toggleExpand(node.id); }}
+          >
+            {hasSub ? (
+              isExpanded ? <ChevronDown size={16} color="#71717a" /> : <ChevronRight size={16} color="#71717a" />
+            ) : (
+              <View style={{ width: 16 }} />
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.popupTreeRowContent}
+            activeOpacity={0.7}
+            onPress={() => {
+              setSelectedCategory(node.id);
+              setSelectedSubCategory(null);
+              setShowCategoryHierarchyModal(false);
+            }}
+          >
+            <View style={[
+              styles.popupTreeCheckbox,
+              isChecked && { backgroundColor: theme.brand[500], borderColor: theme.brand[500] }
+            ]}>
+              {isChecked && <View style={styles.popupTreeCheckboxInner} />}
+            </View>
+            <Text style={[
+              styles.popupTreeLabel,
+              {
+                fontFamily: isChecked ? fonts.semiBold : fonts.regular,
+                color: isChecked ? theme.brand[500] : theme.text.primary,
+                fontSize: depth === 0 ? 15 : 13
+              }
+            ]}>
+              {node.name}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {isExpanded && hasSub && (
+          <View style={{ paddingLeft: 8 }}>
+            {node.subCategories.map(child => renderPopupCategoryNode(child, depth + 1))}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderCategoryHierarchyModal = () => {
+    if (selectedCategory === 'All') return null;
+
+    const parentCat = categories.find(c => c.id === selectedCategory);
+    if (!parentCat) return null;
+
+    return (
+      <Modal
+        visible={showCategoryHierarchyModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowCategoryHierarchyModal(false)}
+      >
+        <TouchableOpacity 
+          style={styles.popupModalOverlay} 
+          activeOpacity={1} 
+          onPress={() => setShowCategoryHierarchyModal(false)}
+        >
+          <TouchableOpacity 
+            activeOpacity={1} 
+            style={[styles.popupModalContainer, { backgroundColor: theme.bg.card }, shadows.premium]}
+          >
+            {/* Header */}
+            <View style={styles.popupModalHeader}>
+              <View>
+                <Text style={[styles.popupModalTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                  {parentCat.name}
+                </Text>
+                <Text style={[styles.popupModalSubtitle, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
+                  Choose subcategory dropdowns
+                </Text>
+              </View>
+              <TouchableOpacity 
+                onPress={() => setShowCategoryHierarchyModal(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <X size={20} color={theme.text.muted} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Tree Accordion Dropdown List */}
+            <ScrollView showsVerticalScrollIndicator={false} style={styles.popupModalScroll}>
+              <View style={{ paddingBottom: 16 }}>
+                {renderPopupCategoryNode(parentCat, 0)}
+              </View>
+            </ScrollView>
+
+            {/* View All / Reset Footer */}
+            <View style={[styles.popupModalFooter, { borderTopColor: theme.border }]}>
+              <TouchableOpacity
+                style={[styles.popupModalBtn, { backgroundColor: theme.brand[500] }]}
+                onPress={() => {
+                  setSelectedCategory(parentCat.id);
+                  setSelectedSubCategory(null);
+                  setShowCategoryHierarchyModal(false);
+                }}
+              >
+                <Text style={[styles.popupModalBtnText, { fontFamily: fonts.bold }]}>
+                  Show All {parentCat.name}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+    );
+  };
 
   const filteredProducts = getFilteredProducts();
 
@@ -704,6 +896,8 @@ export default function ProductsCatalogScreen({ navigation, route }) {
           </Animated.View>
         </TouchableOpacity>
       </Modal>
+
+      {renderCategoryHierarchyModal()}
 
     </View>
   );
@@ -1203,5 +1397,90 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  popupModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  popupModalContainer: {
+    width: '100%',
+    height: '65%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 30 : 20,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+  },
+  popupModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  popupModalTitle: {
+    fontSize: 20,
+  },
+  popupModalSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  popupModalScroll: {
+    marginVertical: 10,
+  },
+  popupModalFooter: {
+    borderTopWidth: 1,
+    paddingTop: 16,
+    marginTop: 10,
+  },
+  popupModalBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 14,
+  },
+  popupModalBtnText: {
+    color: '#3D2E3D',
+    fontSize: 14,
+  },
+  popupTreeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  popupTreeExpandIcon: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  popupTreeRowContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  popupTreeCheckbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: '#a1a1aa',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  popupTreeCheckboxInner: {
+    width: 8,
+    height: 8,
+    borderRadius: 2,
+    backgroundColor: '#3D2E3D',
+  },
+  popupTreeLabel: {
+    fontSize: 14,
   },
 });

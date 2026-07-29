@@ -8,6 +8,7 @@ exports.initSocket = initSocket;
 const socket_io_1 = require("socket.io");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const env_js_1 = __importDefault(require("../config/env.js"));
+const environment_js_1 = require("../config/environment.js");
 const redis_js_1 = __importDefault(require("../config/redis.js"));
 const logger_js_1 = __importDefault(require("../utils/logger.js"));
 const socket_adapter_js_1 = require("./socket.adapter.js");
@@ -19,7 +20,7 @@ function getIO() {
 function initSocket(server) {
     io = new socket_io_1.Server(server, {
         cors: {
-            origin: env_js_1.default.NODE_ENV === 'production'
+            origin: environment_js_1.isProduction
                 ? ['https://marcos-admin-panel.vercel.app', 'https://marcos.app'] // Restrict to known origins in production
                 : '*',
             methods: ['GET', 'POST'],
@@ -28,7 +29,7 @@ function initSocket(server) {
     });
     // Attach Redis adapter for horizontal scaling ONLY in production
     // In development, the in-memory adapter works fine and avoids thousands of Redis commands/min
-    if (env_js_1.default.NODE_ENV === 'production') {
+    if (environment_js_1.isProduction) {
         try {
             const adapter = (0, socket_adapter_js_1.createRedisAdapter)();
             io.adapter(adapter);

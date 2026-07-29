@@ -1,6 +1,7 @@
 import http from 'http';
 import app from './app.js';
 import env from './config/env.js';
+import { mode } from './config/environment.js';
 import logger from './utils/logger.js';
 import { initSocket } from './socket/socket.handler.js';
 import { initWorker } from './queues/jobs.worker.js';
@@ -8,7 +9,11 @@ import { startAnalyticsFlushWorker } from './services/analytics.worker.js';
 import prisma from './config/db.js';
 import redis from './config/redis.js';
 
-const server = http.createServer(app);
+const port = env.PORT || 5000;
+
+const server = app.listen(port, () => {
+  logger.info(`🚀 ${env.APP_NAME} Backend Engine v${env.APP_VERSION} running in ${mode} mode on port ${port}`);
+});
 
 // 1. Initialize Real-Time WebSockets
 initSocket(server);
@@ -16,11 +21,6 @@ initSocket(server);
 // 2. Initialize Background Task Workers
 initWorker();
 startAnalyticsFlushWorker();
-
-const port = env.PORT;
-server.listen(port, () => {
-  logger.info(`🚀 ${env.APP_NAME} Backend Engine v${env.APP_VERSION} running in ${env.NODE_ENV} mode on port ${port}`);
-});
 
 // Graceful shutdown handler
 async function gracefulShutdown(signal: string) {

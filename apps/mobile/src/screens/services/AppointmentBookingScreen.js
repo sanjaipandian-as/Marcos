@@ -40,9 +40,35 @@ import {
   CheckCircle2,
   ChevronDown
 } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-
 const { width } = Dimensions.get('window');
+
+function BookingSkeletonCard({ theme }) {
+  const opacity = React.useRef(new Animated.Value(0.4)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.4, duration: 700, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+
+  return (
+    <Animated.View style={[styles.skeletonCard, { backgroundColor: theme.bg.card, opacity }]}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
+        <View style={{ width: 100, height: 20, borderRadius: 8, backgroundColor: '#e2e8f0' }} />
+        <View style={{ width: 80, height: 20, borderRadius: 8, backgroundColor: '#e2e8f0' }} />
+      </View>
+      <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
+        <View style={{ width: 56, height: 56, borderRadius: 14, backgroundColor: '#cbd5e1' }} />
+        <View style={{ flex: 1, gap: 8 }}>
+          <View style={{ width: '75%', height: 14, borderRadius: 6, backgroundColor: '#e2e8f0' }} />
+          <View style={{ width: '45%', height: 12, borderRadius: 6, backgroundColor: '#e2e8f0' }} />
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
 
 export default function AppointmentBookingScreen({ navigation, route }) {
   const { theme, fonts, shadows } = useTheme();
@@ -139,6 +165,9 @@ export default function AppointmentBookingScreen({ navigation, route }) {
 
   useEffect(() => {
     fetchSettings();
+    const today = new Date();
+    loadBookedSlots(today);
+    loadData(true);
   }, []);
 
   useEffect(() => {
@@ -199,14 +228,16 @@ export default function AppointmentBookingScreen({ navigation, route }) {
         api.get('/visits?limit=20&page=1')
       ]);
       
-      if (apptsRes.success) {
-        setAppointments(apptsRes.data);
-        setHasMoreAppts(apptsRes.data.length >= 20);
+      if (apptsRes && apptsRes.success) {
+        const apptList = Array.isArray(apptsRes.data) ? apptsRes.data : (apptsRes.data?.data || []);
+        setAppointments(apptList);
+        setHasMoreAppts(apptList.length >= 20);
         if (reset) setApptsPage(1);
       }
-      if (visitsRes.success) {
-        setVisits(visitsRes.data);
-        setHasMoreVisits(visitsRes.data.length >= 20);
+      if (visitsRes && visitsRes.success) {
+        const visitList = Array.isArray(visitsRes.data) ? visitsRes.data : (visitsRes.data?.data || []);
+        setVisits(visitList);
+        setHasMoreVisits(visitList.length >= 20);
         if (reset) setVisitsPage(1);
       }
     } catch (err) {
@@ -727,7 +758,7 @@ export default function AppointmentBookingScreen({ navigation, route }) {
       {loading && currentData.length === 0 ? (
         <View style={styles.listPadding}>
           {[1, 2, 3].map(idx => (
-            <View key={idx} style={[styles.skeletonCard, shadows.premium, { backgroundColor: theme.border }]} />
+            <BookingSkeletonCard key={idx} theme={theme} />
           ))}
         </View>
       ) : currentData.length === 0 ? (
@@ -1570,5 +1601,12 @@ const styles = StyleSheet.create({
   submitBtnText: {
     fontSize: 16,
     letterSpacing: 1.5,
+  },
+  skeletonCard: {
+    borderRadius: 22,
+    marginBottom: 16,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
 });

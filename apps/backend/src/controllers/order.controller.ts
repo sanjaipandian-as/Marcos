@@ -8,6 +8,7 @@ import { computeStockStatus } from './product.controller.js';
 import JobsProducer from '../queues/jobs.producer.js';
 import { getIO } from '../socket/socket.handler.js';
 import redis from '../config/redis.js';
+import PdfService from '../services/pdf.service.js';
 
 export const orderStatusUpdateSchema = z.object({
   body: z.object({
@@ -446,9 +447,16 @@ export class OrderController {
       }
 
       // Invalidate admin cache
-      await redis.keys('cache:admin:*').then(keys => {
-        if (keys.length > 0) return redis.del(...keys);
-      }).catch(err => console.error('Failed to invalidate admin cache:', err));
+      try {
+        let cursor = '0';
+        do {
+          const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', 'cache:admin:*', 'COUNT', '100');
+          cursor = nextCursor;
+          if (keys.length > 0) await redis.del(...keys);
+        } while (cursor !== '0');
+      } catch (err: any) {
+        console.error('Failed to invalidate admin cache:', err);
+      }
 
       // Audit Log for order status change
       if (status !== undefined && status !== existing.status) {
@@ -576,6 +584,47 @@ export class OrderController {
         success: true,
         data: slip,
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /orders/:id/invoice-pdf
+   * Generate and stream PDF Invoice on demand.
+   */
+  static async downloadInvoicePdf(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const order = await prisma.order.findUnique({
+        where: { id },
+        include: {
+          orderItems: {
+            include: { product: true },
+          },
+          user: true,
+        },
+      });
+
+      if (!order) {
+        return res.status(404).json({ success: false, message: 'Order not found' });
+      }
+
+      if (req.user!.role === Role.CUSTOMER && order.userId !== req.user!.id) {
+        return res.status(403).json({ success: false, message: 'Forbidden' });
+      }
+
+      const customer = order.user || {
+        fullName: (order.gatewayResponse as any)?.guestCustomerName || 'Bespoke Customer',
+        email: 'customer@marcosapp.com',
+        phoneNumber: 'N/A',
+      };
+
+      const pdfBuffer = await PdfService.generateInvoicePdf(order, customer);
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="invoice-${order.invoiceNumber}.pdf"`);
+      return res.send(pdfBuffer);
     } catch (error) {
       next(error);
     }
@@ -828,9 +877,16 @@ export class OrderController {
       }
 
       // Invalidate admin cache
-      await redis.keys('cache:admin:*').then(keys => {
-        if (keys.length > 0) return redis.del(...keys);
-      }).catch(err => console.error('Failed to invalidate admin cache:', err));
+      try {
+        let cursor = '0';
+        do {
+          const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', 'cache:admin:*', 'COUNT', '100');
+          cursor = nextCursor;
+          if (keys.length > 0) await redis.del(...keys);
+        } while (cursor !== '0');
+      } catch (err: any) {
+        console.error('Failed to invalidate admin cache:', err);
+      }
 
       return res.status(201).json({
         success: true,
@@ -938,9 +994,16 @@ export class OrderController {
       }
 
       // Invalidate admin cache
-      await redis.keys('cache:admin:*').then(keys => {
-        if (keys.length > 0) return redis.del(...keys);
-      }).catch(err => console.error('Failed to invalidate admin cache:', err));
+      try {
+        let cursor = '0';
+        do {
+          const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', 'cache:admin:*', 'COUNT', '100');
+          cursor = nextCursor;
+          if (keys.length > 0) await redis.del(...keys);
+        } while (cursor !== '0');
+      } catch (err: any) {
+        console.error('Failed to invalidate admin cache:', err);
+      }
 
       return res.status(200).json({
         success: true,
@@ -1131,9 +1194,16 @@ export class OrderController {
       }
 
       // Invalidate admin cache
-      await redis.keys('cache:admin:*').then(keys => {
-        if (keys.length > 0) return redis.del(...keys);
-      }).catch(err => console.error('Failed to invalidate admin cache:', err));
+      try {
+        let cursor = '0';
+        do {
+          const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', 'cache:admin:*', 'COUNT', '100');
+          cursor = nextCursor;
+          if (keys.length > 0) await redis.del(...keys);
+        } while (cursor !== '0');
+      } catch (err: any) {
+        console.error('Failed to invalidate admin cache:', err);
+      }
 
       return res.status(200).json({
         success: true,
@@ -1250,9 +1320,16 @@ export class OrderController {
       }
 
       // Invalidate admin cache
-      await redis.keys('cache:admin:*').then(keys => {
-        if (keys.length > 0) return redis.del(...keys);
-      }).catch(err => console.error('Failed to invalidate admin cache:', err));
+      try {
+        let cursor = '0';
+        do {
+          const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', 'cache:admin:*', 'COUNT', '100');
+          cursor = nextCursor;
+          if (keys.length > 0) await redis.del(...keys);
+        } while (cursor !== '0');
+      } catch (err: any) {
+        console.error('Failed to invalidate admin cache:', err);
+      }
 
       return res.status(200).json({
         success: true,

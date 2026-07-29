@@ -184,6 +184,11 @@ class AdminCategoryController {
             }
             const categories = await db_js_1.default.category.findMany({
                 orderBy: { order: 'asc' },
+                include: {
+                    _count: {
+                        select: { products: true }
+                    }
+                }
             });
             // Build tree
             const categoryMap = new Map();
@@ -203,16 +208,24 @@ class AdminCategoryController {
                     tree.push(categoryMap.get(c.id));
                 }
             });
-            // Sort subcategories by order recursively
-            const sortTree = (nodes) => {
-                nodes.sort((a, b) => a.order - b.order);
-                nodes.forEach(n => {
-                    if (n.subCategories && n.subCategories.length > 0) {
-                        sortTree(n.subCategories);
-                    }
-                });
+            // Sort subcategories by order recursively and compute product counts
+            const processTree = (node) => {
+                const directCount = node._count?.products || 0;
+                node.directProductCount = directCount;
+                let subCategoriesTotal = 0;
+                if (node.subCategories && node.subCategories.length > 0) {
+                    node.subCategories.sort((a, b) => a.order - b.order);
+                    node.subCategories.forEach((sub) => {
+                        subCategoriesTotal += processTree(sub);
+                    });
+                }
+                node.totalProductCount = directCount + subCategoriesTotal;
+                return node.totalProductCount;
             };
-            sortTree(tree);
+            tree.forEach(node => {
+                processTree(node);
+            });
+            tree.sort((a, b) => a.order - b.order);
             await redis_js_1.default.set('cache:categories', JSON.stringify(tree), 'EX', 86400);
             return res.status(200).json({
                 success: true,

@@ -217,6 +217,8 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
   const [loadingMain, setLoadingMain] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(new Date());
 
+  const [selectedOrderModal, setSelectedOrderModal] = useState(null);
+
   // ── Load main dashboard + all orders (on mount / refresh only)
   const loadMain = useCallback(async (quiet = false) => {
     if (!quiet) setLoadingMain(true);
@@ -288,6 +290,7 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
       appointmentsScheduled: dayAppointments.length,
       appointmentsConfirmed: confirmedAppointments.length,
       ordersList: dayOrders.slice(0, 10),
+      deliveriesPromisedList: promisedDeliveries,
       appointmentsList: dayAppointments, // all day meetings
     };
   }, [allOrders, allAppointments]);
@@ -354,13 +357,17 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
 
       {/* ── Date-Specific Stats Strip ── */}
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        {/* Box 1: Orders */}
+        {/* Box 1: Orders Received */}
         <div
-          onClick={() => setActiveTab?.('orders')}
-          className="bg-white border border-brand-100 rounded-2xl p-4 flex flex-col justify-between cursor-pointer hover:shadow-premium hover:-translate-y-0.5 transition-all"
+          onClick={() => {
+            sessionStorage.setItem('admin_order_status_filter', 'ALL');
+            sessionStorage.setItem('admin_order_date_filter', selectedDate);
+            setActiveTab?.('orders-bookings');
+          }}
+          className="bg-white border border-brand-100 rounded-2xl p-4 flex flex-col justify-between cursor-pointer hover:shadow-premium hover:-translate-y-0.5 transition-all group"
         >
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-8 h-8 rounded-xl bg-brand-50 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-brand-50 group-hover:bg-brand-100 flex items-center justify-center shrink-0 transition-colors">
               <ShoppingCart className="w-4 h-4 text-brand-600" />
             </div>
             <p className="text-[10px] text-brand-600 font-bold uppercase tracking-wider leading-tight">Orders<br />Received</p>
@@ -370,11 +377,21 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
 
         {/* Box 2: Deliveries Promised */}
         <div
-          onClick={() => setActiveTab?.('orders')}
-          className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col justify-between cursor-pointer hover:shadow-premium hover:-translate-y-0.5 transition-all"
+          onClick={() => {
+            const el = document.getElementById('deliveries-promised-section');
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              el.classList.add('ring-2', 'ring-brand-500');
+              setTimeout(() => el.classList.remove('ring-2', 'ring-brand-500'), 2000);
+            } else {
+              sessionStorage.setItem('admin_order_delivery_promised_date', selectedDate);
+              setActiveTab?.('orders-bookings');
+            }
+          }}
+          className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col justify-between cursor-pointer hover:shadow-premium hover:-translate-y-0.5 transition-all group"
         >
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-slate-50 group-hover:bg-slate-100 flex items-center justify-center shrink-0 transition-colors">
               <Package className="w-4 h-4 text-slate-600" />
             </div>
             <p className="text-[10px] text-slate-600 font-bold uppercase tracking-wider leading-tight">Deliveries<br />Promised</p>
@@ -384,11 +401,14 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
 
         {/* Box 3: Deliveries Proceeded */}
         <div
-          onClick={() => setActiveTab?.('orders')}
-          className="bg-white border border-amber-100 rounded-2xl p-4 flex flex-col justify-between cursor-pointer hover:shadow-premium hover:-translate-y-0.5 transition-all"
+          onClick={() => {
+            sessionStorage.setItem('admin_order_status_filter', 'PROCEEDED');
+            setActiveTab?.('orders-bookings');
+          }}
+          className="bg-white border border-amber-100 rounded-2xl p-4 flex flex-col justify-between cursor-pointer hover:shadow-premium hover:-translate-y-0.5 transition-all group"
         >
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-8 h-8 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-amber-50 group-hover:bg-amber-100 flex items-center justify-center shrink-0 transition-colors">
               <Truck className="w-4 h-4 text-amber-600" />
             </div>
             <p className="text-[10px] text-amber-600 font-bold uppercase tracking-wider leading-tight">Deliveries<br />Proceeded</p>
@@ -398,11 +418,14 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
 
         {/* Box 4: Deliveries Completed */}
         <div
-          onClick={() => setActiveTab?.('orders')}
-          className="bg-white border border-emerald-100 rounded-2xl p-4 flex flex-col justify-between cursor-pointer hover:shadow-premium hover:-translate-y-0.5 transition-all"
+          onClick={() => {
+            sessionStorage.setItem('admin_order_status_filter', 'DELIVERED');
+            setActiveTab?.('orders-bookings');
+          }}
+          className="bg-white border border-emerald-100 rounded-2xl p-4 flex flex-col justify-between cursor-pointer hover:shadow-premium hover:-translate-y-0.5 transition-all group"
         >
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 group-hover:bg-emerald-100 flex items-center justify-center shrink-0 transition-colors">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
             </div>
             <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider leading-tight">Deliveries<br />Completed</p>
@@ -412,11 +435,15 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
 
         {/* Box 5: Appointments Scheduled */}
         <div
-          onClick={() => setActiveTab?.('orders-bookings')}
-          className="bg-white border border-blue-100 rounded-2xl p-4 flex flex-col justify-between cursor-pointer hover:shadow-premium hover:-translate-y-0.5 transition-all"
+          onClick={() => {
+            sessionStorage.setItem('admin_appt_status_filter', 'ALL');
+            sessionStorage.setItem('admin_appt_date_filter', selectedDate);
+            setActiveTab?.('orders-fittings');
+          }}
+          className="bg-white border border-blue-100 rounded-2xl p-4 flex flex-col justify-between cursor-pointer hover:shadow-premium hover:-translate-y-0.5 transition-all group"
         >
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-blue-50 group-hover:bg-blue-100 flex items-center justify-center shrink-0 transition-colors">
               <Calendar className="w-4 h-4 text-blue-600" />
             </div>
             <p className="text-[10px] text-blue-600 font-bold uppercase tracking-wider leading-tight">Appointments<br />Scheduled</p>
@@ -426,11 +453,15 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
 
         {/* Box 6: Appointments Confirmed */}
         <div
-          onClick={() => setActiveTab?.('orders-bookings')}
-          className="bg-white border border-indigo-100 rounded-2xl p-4 flex flex-col justify-between cursor-pointer hover:shadow-premium hover:-translate-y-0.5 transition-all"
+          onClick={() => {
+            sessionStorage.setItem('admin_appt_status_filter', 'CONFIRMED');
+            sessionStorage.setItem('admin_appt_date_filter', selectedDate);
+            setActiveTab?.('orders-fittings');
+          }}
+          className="bg-white border border-indigo-100 rounded-2xl p-4 flex flex-col justify-between cursor-pointer hover:shadow-premium hover:-translate-y-0.5 transition-all group"
         >
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 group-hover:bg-indigo-100 flex items-center justify-center shrink-0 transition-colors">
               <Star className="w-4 h-4 text-indigo-600" />
             </div>
             <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider leading-tight">Appointments<br />Confirmed</p>
@@ -439,33 +470,41 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
         </div>
       </div>
 
-      {/* ── Date Orders & Appointments Detail ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Orders List */}
+      {/* ── Date Details Grid: Orders Received, Deliveries Promised, Appointments ── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Orders Received List */}
         <div className="bg-white rounded-3xl p-6 shadow-premium">
           <SH
-            title={`Orders on ${new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}`}
-            sub={`${ds.ordersReceived} total orders`}
-            action={<button onClick={() => setActiveTab?.('orders')} className="text-[10px] font-bold text-brand-600 hover:underline">View all →</button>}
+            title={`Orders Received`}
+            sub={`${ds.ordersReceived} orders on ${new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`}
+            action={
+              <button 
+                onClick={() => {
+                  sessionStorage.setItem('admin_order_status_filter', 'ALL');
+                  sessionStorage.setItem('admin_order_date_filter', selectedDate);
+                  setActiveTab?.('orders-bookings');
+                }} 
+                className="text-[10px] font-bold text-brand-600 hover:underline"
+              >
+                View all →
+              </button>
+            }
           />
-          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
             {ds.ordersList?.length === 0 ? (
               <div className="text-center py-8 text-slate-400">
                 <ShoppingCart className="w-8 h-8 mx-auto mb-2 text-slate-200" />
-                <p className="text-xs font-semibold">No orders for this date</p>
+                <p className="text-xs font-semibold">No orders received on this date</p>
               </div>
             ) : ds.ordersList?.map(o => (
               <div 
                 key={o.id} 
-                onClick={() => {
-                  sessionStorage.setItem('filterBookingByOrderId', o.id);
-                  setActiveTab?.('bookings');
-                }}
-                className="flex items-center justify-between p-3 rounded-2xl bg-slate-50/60 border border-slate-100 hover:bg-brand-50/30 transition-colors cursor-pointer group"
+                onClick={() => setSelectedOrderModal(o)}
+                className="flex items-center justify-between p-3 rounded-2xl bg-slate-50/60 border border-slate-100 hover:bg-brand-50/40 transition-colors cursor-pointer group"
               >
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-bold text-[#3D2E3D] group-hover:text-brand-700 transition-colors truncate">{o.invoiceNumber}</p>
-                  <p className="text-[10px] text-slate-400 truncate">{o.user?.fullName || 'Guest'}</p>
+                  <p className="text-[10px] text-slate-400 truncate">{o.user?.fullName || o.customerName || 'Guest'}</p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0 ml-2">
                   <span className="text-xs font-extrabold text-[#3D2E3D]">{fmtCur(o.payableAmount)}</span>
@@ -478,13 +517,72 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
           </div>
         </div>
 
+        {/* Deliveries Promised Standalone Section */}
+        <div id="deliveries-promised-section" className="bg-white rounded-3xl p-6 shadow-premium transition-all duration-300 border border-transparent">
+          <SH
+            title={`Deliveries Promised`}
+            sub={`${ds.deliveriesPromised} promised for ${new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`}
+            action={
+              <button 
+                onClick={() => {
+                  sessionStorage.setItem('admin_order_delivery_promised_date', selectedDate);
+                  setActiveTab?.('orders-bookings');
+                }} 
+                className="text-[10px] font-bold text-slate-600 hover:underline"
+              >
+                Pipeline →
+              </button>
+            }
+          />
+          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+            {ds.deliveriesPromisedList?.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <Package className="w-8 h-8 mx-auto mb-2 text-slate-200" />
+                <p className="text-xs font-semibold">No deliveries promised for this date</p>
+              </div>
+            ) : ds.deliveriesPromisedList?.map(o => (
+              <div 
+                key={o.id} 
+                onClick={() => setSelectedOrderModal(o)}
+                className="flex items-center justify-between p-3 rounded-2xl bg-amber-50/40 border border-amber-100 hover:bg-amber-50 transition-colors cursor-pointer group"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <Package className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <p className="text-xs font-bold text-[#3D2E3D] group-hover:text-amber-800 transition-colors truncate">{o.invoiceNumber}</p>
+                  </div>
+                  <p className="text-[10px] text-slate-500 truncate mt-0.5">{o.user?.fullName || o.customerName || 'Customer'}</p>
+                </div>
+                <div className="flex flex-col items-end shrink-0 ml-2">
+                  <span className="text-xs font-extrabold text-[#3D2E3D]">{fmtCur(o.payableAmount)}</span>
+                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border mt-0.5 ${STATUS_COLORS[o.status] || 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                    {o.status.replace(/_/g, ' ')}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Appointments List */}
         <div className="bg-white rounded-3xl p-6 shadow-premium">
           <SH
-            title={`Appointments on ${new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}`}
-            sub={`${ds.appointmentsList?.length || 0} scheduled`}
+            title={`Appointments Scheduled`}
+            sub={`${ds.appointmentsList?.length || 0} on ${new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`}
+            action={
+              <button 
+                onClick={() => {
+                  sessionStorage.setItem('admin_appt_status_filter', 'ALL');
+                  sessionStorage.setItem('admin_appt_date_filter', selectedDate);
+                  setActiveTab?.('orders-fittings');
+                }} 
+                className="text-[10px] font-bold text-blue-600 hover:underline"
+              >
+                View all →
+              </button>
+            }
           />
-          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
             {ds.appointmentsList?.length === 0 ? (
               <div className="text-center py-8 text-slate-400">
                 <Calendar className="w-8 h-8 mx-auto mb-2 text-slate-200" />
@@ -493,7 +591,14 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
             ) : ds.appointmentsList?.map(a => {
               const active = isActiveSlot(a.timeSlot, a.date);
               return (
-                <div key={a.id} className={`relative flex items-center justify-between p-3 rounded-2xl border transition-all ${active ? 'bg-indigo-50 border-indigo-300 ring-2 ring-indigo-500/20 shadow-sm' : 'bg-slate-50/60 border-slate-100 hover:bg-slate-50'}`}>
+                <div 
+                  key={a.id} 
+                  onClick={() => {
+                    sessionStorage.setItem('admin_appt_status_filter', a.status || 'ALL');
+                    setActiveTab?.('orders-fittings');
+                  }}
+                  className={`relative flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer ${active ? 'bg-indigo-50 border-indigo-300 ring-2 ring-indigo-500/20 shadow-sm' : 'bg-slate-50/60 border-slate-100 hover:bg-slate-100/80'}`}
+                >
                   {active && (
                     <div className="absolute -top-1.5 -right-1.5 flex h-3.5 w-3.5">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
@@ -502,7 +607,7 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
                   )}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <p className={`text-xs font-bold truncate ${active ? 'text-indigo-950' : 'text-[#3D2E3D]'}`}>{a.user?.fullName || 'Customer'}</p>
+                      <p className={`text-xs font-bold truncate ${active ? 'text-indigo-950' : 'text-[#3D2E3D]'}`}>{a.user?.fullName || a.userName || 'Customer'}</p>
                       {active && <span className="text-[8px] font-black text-red-600 bg-red-100 px-1.5 rounded uppercase tracking-wider">Live Now</span>}
                     </div>
                     <p className={`text-[10px] ${active ? 'text-indigo-600 font-semibold' : 'text-slate-400'}`}>
@@ -766,10 +871,7 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
                 {recentOrders.map(o => (
                   <tr 
                     key={o.id} 
-                    onClick={() => {
-                      sessionStorage.setItem('filterBookingByOrderId', o.id);
-                      setActiveTab?.('bookings');
-                    }}
+                    onClick={() => setSelectedOrderModal(o)}
                     className="hover:bg-slate-50/60 transition-colors cursor-pointer group"
                   >
                     <td className="py-2.5 pr-3 font-bold text-[#3D2E3D] group-hover:text-brand-700 transition-colors text-[11px]">{o.invoiceNumber}</td>
@@ -797,7 +899,7 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { label: 'New Checkout', icon: ShoppingCart, tab: 'checkout', color: 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' },
-            { label: 'View Orders', icon: Package, tab: 'orders', color: 'bg-blue-50 text-blue-700 hover:bg-blue-100' },
+            { label: 'View Orders', icon: Package, tab: 'orders-bookings', color: 'bg-blue-50 text-blue-700 hover:bg-blue-100' },
             { label: 'Manage Products', icon: Star, tab: 'products', color: 'bg-violet-50 text-violet-700 hover:bg-violet-100' },
             { label: 'Analytics', icon: Activity, tab: 'reports', color: 'bg-amber-50 text-amber-700 hover:bg-amber-100' },
           ].map(a => (
@@ -812,6 +914,142 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
           ))}
         </div>
       </div>
+
+      {/* ── Order Details Dashboard Modal ── */}
+      {selectedOrderModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-100 p-6 space-y-6 animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xl font-extrabold text-[#3D2E3D]">{selectedOrderModal.invoiceNumber}</h3>
+                  <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${STATUS_COLORS[selectedOrderModal.status] || 'bg-slate-100 text-slate-500'}`}>
+                    {selectedOrderModal.status.replace(/_/g, ' ')}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 font-medium mt-1">
+                  Ordered on {new Date(selectedOrderModal.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </p>
+              </div>
+              <button 
+                onClick={() => setSelectedOrderModal(null)}
+                className="p-2 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Customer & Address Details */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-1.5">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Customer Details</p>
+                <p className="text-sm font-bold text-[#3D2E3D]">{selectedOrderModal.customerName || selectedOrderModal.user?.fullName || 'Guest Customer'}</p>
+                {selectedOrderModal.user?.phoneNumber && (
+                  <p className="text-xs text-slate-500 font-medium">{selectedOrderModal.user.phoneNumber}</p>
+                )}
+                {selectedOrderModal.user?.email && (
+                  <p className="text-xs text-slate-400 font-medium">{selectedOrderModal.user.email}</p>
+                )}
+              </div>
+
+              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-1.5">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Promised Delivery Date</p>
+                <p className="text-sm font-extrabold text-amber-700">
+                  {selectedOrderModal.deliveryDate 
+                    ? new Date(selectedOrderModal.deliveryDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
+                    : 'Standard Processing'
+                  }
+                </p>
+                <p className="text-xs text-slate-500 font-medium">Payment Mode: <strong className="text-slate-700 uppercase">{selectedOrderModal.paymentMethod || 'Online'}</strong></p>
+              </div>
+            </div>
+
+            {/* Stage Progress Bar */}
+            <div className="bg-brand-50/50 rounded-2xl p-4 border border-brand-100 space-y-3">
+              <p className="text-[10px] font-bold text-brand-700 uppercase tracking-wider">Delivery Stage Pipeline</p>
+              <div className="flex items-center justify-between text-xs font-bold text-slate-700 gap-1 overflow-x-auto pb-1">
+                {['PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'].map((stage, idx) => {
+                  const stageLabels = {
+                    PENDING: 'Order Placed',
+                    PAID: 'Measurement',
+                    PROCESSING: 'Stitching',
+                    SHIPPED: 'Completed',
+                    OUT_FOR_DELIVERY: 'Out for Delivery',
+                    DELIVERED: 'Delivered'
+                  };
+                  const happyPath = ['PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'];
+                  const currentIdx = happyPath.indexOf(selectedOrderModal.status);
+                  const isDone = idx <= currentIdx;
+                  const isCurrent = idx === currentIdx;
+
+                  return (
+                    <div key={stage} className="flex flex-col items-center text-center min-w-[70px]">
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black transition-all ${isCurrent ? 'bg-brand-600 text-[#3D2E3D] ring-4 ring-brand-200' : isDone ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-400'}`}>
+                        {isDone ? '✓' : idx + 1}
+                      </div>
+                      <span className={`text-[9px] mt-1 font-bold ${isCurrent ? 'text-brand-800' : isDone ? 'text-emerald-700' : 'text-slate-400'}`}>
+                        {stageLabels[stage]}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Financial Summary */}
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex justify-between items-center">
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Payable Amount</p>
+                <p className="text-2xl font-black text-[#3D2E3D] mt-0.5">{fmtCur(selectedOrderModal.payableAmount)}</p>
+              </div>
+              <div className="text-right">
+                <span className={`text-xs font-bold px-3 py-1 rounded-full border ${selectedOrderModal.paymentStatus === 'PAID' || selectedOrderModal.paymentStatus === 'COMPLETED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                  {selectedOrderModal.paymentStatus || 'PENDING'}
+                </span>
+              </div>
+            </div>
+
+            {/* Items List */}
+            {selectedOrderModal.orderItems && selectedOrderModal.orderItems.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Ordered Items</p>
+                <div className="space-y-2 max-h-36 overflow-y-auto">
+                  {selectedOrderModal.orderItems.map((item, i) => (
+                    <div key={i} className="flex justify-between items-center p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs">
+                      <div>
+                        <p className="font-bold text-[#3D2E3D]">{item.productName || item.product?.name || 'Custom Garment'}</p>
+                        <p className="text-[10px] text-slate-400">Qty: {item.quantity || 1}</p>
+                      </div>
+                      <p className="font-extrabold text-[#3D2E3D]">{fmtCur(item.price * (item.quantity || 1))}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Actions Footer */}
+            <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
+              <button
+                onClick={() => setSelectedOrderModal(null)}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 text-xs font-bold transition-all"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  sessionStorage.setItem('admin_selected_order_id', selectedOrderModal.id);
+                  setSelectedOrderModal(null);
+                  setActiveTab?.('orders-bookings');
+                }}
+                className="px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-[#3D2E3D] text-xs font-extrabold shadow-sm transition-all"
+              >
+                Open in Order Manager →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

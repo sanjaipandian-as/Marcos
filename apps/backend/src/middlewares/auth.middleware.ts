@@ -12,7 +12,7 @@ const blacklistCache = new Map<string, { isBlacklisted: boolean; expiresAt: numb
 const BLACKLIST_CACHE_TTL = 30_000; // 30 seconds
 
 // User existence cache — verified users are cached for 5 minutes
-const userExistsCache = new Map<string, { exists: boolean; expiresAt: number }>();
+const userExistsCache = new Map<string, { exists: boolean; role: any; expiresAt: number }>();
 const USER_CACHE_TTL = 300_000; // 5 minutes
 
 // Periodically clean expired cache entries to prevent memory leaks
@@ -88,24 +88,29 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
 
     const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as AuthUser;
     
-    // Verify user exists in database to prevent stale token/foreign key violations
+    // Verify user exists in database and fetch fresh role to prevent stale token/privilege issues
     const userCacheKey = decoded.id;
     const cachedUser = userExistsCache.get(userCacheKey);
     const nowTime = Date.now();
 
     if (cachedUser && nowTime < cachedUser.expiresAt) {
-      if (!cachedUser.exists) {
+      if (!cachedUser.exists || !cachedUser.role) {
         return res.status(401).json({ success: false, message: 'User account no longer exists' });
       }
+      // Use cached fresh role instead of JWT-embedded role
+      decoded.role = cachedUser.role;
     } else {
-      const userExists = await prisma.user.findUnique({ where: { id: decoded.id }, select: { id: true } });
+      const userExists = await prisma.user.findUnique({ where: { id: decoded.id }, select: { id: true, role: true } });
       userExistsCache.set(userCacheKey, {
         exists: !!userExists,
+        role: userExists?.role || null,
         expiresAt: nowTime + USER_CACHE_TTL,
       });
       if (!userExists) {
         return res.status(401).json({ success: false, message: 'User account no longer exists' });
       }
+      // Use fresh DB role instead of JWT-embedded role
+      decoded.role = userExists.role;
     }
     
     req.user = decoded;

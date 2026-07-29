@@ -13,6 +13,7 @@ import RegisterScreen from '../screens/auth/RegisterScreen';
 import SetupPasswordScreen from '../screens/auth/SetupPasswordScreen';
 import OtpVerifyScreen from '../screens/auth/OtpVerifyScreen';
 import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
+import TermsOfServiceScreen from '../screens/auth/TermsOfServiceScreen';
 
 // Core Screens
 import HomeScreen from '../screens/core/HomeScreen';
@@ -295,6 +296,8 @@ export function RootNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false, presentation: 'modal' }}>
       <Stack.Screen name="MainApp" component={AppNavigator} />
       <Stack.Screen name="AuthStack" component={AuthNavigator} />
+      <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+      <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} />
     </Stack.Navigator>
   );
 }

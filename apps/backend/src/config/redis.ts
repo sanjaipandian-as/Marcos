@@ -1,9 +1,10 @@
 import Redis from 'ioredis';
 import env from './env.js';
+import { isDevOrTest } from './environment.js';
 
-let redis: Redis;
+let redis: any;
 
-if (env.NODE_ENV === 'test' || env.NODE_ENV === 'development') {
+if (isDevOrTest) {
   // If we are in test or dev mode, use ioredis-mock to save real Redis commands
   // and prevent Upstash rate limiting issues.
   try {
@@ -20,7 +21,7 @@ if (env.NODE_ENV === 'test' || env.NODE_ENV === 'development') {
   });
 }
 
-redis.on('error', (err) => {
+redis.on('error', (err: any) => {
   console.error('Redis Client Error:', err);
 });
 

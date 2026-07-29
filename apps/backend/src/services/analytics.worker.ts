@@ -1,11 +1,12 @@
 import redis from '../config/redis.js';
 import prisma from '../config/db.js';
 import logger from '../utils/logger.js';
+import { isDevelopment } from '../config/environment.js';
 
 const CHUNK_SIZE = 2000;
 
 export function startAnalyticsFlushWorker() {
-  if (process.env.NODE_ENV === 'development') {
+  if (isDevelopment) {
     logger.info('Background Analytics Flush Worker disabled in development to save Redis limits.');
     return;
   }
@@ -32,9 +33,9 @@ export function startAnalyticsFlushWorker() {
         if (!results) break;
 
         const events = results
-          .map(([err, res]) => res)
-          .filter((res): res is string => typeof res === 'string')
-          .map((val) => JSON.parse(val));
+          .map(([err, res]: [any, any]) => res)
+          .filter((res: any): res is string => typeof res === 'string')
+          .map((val: string) => JSON.parse(val));
 
         if (events.length === 0) {
           break; // No more items to process in the Redis list

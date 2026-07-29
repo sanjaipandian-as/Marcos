@@ -8,6 +8,7 @@ const zod_1 = require("zod");
 const db_js_1 = __importDefault(require("../config/db.js"));
 const r2_service_js_1 = require("../services/r2.service.js");
 const email_service_js_1 = __importDefault(require("../services/email.service.js"));
+const env_js_1 = __importDefault(require("../config/env.js"));
 exports.ticketCreateSchema = zod_1.z.object({
     body: zod_1.z.object({
         subject: zod_1.z.string().min(1),
@@ -31,12 +32,12 @@ class TicketController {
      */
     static async sendStatusUpdateEmail(ticketId, status, subject, description, userEmail, userFullName) {
         try {
-            let emailSubject = `MARCOS Support: Ticket Update - ID: ${ticketId}`;
+            let emailSubject = `${env_js_1.default.APP_NAME} Support: Ticket Update - ID: ${ticketId}`;
             let text = '';
             let html = '';
             if (status === 'RESOLVED') {
-                emailSubject = `MARCOS Support: Ticket Resolved - ID: ${ticketId}`;
-                text = `Hello ${userFullName},\n\nOur support team has resolved your ticket.\n\nTicket Details:\n- Ticket ID: ${ticketId}\n- Subject: ${subject}\n- Description: ${description}\n\nThank you for reaching out to MARCOS. Let us know if you need any further assistance.\n\nBest regards,\nThe MARCOS Support Team`;
+                emailSubject = `${env_js_1.default.APP_NAME} Support: Ticket Resolved - ID: ${ticketId}`;
+                text = `Hello ${userFullName},\n\nOur support team has resolved your ticket.\n\nTicket Details:\n- Ticket ID: ${ticketId}\n- Subject: ${subject}\n- Description: ${description}\n\nThank you for reaching out to ${env_js_1.default.APP_NAME}. Let us know if you need any further assistance.\n\nBest regards,\nThe ${env_js_1.default.APP_NAME} Support Team`;
                 html = `
           <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px;">
             <h2 style="color: #006241; margin-top: 0;">Issue Resolved!</h2>
@@ -47,16 +48,16 @@ class TicketController {
               <strong>Subject:</strong> ${subject}<br/>
               <strong>Status:</strong> RESOLVED
             </div>
-            <p>You can view the resolution details and chat transcript in the MARCOS mobile app.</p>
-            <p>Thank you for choosing MARCOS!</p>
+            <p>You can view the resolution details and chat transcript in the ${env_js_1.default.APP_NAME} mobile app.</p>
+            <p>Thank you for choosing ${env_js_1.default.APP_NAME}!</p>
             <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 24px 0;"/>
-            <p style="font-size: 11px; color: #64748b; margin-bottom: 0;">This is an automated message from MARCOS Support.</p>
+            <p style="font-size: 11px; color: #64748b; margin-bottom: 0;">This is an automated message from ${env_js_1.default.APP_NAME} Support.</p>
           </div>
         `;
             }
             else {
                 const statusLabel = status === 'IN_PROGRESS' ? 'In Progress' : status;
-                text = `Hello ${userFullName},\n\nYour support ticket status has been updated to ${statusLabel}.\n\nTicket Details:\n- Ticket ID: ${ticketId}\n- Subject: ${subject}\n- Description: ${description}\n\nOur team is actively working on it. You can check updates in the mobile app.\n\nBest regards,\nThe MARCOS Support Team`;
+                text = `Hello ${userFullName},\n\nYour support ticket status has been updated to ${statusLabel}.\n\nTicket Details:\n- Ticket ID: ${ticketId}\n- Subject: ${subject}\n- Description: ${description}\n\nOur team is actively working on it. You can check updates in the mobile app.\n\nBest regards,\nThe ${env_js_1.default.APP_NAME} Support Team`;
                 html = `
           <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px;">
             <h2 style="color: #1e293b; margin-top: 0;">Ticket Status Updated</h2>
@@ -67,9 +68,9 @@ class TicketController {
               <strong>Subject:</strong> ${subject}<br/>
               <strong>Status:</strong> ${statusLabel}
             </div>
-            <p>Our team is reviewing and addressing your request. You can track this and chat with support in the MARCOS mobile app.</p>
+            <p>Our team is reviewing and addressing your request. You can track this and chat with support in the ${env_js_1.default.APP_NAME} mobile app.</p>
             <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 24px 0;"/>
-            <p style="font-size: 11px; color: #64748b; margin-bottom: 0;">This is an automated message from MARCOS Support.</p>
+            <p style="font-size: 11px; color: #64748b; margin-bottom: 0;">This is an automated message from ${env_js_1.default.APP_NAME} Support.</p>
           </div>
         `;
             }
@@ -98,8 +99,8 @@ class TicketController {
             });
             // Send ticket confirmation email
             try {
-                const emailSubject = `MARCOS Support: Ticket Raised - ID: ${ticket.id}`;
-                const text = `Hello ${req.user.fullName},\n\nThank you for reaching out to us. We have successfully received your support ticket.\n\nTicket Details:\n- Ticket ID: ${ticket.id}\n- Subject: ${ticket.subject}\n- Description: ${ticket.description}\n\nOur team will review your request and solve the issue within 24 hours.\n\nBest regards,\nThe MARCOS Support Team`;
+                const emailSubject = `${env_js_1.default.APP_NAME} Support: Ticket Raised - ID: ${ticket.id}`;
+                const text = `Hello ${req.user.fullName},\n\nThank you for reaching out to us. We have successfully received your support ticket.\n\nTicket Details:\n- Ticket ID: ${ticket.id}\n- Subject: ${ticket.subject}\n- Description: ${ticket.description}\n\nOur team will review your request and solve the issue within 24 hours.\n\nBest regards,\nThe ${env_js_1.default.APP_NAME} Support Team`;
                 const html = `
           <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px;">
             <h2 style="color: #006241; margin-top: 0;">We've Received Your Support Ticket</h2>
@@ -112,9 +113,9 @@ class TicketController {
               <strong>Status:</strong> OPEN
             </div>
             <p>Our team will investigate the issue and get back to you or resolve it within 24 hours.</p>
-            <p>You can chat with our team directly regarding this ticket in the support section of the MARCOS app.</p>
+            <p>You can chat with our team directly regarding this ticket in the support section of the ${env_js_1.default.APP_NAME} app.</p>
             <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 24px 0;"/>
-            <p style="font-size: 11px; color: #64748b; margin-bottom: 0;">This is an automated message from MARCOS Support.</p>
+            <p style="font-size: 11px; color: #64748b; margin-bottom: 0;">This is an automated message from ${env_js_1.default.APP_NAME} Support.</p>
           </div>
         `;
                 await email_service_js_1.default.sendEmail(req.user.email, emailSubject, text, html);

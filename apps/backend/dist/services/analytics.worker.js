@@ -7,9 +7,10 @@ exports.startAnalyticsFlushWorker = startAnalyticsFlushWorker;
 const redis_js_1 = __importDefault(require("../config/redis.js"));
 const db_js_1 = __importDefault(require("../config/db.js"));
 const logger_js_1 = __importDefault(require("../utils/logger.js"));
+const environment_js_1 = require("../config/environment.js");
 const CHUNK_SIZE = 2000;
 function startAnalyticsFlushWorker() {
-    if (process.env.NODE_ENV === 'development') {
+    if (environment_js_1.isDevelopment) {
         logger_js_1.default.info('Background Analytics Flush Worker disabled in development to save Redis limits.');
         return;
     }
