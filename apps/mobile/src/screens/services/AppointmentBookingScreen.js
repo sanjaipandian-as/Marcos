@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -14,7 +14,8 @@ import {
   Animated,
   Dimensions,
   StatusBar,
-  Image
+  Image,
+  RefreshControl
 } from 'react-native';
 import { useTheme } from '../../styles/ThemeContext';
 import { APP_CONFIG } from '../../config/app.config';
@@ -38,32 +39,36 @@ import {
   Home,
   Briefcase,
   CheckCircle2,
-  ChevronDown
+  ChevronDown,
+  CalendarDays
 } from 'lucide-react-native';
+
 const { width } = Dimensions.get('window');
 
 function BookingSkeletonCard({ theme }) {
-  const opacity = React.useRef(new Animated.Value(0.4)).current;
+  const opacity = useRef(new Animated.Value(0.35)).current;
+
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(opacity, { toValue: 1, duration: 700, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.4, duration: 700, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.75, duration: 750, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.35, duration: 750, useNativeDriver: true }),
       ])
     ).start();
   }, []);
 
   return (
-    <Animated.View style={[styles.skeletonCard, { backgroundColor: theme.bg.card, opacity }]}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
-        <View style={{ width: 100, height: 20, borderRadius: 8, backgroundColor: '#e2e8f0' }} />
-        <View style={{ width: 80, height: 20, borderRadius: 8, backgroundColor: '#e2e8f0' }} />
+    <Animated.View style={[styles.skeletonCard, { backgroundColor: theme.bg.card, borderColor: theme.border, opacity }]}>
+      <View style={styles.skeletonHeader}>
+        <View style={[styles.skeletonPill, { backgroundColor: theme.border }]} />
+        <View style={[styles.skeletonPillSmall, { backgroundColor: theme.border }]} />
       </View>
-      <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
-        <View style={{ width: 56, height: 56, borderRadius: 14, backgroundColor: '#cbd5e1' }} />
-        <View style={{ flex: 1, gap: 8 }}>
-          <View style={{ width: '75%', height: 14, borderRadius: 6, backgroundColor: '#e2e8f0' }} />
-          <View style={{ width: '45%', height: 12, borderRadius: 6, backgroundColor: '#e2e8f0' }} />
+      <View style={styles.skeletonBody}>
+        <View style={[styles.skeletonSquare, { backgroundColor: theme.border }]} />
+        <View style={{ flex: 1, gap: 10 }}>
+          <View style={[styles.skeletonLine, { width: '82%', backgroundColor: theme.border }]} />
+          <View style={[styles.skeletonLine, { width: '52%', backgroundColor: theme.border }]} />
+          <View style={[styles.skeletonLine, { width: '68%', backgroundColor: theme.border }]} />
         </View>
       </View>
     </Animated.View>
@@ -82,6 +87,7 @@ export default function AppointmentBookingScreen({ navigation, route }) {
   
   // Tab View Toggle: 'SERVICE' or 'VISIT'
   const [activeTab, setActiveTab] = useState('SERVICE');
+  const horizontalScrollRef = useRef(null);
 
   // Pagination states
   const [apptsPage, setApptsPage] = useState(1);
@@ -111,25 +117,42 @@ export default function AppointmentBookingScreen({ navigation, route }) {
   const [rescheduleDate, setRescheduleDate] = useState(null);
   const [rescheduleTimeSlot, setRescheduleTimeSlot] = useState('');
   const [rescheduleNotes, setRescheduleNotes] = useState('');
-  const [calendarTarget, setCalendarTarget] = useState('BOOKING'); // 'BOOKING', 'RESCHEDULE', or 'SLOT'
+  const [calendarTarget, setCalendarTarget] = useState('BOOKING');
 
   const [bookedSlotsCounts, setBookedSlotsCounts] = useState({});
   const [maxBookingsPerSlot, setMaxBookingsPerSlot] = useState(5);
 
-  // ── Slot Booking States ──────────────────────────────────────
+  // Slot Booking States
   const [slotModalVisible, setSlotModalVisible] = useState(false);
   const [slotDate, setSlotDate] = useState(null);
   const [slotTime, setSlotTime] = useState('');
   const [slotDescription, setSlotDescription] = useState('');
   const [slotErrors, setSlotErrors] = useState({});
   const [slotSubmitting, setSlotSubmitting] = useState(false);
-
-  const scrollY = React.useRef(new Animated.Value(0)).current;
+  const [refreshing, setRefreshing] = useState(false);
 
   const [availableSlots, setAvailableSlots] = useState([]);
 
+  const handleTabPress = (tabName) => {
+    setActiveTab(tabName);
+    if (tabName === 'SERVICE') {
+      horizontalScrollRef.current?.scrollTo({ x: 0, animated: true });
+    } else {
+      horizontalScrollRef.current?.scrollTo({ x: width, animated: true });
+    }
+  };
+
+  const handleHorizontalScrollEnd = (e) => {
+    const offsetX = e.nativeEvent.contentOffset.x;
+    const pageIndex = Math.round(offsetX / width);
+    if (pageIndex === 0 && activeTab !== 'SERVICE') {
+      setActiveTab('SERVICE');
+    } else if (pageIndex === 1 && activeTab !== 'VISIT') {
+      setActiveTab('VISIT');
+    }
+  };
+
   const fetchSettings = async () => {
-    // /system/settings/public is open to guests — safe to call always
     try {
       const res = await api.get('/system/settings/public');
       if (res.success && res.data) {
@@ -172,7 +195,7 @@ export default function AppointmentBookingScreen({ navigation, route }) {
 
   useEffect(() => {
     if (route?.params?.autoOpenModal) {
-      setActiveTab('SERVICE');
+      handleTabPress('SERVICE');
       setBookingModalVisible(true);
       if (route.params.prefillProduct) {
         setProductDetails(route.params.prefillProduct);
@@ -183,7 +206,6 @@ export default function AppointmentBookingScreen({ navigation, route }) {
       if (route.params.prefillProductImage) {
         setProductImage(route.params.prefillProductImage);
       }
-      // Clear route parameters so it doesn't auto-open again on revisit
       navigation.setParams({ autoOpenModal: false, prefillProduct: undefined, prefillCategory: undefined, prefillProductImage: undefined });
     }
   }, [route?.params]);
@@ -202,13 +224,13 @@ export default function AppointmentBookingScreen({ navigation, route }) {
 
   const getFilteredAvailableSlots = (dateObj) => {
     if (!dateObj) return availableSlots;
-    // The backend now pre-filters full and past slots
     return availableSlots;
   };
 
   const loadData = async (reset = false) => {
-    // Bookings list is auth-only — skip silently for guests
     if (!user) {
+      setAppointments([]);
+      setVisits([]);
       setLoading(false);
       return;
     }
@@ -224,8 +246,8 @@ export default function AppointmentBookingScreen({ navigation, route }) {
         setLoading(true);
       }
       const [apptsRes, visitsRes] = await Promise.all([
-        api.get('/appointments?limit=20&page=1'),
-        api.get('/visits?limit=20&page=1')
+        api.get('/appointments?limit=20&page=1').catch(() => ({ success: false, data: [] })),
+        api.get('/visits?limit=20&page=1').catch(() => ({ success: false, data: [] }))
       ]);
       
       if (apptsRes && apptsRes.success) {
@@ -233,12 +255,17 @@ export default function AppointmentBookingScreen({ navigation, route }) {
         setAppointments(apptList);
         setHasMoreAppts(apptList.length >= 20);
         if (reset) setApptsPage(1);
+      } else {
+        setAppointments([]);
       }
+
       if (visitsRes && visitsRes.success) {
         const visitList = Array.isArray(visitsRes.data) ? visitsRes.data : (visitsRes.data?.data || []);
         setVisits(visitList);
         setHasMoreVisits(visitList.length >= 20);
         if (reset) setVisitsPage(1);
+      } else {
+        setVisits([]);
       }
     } catch (err) {
       console.warn('Error fetching bookings:', err.message);
@@ -247,8 +274,14 @@ export default function AppointmentBookingScreen({ navigation, route }) {
     }
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadData(true);
+    setRefreshing(false);
+  };
+
   const loadMoreData = async () => {
-    if (loadingMore) return;
+    if (loadingMore || !user) return;
     
     try {
       setLoadingMore(true);
@@ -281,11 +314,15 @@ export default function AppointmentBookingScreen({ navigation, route }) {
   };
 
   useEffect(() => {
+    loadData(true);
+  }, [user]);
+
+  useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       loadData(true);
     });
     return unsubscribe;
-  }, [navigation]);
+  }, [navigation, user]);
 
   const validateForm = () => {
     const newErrors = {};
@@ -306,43 +343,39 @@ export default function AppointmentBookingScreen({ navigation, route }) {
     requireAuth(async () => {
       if (!validateForm()) return;
       setSubmitting(true);
-    try {
-      // Use UTC date construction to avoid timezone-related off-by-one date issues.
-      // getFullYear/getMonth/getDate return LOCAL calendar values (which match what
-      // the user saw in the calendar picker), then we pin the time to noon UTC so
-      // the stored UTC date stays on the same calendar day as the user's selection.
-      const yearVal = selectedDate.getFullYear();
-      const monthVal = String(selectedDate.getMonth() + 1).padStart(2, '0');
-      const dayVal = String(selectedDate.getDate()).padStart(2, '0');
-      const formattedDate = `${yearVal}-${monthVal}-${dayVal}T12:00:00.000Z`;
-      let res;
-      if (activeTab === 'SERVICE') {
-        res = await api.post('/appointments', {
-          date: formattedDate,
-          timeSlot,
-          productType: productDetails,
-          type: 'CONSULTATION',
-          notes: `Category: ${apptCategory}\nProductImage: ${productImage || ''}\n${notes}`,
-        });
-      } else {
-        res = await api.post('/visits', {
-          preferredDate: formattedDate,
-          address,
-          requirements: notes,
-        });
-      }
+      try {
+        const yearVal = selectedDate.getFullYear();
+        const monthVal = String(selectedDate.getMonth() + 1).padStart(2, '0');
+        const dayVal = String(selectedDate.getDate()).padStart(2, '0');
+        const formattedDate = `${yearVal}-${monthVal}-${dayVal}T12:00:00.000Z`;
+        let res;
+        if (activeTab === 'SERVICE') {
+          res = await api.post('/appointments', {
+            date: formattedDate,
+            timeSlot,
+            productType: productDetails,
+            type: 'CONSULTATION',
+            notes: `Category: ${apptCategory}\nProductImage: ${productImage || ''}\n${notes}`,
+          });
+        } else {
+          res = await api.post('/visits', {
+            preferredDate: formattedDate,
+            address,
+            requirements: notes,
+          });
+        }
 
-      if (res.success) {
-        Alert.alert('Success', `${activeTab === 'SERVICE' ? 'Service' : 'Home Visit'} booked successfully.`);
-        setBookingModalVisible(false);
-        resetForm();
-        loadData(true);
+        if (res.success) {
+          Alert.alert('Success', `${activeTab === 'SERVICE' ? 'Service' : 'Home Visit'} booked successfully.`);
+          setBookingModalVisible(false);
+          resetForm();
+          loadData(true);
+        }
+      } catch (err) {
+        Alert.alert('Error', err.message || 'Booking failed.');
+      } finally {
+        setSubmitting(false);
       }
-    } catch (err) {
-      Alert.alert('Error', err.message || 'Booking failed.');
-    } finally {
-      setSubmitting(false);
-    }
     });
   };
 
@@ -468,30 +501,30 @@ export default function AppointmentBookingScreen({ navigation, route }) {
       }
       
       setSubmitting(true);
-    try {
-      const yearVal = rescheduleDate.getFullYear();
-      const monthVal = String(rescheduleDate.getMonth() + 1).padStart(2, '0');
-      const dayVal = String(rescheduleDate.getDate()).padStart(2, '0');
-      const formattedDate = `${yearVal}-${monthVal}-${dayVal}T12:00:00.000Z`;
-      
-      const endpoint = isVisit ? `/visits/${reschedulingItem.id}` : `/appointments/${reschedulingItem.id}`;
-      const payload = isVisit 
-        ? { preferredDate: formattedDate, requirements: rescheduleNotes }
-        : { date: formattedDate, timeSlot: rescheduleTimeSlot, notes: rescheduleNotes };
+      try {
+        const yearVal = rescheduleDate.getFullYear();
+        const monthVal = String(rescheduleDate.getMonth() + 1).padStart(2, '0');
+        const dayVal = String(rescheduleDate.getDate()).padStart(2, '0');
+        const formattedDate = `${yearVal}-${monthVal}-${dayVal}T12:00:00.000Z`;
         
-      const res = await api.put(endpoint, payload);
-      if (res.success) {
-        Alert.alert('Success', 'Booking rescheduled successfully.');
-        setRescheduleModalVisible(false);
-        loadData(true);
-      } else {
-        Alert.alert('Error', res.message || 'Failed to reschedule.');
+        const endpoint = isVisit ? `/visits/${reschedulingItem.id}` : `/appointments/${reschedulingItem.id}`;
+        const payload = isVisit 
+          ? { preferredDate: formattedDate, requirements: rescheduleNotes }
+          : { date: formattedDate, timeSlot: rescheduleTimeSlot, notes: rescheduleNotes };
+          
+        const res = await api.put(endpoint, payload);
+        if (res.success) {
+          Alert.alert('Success', 'Booking rescheduled successfully.');
+          setRescheduleModalVisible(false);
+          loadData(true);
+        } else {
+          Alert.alert('Error', res.message || 'Failed to reschedule.');
+        }
+      } catch (err) {
+        Alert.alert('Error', err.message || 'An error occurred.');
+      } finally {
+        setSubmitting(false);
       }
-    } catch (err) {
-      Alert.alert('Error', err.message || 'An error occurred.');
-    } finally {
-      setSubmitting(false);
-    }
     });
   };
 
@@ -522,15 +555,19 @@ export default function AppointmentBookingScreen({ navigation, route }) {
     return (
       <Modal visible={showCalendarModal} transparent animationType="fade">
         <View style={styles.calendarOverlay}>
-          <View style={[styles.calendarCard, { backgroundColor: '#ffffff' }]}>
+          <View style={[styles.calendarCard, { backgroundColor: '#ffffff', borderColor: theme.border }]}>
             <View style={styles.calendarHeader}>
-              <TouchableOpacity onPress={() => setCurrentMonth(new Date(year, month - 1, 1))}><ChevronLeft size={24} color="#1e293b" /></TouchableOpacity>
-              <Text style={[styles.calendarMonthText, { color: '#1e293b', fontFamily: fonts.bold }]}>{monthNames[month]} {year}</Text>
-              <TouchableOpacity onPress={() => setCurrentMonth(new Date(year, month + 1, 1))}><ChevronRight size={24} color="#1e293b" /></TouchableOpacity>
+              <TouchableOpacity style={styles.monthNavBtn} onPress={() => setCurrentMonth(new Date(year, month - 1, 1))}>
+                <ChevronLeft size={20} color={theme.brand[900]} />
+              </TouchableOpacity>
+              <Text style={[styles.calendarMonthText, { color: theme.brand[900], fontFamily: fonts.bold }]}>{monthNames[month]} {year}</Text>
+              <TouchableOpacity style={styles.monthNavBtn} onPress={() => setCurrentMonth(new Date(year, month + 1, 1))}>
+                <ChevronRight size={20} color={theme.brand[900]} />
+              </TouchableOpacity>
             </View>
             <View style={styles.weekDaysRow}>
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, i) => (
-                <Text key={i} style={[styles.weekDayText, { color: theme.text.muted, fontFamily: fonts.bold }]}>{day}</Text>
+                <Text key={i} style={[styles.weekDayText, { color: theme.text.secondary, fontFamily: fonts.semiBold }]}>{day}</Text>
               ))}
             </View>
             <View style={styles.daysGrid}>
@@ -541,7 +578,10 @@ export default function AppointmentBookingScreen({ navigation, route }) {
                 return (
                   <TouchableOpacity 
                     key={i} 
-                    style={[styles.dayCell, isSelected && { backgroundColor: theme.brand[500], borderRadius: 12 }]}
+                    style={[
+                      styles.dayCell, 
+                      isSelected && { backgroundColor: theme.brand[500], borderRadius: 12 }
+                    ]}
                     disabled={isPast || !item.isCurrentMonth}
                     onPress={() => {
                       if (calendarTarget === 'RESCHEDULE') {
@@ -557,9 +597,9 @@ export default function AppointmentBookingScreen({ navigation, route }) {
                   >
                     <Text style={[
                       styles.dayText, 
-                      { fontFamily: fonts.bold },
-                      !item.isCurrentMonth ? { color: '#e2e8f0' } : (isPast ? { color: '#cbd5e1' } : { color: '#1e293b' }),
-                      isSelected && { color: '#ffffff' }
+                      { fontFamily: fonts.medium },
+                      !item.isCurrentMonth ? { color: '#e2e8f0' } : (isPast ? { color: '#cbd5e1' } : { color: theme.brand[900] }),
+                      isSelected && { color: theme.brand[900], fontFamily: fonts.bold }
                     ]}>
                       {item.date.getDate()}
                     </Text>
@@ -568,7 +608,7 @@ export default function AppointmentBookingScreen({ navigation, route }) {
               })}
             </View>
             <TouchableOpacity style={styles.closeCalendarBtn} onPress={() => setShowCalendarModal(false)}>
-              <Text style={[styles.closeCalendarBtnText, { color: theme.brand[500], fontFamily: fonts.bold }]}>CLOSE</Text>
+              <Text style={[styles.closeCalendarBtnText, { color: theme.brand[800], fontFamily: fonts.bold }]}>CANCEL</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -589,1024 +629,1246 @@ export default function AppointmentBookingScreen({ navigation, route }) {
 
   const renderBookingItem = ({ item }) => {
     const isVisit = !!item.address;
-    const date = formatBookingDate(isVisit ? item.preferredDate : item.date);
+    const dateFormatted = formatBookingDate(isVisit ? item.preferredDate : item.date);
+    const dateParts = dateFormatted.split(' ');
+    const dayNum = dateParts[0] || '';
+    const monthName = dateParts[1] || '';
+    const yearNum = dateParts[2] || '';
+    
     const showActions = item.status !== 'CANCELLED' && item.status !== 'COMPLETED';
     
-    // Status colors
-    const getStatusColor = () => {
+    // Status colors & dot indicator
+    const getStatusStyle = () => {
       switch (item.status) {
-        case 'COMPLETED': return '#10b981';
-        case 'CANCELLED': return '#ef4444';
-        default: return theme.brand[500];
+        case 'COMPLETED': return { color: '#10b981', bg: '#ecfdf5', label: 'COMPLETED' };
+        case 'CANCELLED': return { color: '#ef4444', bg: '#fef2f2', label: 'CANCELLED' };
+        default: return { color: theme.brand[800], bg: theme.bg.hover, label: item.status || 'CONFIRMED' };
       }
     };
-    const statusColor = getStatusColor();
+    const statusCfg = getStatusStyle();
     
     return (
-      <View style={[styles.premiumBookingCard, shadows.premium, { backgroundColor: theme.bg.card, borderColor: theme.border }]}>
+      <View style={[styles.minimalCard, { backgroundColor: theme.bg.card, borderColor: theme.border }]}>
         
-        <View style={styles.cardContent}>
-          <View style={styles.cardHeader}>
-            <View style={[styles.typeBadge, { backgroundColor: theme.brand[50] }]}>
-              {isVisit ? <Home size={12} color={theme.brand[600]} /> : <Briefcase size={12} color={theme.brand[600]} />}
-              <Text style={[styles.typeBadgeText, { color: theme.brand[700], fontFamily: fonts.bold }]}>
-                {isVisit ? 'HOME VISIT' : 'STANDARD'}
-              </Text>
-            </View>
-            <View style={[styles.statusBadge, { backgroundColor: statusColor + '15' }]}>
-              <Text style={[styles.statusText, { color: statusColor, fontFamily: fonts.bold }]}>
-                {item.status}
-              </Text>
-            </View>
+        {/* Card Header: Type Badge & Status */}
+        <View style={styles.minimalCardHeader}>
+          <View style={[styles.typeBadgeMinimal, { backgroundColor: theme.bg.hover }]}>
+            {isVisit ? <Home size={12} color={theme.brand[800]} /> : <Briefcase size={12} color={theme.brand[800]} />}
+            <Text style={[styles.typeBadgeTextMinimal, { color: theme.brand[900], fontFamily: fonts.bold }]}>
+              {isVisit ? 'HOME VISIT' : 'STANDARD CONSULTATION'}
+            </Text>
           </View>
-          
-          <View style={styles.cardBody}>
-            <View style={styles.dateBlock}>
-               <Text style={[styles.dateMonthText, { fontFamily: fonts.semiBold, color: theme.brand[500] }]}>
-                 {date.split(' ')[1]} {date.split(' ')[2]}
-               </Text>
-               <Text style={[styles.dateDayText, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-                 {date.split(' ')[0]}
-               </Text>
-               {!isVisit && (
-                 <Text style={[styles.timeSlotText, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
-                   {item.timeSlot}
-                 </Text>
-               )}
-            </View>
 
-            {(() => {
-              if (isVisit || !item.notes) return null;
-              const imgMatch = item.notes.match(/ProductImage:\s*([^\n]+)/);
-              if (imgMatch && imgMatch[1]) {
-                return (
-                  <Image 
-                    source={{ uri: imgMatch[1].trim() }} 
-                    style={{ width: 56, height: 56, borderRadius: 12, backgroundColor: '#f1f5f9' }} 
-                    resizeMode="cover"
-                  />
-                );
-              }
-              return null;
-            })()}
-            
-            <View style={styles.detailsBlock}>
-              <View style={styles.infoRowPremium}>
-                <MapPin size={14} color={theme.text.muted} />
-                <Text style={[styles.infoTextPremium, { color: theme.text.secondary, fontFamily: fonts.medium }]} numberOfLines={1}>
-                  {isVisit ? item.address : 'MARCOS In-Store'}
+          <View style={[styles.statusBadgeMinimal, { backgroundColor: statusCfg.bg }]}>
+            <View style={[styles.statusDot, { backgroundColor: statusCfg.color }]} />
+            <Text style={[styles.statusTextMinimal, { color: statusCfg.color, fontFamily: fonts.bold }]}>
+              {statusCfg.label}
+            </Text>
+          </View>
+        </View>
+
+        {/* Card Body */}
+        <View style={styles.minimalCardBody}>
+          {/* Theme Purple Date Box */}
+          <View style={[styles.minimalDateBox, { backgroundColor: theme.bg.hover, borderColor: theme.border }]}>
+            <Text style={[styles.minimalDateDay, { color: theme.brand[900], fontFamily: fonts.bold }]}>
+              {dayNum}
+            </Text>
+            <Text style={[styles.minimalDateMonth, { color: theme.brand[800], fontFamily: fonts.bold }]}>
+              {monthName}
+            </Text>
+            {!isVisit && item.timeSlot && (
+              <View style={styles.minimalTimeChip}>
+                <Text style={[styles.minimalTimeText, { color: theme.brand[800], fontFamily: fonts.semiBold }]}>
+                  {item.timeSlot.split(' ')[0]}
                 </Text>
               </View>
-              
-              {/* Show Product Details */}
-              {!isVisit && item.productType ? (
-                <View style={styles.infoRowPremium}>
-                  <Sparkles size={14} color={theme.text.muted} />
-                  <Text style={[styles.infoTextPremium, { color: theme.text.secondary, fontFamily: fonts.medium }]} numberOfLines={1}>
-                    {item.productType}
-                  </Text>
-                </View>
-              ) : null}
-              {isVisit && item.requirements ? (
-                <View style={styles.infoRowPremium}>
-                  <Sparkles size={14} color={theme.text.muted} />
-                  <Text style={[styles.infoTextPremium, { color: theme.text.secondary, fontFamily: fonts.medium }]} numberOfLines={1}>
-                    {item.requirements}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
+            )}
           </View>
 
-          {showActions && (
-            <View style={[styles.cardActionsPremium, { borderTopColor: theme.border }]}>
-              <TouchableOpacity 
-                style={[styles.cardActionBtnPremium, { backgroundColor: theme.bg.main }]} 
-                onPress={() => handleReschedulePress(item)}
-                activeOpacity={0.7}
-              >
-                <Calendar size={14} color={theme.text.primary} />
-                <Text style={[styles.cardActionBtnTextPremium, { color: theme.text.primary, fontFamily: fonts.semiBold }]}>
-                  Reschedule
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.cardActionBtnPremium, { backgroundColor: '#fef2f2' }]} 
-                onPress={() => handleCancelPress(item)}
-                activeOpacity={0.7}
-              >
-                <Trash2 size={14} color="#ef4444" />
-                <Text style={[styles.cardActionBtnTextPremium, { color: '#ef4444', fontFamily: fonts.semiBold }]}>
-                  Cancel
-                </Text>
-              </TouchableOpacity>
+          {/* Details Column */}
+          <View style={styles.minimalDetailsCol}>
+            {/* Title / Product Type */}
+            <Text style={[styles.minimalTitleText, { color: theme.brand[900], fontFamily: fonts.bold }]} numberOfLines={1}>
+              {isVisit ? (item.requirements || 'Bespoke Home Visit') : (item.productType || 'Consultation Session')}
+            </Text>
+
+            {/* Location */}
+            <View style={styles.minimalMetaRow}>
+              <MapPin size={13} color={theme.brand[700]} />
+              <Text style={[styles.minimalMetaText, { color: theme.text.secondary, fontFamily: fonts.medium }]} numberOfLines={1}>
+                {isVisit ? item.address : 'MARCOS Flagship Boutique'}
+              </Text>
             </View>
-          )}
+
+            {/* Additional details line if present */}
+            {!isVisit && item.notes && (
+              <View style={styles.minimalMetaRow}>
+                <Sparkles size={13} color={theme.brand[500]} />
+                <Text style={[styles.minimalMetaText, { color: theme.text.secondary, fontFamily: fonts.regular }]} numberOfLines={1}>
+                  {item.notes.replace(/ProductImage:[^\n]+/, '').trim() || 'Custom tailoring notes'}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Image Thumbnail if attached */}
+          {(() => {
+            if (isVisit || !item.notes) return null;
+            const imgMatch = item.notes.match(/ProductImage:\s*([^\n]+)/);
+            if (imgMatch && imgMatch[1]) {
+              return (
+                <Image 
+                  source={{ uri: imgMatch[1].trim() }} 
+                  style={[styles.minimalThumbImage, { borderColor: theme.border }]} 
+                  resizeMode="cover"
+                />
+              );
+            }
+            return null;
+          })()}
         </View>
+
+        {/* Card Actions */}
+        {showActions && (
+          <View style={[styles.minimalCardActions, { borderTopColor: theme.border }]}>
+            <TouchableOpacity 
+              style={[styles.minimalActionBtn, { backgroundColor: theme.bg.hover, borderColor: theme.border }]} 
+              onPress={() => handleReschedulePress(item)}
+              activeOpacity={0.75}
+            >
+              <Calendar size={13} color={theme.brand[900]} />
+              <Text style={[styles.minimalActionBtnText, { color: theme.brand[900], fontFamily: fonts.bold }]}>
+                Reschedule
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.minimalActionBtnCancel]} 
+              onPress={() => handleCancelPress(item)}
+              activeOpacity={0.75}
+            >
+              <Trash2 size={13} color="#ef4444" />
+              <Text style={[styles.minimalActionBtnTextCancel, { color: '#ef4444', fontFamily: fonts.semiBold }]}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
       </View>
     );
   };
-
-  const currentData = activeTab === 'SERVICE' ? appointments : visits;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg.main }]}>
       <StatusBar barStyle="dark-content" translucent={false} />
       {renderCalendarModal()}
       
-      {/* Header Bar */}
-      <View style={styles.headerBar}>
-        <TouchableOpacity style={[styles.headerBtn, shadows.premium]} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <ChevronLeft size={20} color="#1e1e1e" />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-          Bookings
-        </Text>
+      {/* Sleek Header with Theme Purple Accent Button */}
+      <View style={styles.minimalHeader}>
+        <View style={styles.headerTitleContainer}>
+          <Text style={[styles.minimalHeaderTitle, { color: theme.brand[900], fontFamily: fonts.bold }]}>
+            Bookings
+          </Text>
+          <Text style={[styles.minimalHeaderSubtitle, { color: theme.text.secondary, fontFamily: fonts.medium }]}>
+            Swipe left or right to switch views
+          </Text>
+        </View>
+
         <TouchableOpacity
-          style={[styles.slotHeaderBtn, { backgroundColor: theme.brand[500] }, shadows.premium]}
+          style={[styles.headerPlusBtn, { backgroundColor: theme.brand[500] }]}
           onPress={() => {
             setCalendarTarget('SLOT');
             resetSlotForm();
             setSlotModalVisible(true);
           }}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
         >
-          <Plus size={20} color="#3D2E3D" />
+          <Plus size={18} color={theme.brand[900]} />
+          <Text style={[styles.headerPlusBtnText, { color: theme.brand[900], fontFamily: fonts.bold }]}>
+            New Slot
+          </Text>
         </TouchableOpacity>
       </View>
 
-      {/* Booking Type Selector */}
-      <View style={[styles.bookingTypeToggle, shadows.premium, { backgroundColor: theme.bg.card }]}>
+      {/* Segmented Control / Tab Selector */}
+      <View style={[styles.tabBarContainer, { backgroundColor: theme.bg.card, borderColor: theme.border }]}>
         <TouchableOpacity 
-          style={[styles.toggleBtn, activeTab === 'SERVICE' && { backgroundColor: theme.brand[500] }]}
-          onPress={() => setActiveTab('SERVICE')}
-          activeOpacity={0.8}
+          style={[styles.tabBtn, activeTab === 'SERVICE' && [styles.activeTabBtn, { backgroundColor: theme.brand[500] }]]}
+          onPress={() => handleTabPress('SERVICE')}
+          activeOpacity={0.85}
         >
-          <Briefcase size={18} color={activeTab === 'SERVICE' ? '#ffffff' : theme.text.secondary} />
-          <Text style={[styles.toggleText, activeTab === 'SERVICE' && { color: '#ffffff' }, { fontFamily: fonts.bold }]}>Standard</Text>
+          <Briefcase size={14} color={activeTab === 'SERVICE' ? theme.brand[900] : theme.text.secondary} />
+          <Text style={[styles.tabText, { fontFamily: fonts.semiBold, color: theme.text.secondary }, activeTab === 'SERVICE' && { color: theme.brand[900], fontFamily: fonts.bold }]}>
+            Standard
+          </Text>
         </TouchableOpacity>
+
         <TouchableOpacity 
-          style={[styles.toggleBtn, activeTab === 'VISIT' && { backgroundColor: theme.brand[500] }]}
-          onPress={() => setActiveTab('VISIT')}
-          activeOpacity={0.8}
+          style={[styles.tabBtn, activeTab === 'VISIT' && [styles.activeTabBtn, { backgroundColor: theme.brand[500] }]]}
+          onPress={() => handleTabPress('VISIT')}
+          activeOpacity={0.85}
         >
-          <Home size={18} color={activeTab === 'VISIT' ? '#ffffff' : theme.text.secondary} />
-          <Text style={[styles.toggleText, activeTab === 'VISIT' && { color: '#ffffff' }, { fontFamily: fonts.bold }]}>Home Visit</Text>
+          <Home size={14} color={activeTab === 'VISIT' ? theme.brand[900] : theme.text.secondary} />
+          <Text style={[styles.tabText, { fontFamily: fonts.semiBold, color: theme.text.secondary }, activeTab === 'VISIT' && { color: theme.brand[900], fontFamily: fonts.bold }]}>
+            Home Visit
+          </Text>
         </TouchableOpacity>
       </View>
 
-      {loading && currentData.length === 0 ? (
-        <View style={styles.listPadding}>
-          {[1, 2, 3].map(idx => (
-            <BookingSkeletonCard key={idx} theme={theme} />
-          ))}
-        </View>
-      ) : currentData.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <View style={[styles.emptyIconContainer, { backgroundColor: theme.bg.card }]}>
-            <Calendar size={48} color={theme.brand[300]} />
-          </View>
-          <Text style={[styles.emptyTitle, { color: theme.text.primary, fontFamily: fonts.bold }]}>
-            No {activeTab === 'SERVICE' ? 'Standard' : 'Home Visit'} Bookings
-          </Text>
-          <Text style={[styles.emptySubtitle, { color: theme.text.secondary, fontFamily: fonts.medium }]}>
-            Schedule a session to plan or fit your bespoke masterpieces.
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={currentData}
-          renderItem={renderBookingItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listPadding}
-          showsVerticalScrollIndicator={false}
-          onEndReached={loadMoreData}
-          onEndReachedThreshold={0.5}
-          ListFooterComponent={() => (
-            loadingMore ? (
-              <View style={{ paddingVertical: 20, alignItems: 'center' }}>
-                <ActivityIndicator size="small" color={theme.brand[500]} />
-                <Text style={{ marginTop: 8, fontSize: 12, color: theme.text.muted }}>Loading more...</Text>
+      {/* Horizontal Swipeable Content Pages */}
+      <ScrollView
+        ref={horizontalScrollRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={handleHorizontalScrollEnd}
+        scrollEventThrottle={16}
+        style={{ flex: 1 }}
+      >
+        {/* Page 1: Standard Consultations */}
+        <View style={{ width: width, flex: 1 }}>
+          {loading && appointments.length === 0 ? (
+            <View style={styles.listPadding}>
+              {[1, 2, 3].map(idx => (
+                <BookingSkeletonCard key={idx} theme={theme} />
+              ))}
+            </View>
+          ) : appointments.length === 0 ? (
+            <ScrollView
+              contentContainerStyle={styles.emptyStateContainer}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  tintColor={theme.brand[500]}
+                  colors={[theme.brand[500]]}
+                />
+              }
+            >
+              <View style={[styles.emptyIconCircle, { backgroundColor: theme.bg.hover, borderColor: theme.border }]}>
+                <CalendarDays size={32} color={theme.brand[700]} />
               </View>
-            ) : null
+              
+              <Text style={[styles.emptyStateTitle, { color: theme.brand[900], fontFamily: fonts.bold }]}>
+                No Standard Bookings
+              </Text>
+              
+              <Text style={[styles.emptyStateSubtitle, { color: theme.text.secondary, fontFamily: fonts.regular }]}>
+                {user 
+                  ? 'Schedule a consultation session with our master tailors.' 
+                  : 'Sign in to view and manage your appointment schedule.'}
+              </Text>
+
+              {!user ? (
+                <TouchableOpacity
+                  style={[styles.primaryActionBtn, { backgroundColor: theme.brand[500] }]}
+                  onPress={() => requireAuth()}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.primaryActionBtnText, { color: theme.brand[900], fontFamily: fonts.bold }]}>
+                    SIGN IN TO CONTINUE
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.primaryActionBtn, { backgroundColor: theme.brand[500] }]}
+                  onPress={() => {
+                    setActiveTab('SERVICE');
+                    setBookingModalVisible(true);
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.primaryActionBtnText, { color: theme.brand[900], fontFamily: fonts.bold }]}>
+                    BOOK AN APPOINTMENT
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </ScrollView>
+          ) : (
+            <FlatList
+              data={appointments}
+              renderItem={renderBookingItem}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.listPadding}
+              showsVerticalScrollIndicator={false}
+              onEndReached={loadMoreData}
+              onEndReachedThreshold={0.5}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  tintColor={theme.brand[500]}
+                  colors={[theme.brand[500]]}
+                />
+              }
+              ListFooterComponent={() => (
+                loadingMore ? (
+                  <View style={styles.loadingMoreFooter}>
+                    <ActivityIndicator size="small" color={theme.brand[700]} />
+                    <Text style={[styles.loadingMoreText, { color: theme.text.secondary, fontFamily: fonts.regular }]}>
+                      Loading more...
+                    </Text>
+                  </View>
+                ) : null
+              )}
+            />
           )}
-        />
+        </View>
+
+        {/* Page 2: Home Visit Bookings */}
+        <View style={{ width: width, flex: 1 }}>
+          {loading && visits.length === 0 ? (
+            <View style={styles.listPadding}>
+              {[1, 2, 3].map(idx => (
+                <BookingSkeletonCard key={idx} theme={theme} />
+              ))}
+            </View>
+          ) : visits.length === 0 ? (
+            <ScrollView
+              contentContainerStyle={styles.emptyStateContainer}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  tintColor={theme.brand[500]}
+                  colors={[theme.brand[500]]}
+                />
+              }
+            >
+              <View style={[styles.emptyIconCircle, { backgroundColor: theme.bg.hover, borderColor: theme.border }]}>
+                <CalendarDays size={32} color={theme.brand[700]} />
+              </View>
+              
+              <Text style={[styles.emptyStateTitle, { color: theme.brand[900], fontFamily: fonts.bold }]}>
+                No Home Visit Bookings
+              </Text>
+              
+              <Text style={[styles.emptyStateSubtitle, { color: theme.text.secondary, fontFamily: fonts.regular }]}>
+                {user 
+                  ? 'Request a personal home measurement and fitting visit.' 
+                  : 'Sign in to view and manage your visit schedule.'}
+              </Text>
+
+              {!user ? (
+                <TouchableOpacity
+                  style={[styles.primaryActionBtn, { backgroundColor: theme.brand[500] }]}
+                  onPress={() => requireAuth()}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.primaryActionBtnText, { color: theme.brand[900], fontFamily: fonts.bold }]}>
+                    SIGN IN TO CONTINUE
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.primaryActionBtn, { backgroundColor: theme.brand[500] }]}
+                  onPress={() => {
+                    setActiveTab('VISIT');
+                    setBookingModalVisible(true);
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.primaryActionBtnText, { color: theme.brand[900], fontFamily: fonts.bold }]}>
+                    REQUEST HOME VISIT
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </ScrollView>
+          ) : (
+            <FlatList
+              data={visits}
+              renderItem={renderBookingItem}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.listPadding}
+              showsVerticalScrollIndicator={false}
+              onEndReached={loadMoreData}
+              onEndReachedThreshold={0.5}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  tintColor={theme.brand[500]}
+                  colors={[theme.brand[500]]}
+                />
+              }
+              ListFooterComponent={() => (
+                loadingMore ? (
+                  <View style={styles.loadingMoreFooter}>
+                    <ActivityIndicator size="small" color={theme.brand[700]} />
+                    <Text style={[styles.loadingMoreText, { color: theme.text.secondary, fontFamily: fonts.regular }]}>
+                      Loading more...
+                    </Text>
+                  </View>
+                ) : null
+              )}
+            />
+          )}
+        </View>
+
+      </ScrollView>
+
+      {/* Floating Purple Plus Button */}
+      {user && (
+        <TouchableOpacity 
+          style={[styles.fabBtn, { backgroundColor: theme.brand[500] }]}
+          onPress={() => setBookingModalVisible(true)}
+          activeOpacity={0.85}
+        >
+          <Plus size={22} color={theme.brand[900]} />
+        </TouchableOpacity>
       )}
 
+      {/* New Booking Modal */}
       <Modal visible={bookingModalVisible} animationType="slide" transparent>
-        <View style={styles.modalBg}>
-          <View style={[styles.modalCard, { backgroundColor: '#ffffff' }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: '#1e293b', fontFamily: fonts.bold }]}>NEW {activeTab === 'SERVICE' ? 'SERVICE' : 'HOME VISIT'}</Text>
-              <TouchableOpacity onPress={() => setBookingModalVisible(false)}><X size={24} color="#64748b" /></TouchableOpacity>
-            </View>
-            <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={styles.modalScroll} showsVerticalScrollIndicator={false}>
-              
-              <TouchableOpacity style={[styles.inputField, { backgroundColor: theme.bg.input, borderColor: theme.border }]} onPress={() => setShowCalendarModal(true)}>
-                <Calendar size={20} color={theme.brand[500]} />
-                <Text style={[styles.inputText, { color: theme.text.primary, fontFamily: fonts.medium }]}>{selectedDate ? selectedDate.toDateString() : 'Select Date'}</Text>
-                <ChevronDown size={20} color={theme.text.muted} />
+        <View style={styles.modalOverlay}>
+          <View style={[styles.bottomSheetCard, { backgroundColor: theme.bg.card }]}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <Text style={[styles.sheetTitle, { color: theme.brand[900], fontFamily: fonts.bold }]}>
+                New {activeTab === 'SERVICE' ? 'Service' : 'Home Visit'}
+              </Text>
+              <TouchableOpacity style={styles.sheetCloseBtn} onPress={() => setBookingModalVisible(false)}>
+                <X size={18} color={theme.brand[900]} />
               </TouchableOpacity>
-              {errors.date && <Text style={styles.errorText}>{errors.date}</Text>}
+            </View>
+
+            <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={styles.sheetScroll} showsVerticalScrollIndicator={false}>
+              
+              <Text style={[styles.inputLabel, { color: theme.text.secondary, fontFamily: fonts.semiBold }]}>DATE</Text>
+              <TouchableOpacity 
+                style={[styles.minimalInputField, { backgroundColor: theme.bg.main, borderColor: errors.date ? '#ef4444' : theme.border }]} 
+                onPress={() => setShowCalendarModal(true)}
+              >
+                <Calendar size={18} color={theme.brand[700]} />
+                <Text style={[styles.minimalInputText, { color: selectedDate ? theme.brand[900] : theme.text.secondary, fontFamily: fonts.medium }]}>
+                  {selectedDate ? selectedDate.toDateString() : 'Select date'}
+                </Text>
+                <ChevronDown size={18} color={theme.text.secondary} />
+              </TouchableOpacity>
+              {errors.date && <Text style={styles.errorTextMinimal}>{errors.date}</Text>}
 
               {activeTab === 'SERVICE' ? (
                 <>
                   {productImage ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: theme.bg.input, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: theme.border, marginBottom: 12 }}>
-                      <Image source={{ uri: productImage }} style={{ width: 50, height: 50, borderRadius: 10 }} />
+                    <View style={[styles.prefillPreviewCard, { borderColor: theme.border, backgroundColor: theme.bg.hover }]}>
+                      <Image source={{ uri: productImage }} style={styles.prefillThumb} />
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: theme.text.primary }} numberOfLines={1}>{productDetails}</Text>
-                        <Text style={{ fontFamily: fonts.medium, fontSize: 11, color: theme.text.secondary }}>{apptCategory}</Text>
+                        <Text style={{ fontFamily: fonts.bold, fontSize: 13, color: theme.brand[900] }} numberOfLines={1}>{productDetails}</Text>
+                        <Text style={{ fontFamily: fonts.medium, fontSize: 11, color: theme.brand[800] }}>{apptCategory}</Text>
                       </View>
                       <TouchableOpacity onPress={() => { setProductImage(''); setProductDetails(''); setApptCategory(''); }}>
-                        <X size={18} color={theme.text.muted} />
+                        <X size={16} color={theme.brand[800]} />
                       </TouchableOpacity>
                     </View>
                   ) : (
                     <>
-                      <TextInput style={[styles.textInput, { backgroundColor: theme.bg.input, borderColor: theme.border, color: theme.text.primary }]} placeholder="Category (e.g. Wedding)" placeholderTextColor={theme.text.muted} value={apptCategory} onChangeText={setApptCategory} />
-                      {errors.category && <Text style={styles.errorText}>{errors.category}</Text>}
+                      <Text style={[styles.inputLabel, { color: theme.text.secondary, fontFamily: fonts.semiBold }]}>CATEGORY</Text>
+                      <TextInput 
+                        style={[styles.minimalTextInput, { backgroundColor: theme.bg.main, borderColor: errors.category ? '#ef4444' : theme.border, color: theme.brand[900], fontFamily: fonts.regular }]} 
+                        placeholder="E.g. Wedding Couture, Tuxedo Fitting" 
+                        placeholderTextColor={theme.text.secondary} 
+                        value={apptCategory} 
+                        onChangeText={setApptCategory} 
+                      />
+                      {errors.category && <Text style={styles.errorTextMinimal}>{errors.category}</Text>}
                     </>
                   )}
-                  <View style={styles.slotsRow}>
+
+                  <Text style={[styles.inputLabel, { color: theme.text.secondary, fontFamily: fonts.semiBold }]}>PREFERRED TIME SLOT</Text>
+                  <View style={styles.slotsRowMinimal}>
                     {getFilteredAvailableSlots(selectedDate).map(s => (
-                      <TouchableOpacity key={s} style={[styles.slot, { borderColor: theme.border }, timeSlot === s && { backgroundColor: theme.brand[500], borderColor: theme.brand[500] }]} onPress={() => setTimeSlot(s)}>
-                        <Text style={[styles.slotText, { color: theme.text.secondary }, timeSlot === s && { color: '#ffffff' }, { fontFamily: fonts.bold }]}>{s.split(' ')[0]}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                  {!productImage && (
-                    <TextInput style={[styles.textInput, { backgroundColor: theme.bg.input, borderColor: theme.border, color: theme.text.primary }]} placeholder="Product Details" placeholderTextColor={theme.text.muted} value={productDetails} onChangeText={setProductDetails} />
-                  )}
-                </>
-              ) : (
-                <TextInput style={[styles.textInput, { height: 80, backgroundColor: theme.bg.input, borderColor: theme.border, color: theme.text.primary }]} placeholder="Full Address" placeholderTextColor={theme.text.muted} multiline value={address} onChangeText={setAddress} />
-              )}
-              {errors.address && <Text style={styles.errorText}>{errors.address}</Text>}
-
-              <TextInput style={[styles.textInput, { height: 80, backgroundColor: theme.bg.input, borderColor: theme.border, color: theme.text.primary }]} placeholder="Notes / Requirements" placeholderTextColor={theme.text.muted} multiline value={notes} onChangeText={setNotes} />
-              {errors.notes && <Text style={styles.errorText}>{errors.notes}</Text>}
-
-              <TouchableOpacity style={[styles.submitBtn, { backgroundColor: theme.brand[500] }]} onPress={handleBooking} disabled={submitting}>
-                {submitting ? <ActivityIndicator color="#3D2E3D" /> : <Text style={[styles.submitBtnText, { color: '#3D2E3D', fontFamily: fonts.bold }]}>CONFIRM BOOKING</Text>}
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={rescheduleModalVisible} animationType="slide" transparent>
-        <View style={styles.modalBg}>
-          <View style={[styles.modalCard, { backgroundColor: '#ffffff' }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: '#1e293b', fontFamily: fonts.bold }]}>
-                RESCHEDULE {reschedulingItem?.address ? 'HOME VISIT' : 'STANDARD'}
-              </Text>
-              <TouchableOpacity onPress={() => setRescheduleModalVisible(false)}>
-                <X size={24} color="#64748b" />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={styles.modalScroll} showsVerticalScrollIndicator={false}>
-              
-              <TouchableOpacity 
-                style={[styles.inputField, { backgroundColor: theme.bg.input, borderColor: theme.border }]} 
-                onPress={() => {
-                  setCalendarTarget('RESCHEDULE');
-                  setShowCalendarModal(true);
-                }}
-              >
-                <Calendar size={20} color={theme.brand[500]} />
-                <Text style={[styles.inputText, { color: theme.text.primary, fontFamily: fonts.medium }]}>
-                  {rescheduleDate ? rescheduleDate.toDateString() : 'Select Date'}
-                </Text>
-                <ChevronDown size={20} color={theme.text.muted} />
-              </TouchableOpacity>
-              {errors.rescheduleDate && <Text style={styles.errorText}>{errors.rescheduleDate}</Text>}
-
-              {reschedulingItem && !reschedulingItem.address ? (
-                <>
-                  <View style={styles.slotsRow}>
-                    {getFilteredAvailableSlots(rescheduleDate).map(s => (
                       <TouchableOpacity 
                         key={s} 
                         style={[
-                          styles.slot, 
-                          { borderColor: theme.border }, 
-                          rescheduleTimeSlot === s && { backgroundColor: theme.brand[500], borderColor: theme.brand[500] }
+                          styles.slotChipMinimal, 
+                          { borderColor: theme.border, backgroundColor: theme.bg.main }, 
+                          timeSlot === s && { backgroundColor: theme.brand[500], borderColor: theme.brand[500] }
                         ]} 
-                        onPress={() => setRescheduleTimeSlot(s)}
+                        onPress={() => setTimeSlot(s)}
+                        activeOpacity={0.8}
                       >
+                        {timeSlot === s && <CheckCircle2 size={12} color={theme.brand[900]} style={{ marginRight: 4 }} />}
                         <Text style={[
-                          styles.slotText, 
-                          { color: theme.text.secondary }, 
-                          rescheduleTimeSlot === s && { color: '#ffffff' }, 
-                          { fontFamily: fonts.bold }
+                          styles.slotChipTextMinimal, 
+                          { color: theme.text.secondary, fontFamily: fonts.medium }, 
+                          timeSlot === s && { color: theme.brand[900], fontFamily: fonts.bold }
                         ]}>
                           {s.split(' ')[0]}
                         </Text>
                       </TouchableOpacity>
                     ))}
                   </View>
-                  {errors.rescheduleTimeSlot && <Text style={styles.errorText}>{errors.rescheduleTimeSlot}</Text>}
+                  {errors.timeSlot && <Text style={styles.errorTextMinimal}>{errors.timeSlot}</Text>}
+
+                  {!productImage && (
+                    <>
+                      <Text style={[styles.inputLabel, { color: theme.text.secondary, fontFamily: fonts.semiBold }]}>PRODUCT DETAILS</Text>
+                      <TextInput 
+                        style={[styles.minimalTextInput, { backgroundColor: theme.bg.main, borderColor: errors.product ? '#ef4444' : theme.border, color: theme.brand[900], fontFamily: fonts.regular }]} 
+                        placeholder="Product name or code" 
+                        placeholderTextColor={theme.text.secondary} 
+                        value={productDetails} 
+                        onChangeText={setProductDetails} 
+                      />
+                      {errors.product && <Text style={styles.errorTextMinimal}>{errors.product}</Text>}
+                    </>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.inputLabel, { color: theme.text.secondary, fontFamily: fonts.semiBold }]}>VISIT ADDRESS</Text>
+                  <TextInput 
+                    style={[styles.minimalTextInputArea, { backgroundColor: theme.bg.main, borderColor: errors.address ? '#ef4444' : theme.border, color: theme.brand[900], fontFamily: fonts.regular }]} 
+                    placeholder="Enter complete residence or office address" 
+                    placeholderTextColor={theme.text.secondary} 
+                    multiline 
+                    value={address} 
+                    onChangeText={setAddress} 
+                  />
+                  {errors.address && <Text style={styles.errorTextMinimal}>{errors.address}</Text>}
+                </>
+              )}
+
+              <Text style={[styles.inputLabel, { color: theme.text.secondary, fontFamily: fonts.semiBold }]}>NOTES & REQUIREMENTS</Text>
+              <TextInput 
+                style={[styles.minimalTextInputArea, { backgroundColor: theme.bg.main, borderColor: errors.notes ? '#ef4444' : theme.border, color: theme.brand[900], fontFamily: fonts.regular }]} 
+                placeholder="Specific preferences, measurements, or requests" 
+                placeholderTextColor={theme.text.secondary} 
+                multiline 
+                value={notes} 
+                onChangeText={setNotes} 
+              />
+              {errors.notes && <Text style={styles.errorTextMinimal}>{errors.notes}</Text>}
+
+              <TouchableOpacity 
+                style={[styles.sheetSubmitBtn, { backgroundColor: theme.brand[500] }]} 
+                onPress={handleBooking} 
+                disabled={submitting}
+                activeOpacity={0.85}
+              >
+                {submitting ? (
+                  <ActivityIndicator color={theme.brand[900]} />
+                ) : (
+                  <Text style={[styles.sheetSubmitBtnText, { color: theme.brand[900], fontFamily: fonts.bold }]}>
+                    CONFIRM BOOKING
+                  </Text>
+                )}
+              </TouchableOpacity>
+
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Reschedule Modal */}
+      <Modal visible={rescheduleModalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.bottomSheetCard, { backgroundColor: theme.bg.card }]}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <Text style={[styles.sheetTitle, { color: theme.brand[900], fontFamily: fonts.bold }]}>
+                Reschedule {reschedulingItem?.address ? 'Visit' : 'Service'}
+              </Text>
+              <TouchableOpacity style={styles.sheetCloseBtn} onPress={() => setRescheduleModalVisible(false)}>
+                <X size={18} color={theme.brand[900]} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={styles.sheetScroll} showsVerticalScrollIndicator={false}>
+              
+              <Text style={[styles.inputLabel, { color: theme.text.secondary, fontFamily: fonts.semiBold }]}>NEW DATE</Text>
+              <TouchableOpacity 
+                style={[styles.minimalInputField, { backgroundColor: theme.bg.main, borderColor: errors.rescheduleDate ? '#ef4444' : theme.border }]} 
+                onPress={() => {
+                  setCalendarTarget('RESCHEDULE');
+                  setShowCalendarModal(true);
+                }}
+              >
+                <Calendar size={18} color={theme.brand[700]} />
+                <Text style={[styles.minimalInputText, { color: rescheduleDate ? theme.brand[900] : theme.text.secondary, fontFamily: fonts.medium }]}>
+                  {rescheduleDate ? rescheduleDate.toDateString() : 'Select Date'}
+                </Text>
+                <ChevronDown size={18} color={theme.text.secondary} />
+              </TouchableOpacity>
+              {errors.rescheduleDate && <Text style={styles.errorTextMinimal}>{errors.rescheduleDate}</Text>}
+
+              {reschedulingItem && !reschedulingItem.address ? (
+                <>
+                  <Text style={[styles.inputLabel, { color: theme.text.secondary, fontFamily: fonts.semiBold }]}>NEW TIME SLOT</Text>
+                  <View style={styles.slotsRowMinimal}>
+                    {getFilteredAvailableSlots(rescheduleDate).map(s => (
+                      <TouchableOpacity 
+                        key={s} 
+                        style={[
+                          styles.slotChipMinimal, 
+                          { borderColor: theme.border, backgroundColor: theme.bg.main }, 
+                          rescheduleTimeSlot === s && { backgroundColor: theme.brand[500], borderColor: theme.brand[500] }
+                        ]} 
+                        onPress={() => setRescheduleTimeSlot(s)}
+                        activeOpacity={0.8}
+                      >
+                        {rescheduleTimeSlot === s && <CheckCircle2 size={12} color={theme.brand[900]} style={{ marginRight: 4 }} />}
+                        <Text style={[
+                          styles.slotChipTextMinimal, 
+                          { color: theme.text.secondary, fontFamily: fonts.medium }, 
+                          rescheduleTimeSlot === s && { color: theme.brand[900], fontFamily: fonts.bold }
+                        ]}>
+                          {s.split(' ')[0]}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  {errors.rescheduleTimeSlot && <Text style={styles.errorTextMinimal}>{errors.rescheduleTimeSlot}</Text>}
                 </>
               ) : null}
 
+              <Text style={[styles.inputLabel, { color: theme.text.secondary, fontFamily: fonts.semiBold }]}>UPDATED NOTES</Text>
               <TextInput 
-                style={[styles.textInput, { height: 100, backgroundColor: theme.bg.input, borderColor: theme.border, color: theme.text.primary }]} 
-                placeholder="Notes / Requirements" 
-                placeholderTextColor={theme.text.muted} 
+                style={[styles.minimalTextInputArea, { backgroundColor: theme.bg.main, borderColor: theme.border, color: theme.brand[900], fontFamily: fonts.regular }]} 
+                placeholder="Reason or additional instructions" 
+                placeholderTextColor={theme.text.secondary} 
                 multiline 
                 value={rescheduleNotes} 
                 onChangeText={setRescheduleNotes} 
               />
 
               <TouchableOpacity 
-                style={[styles.submitBtn, { backgroundColor: theme.brand[500] }]} 
+                style={[styles.sheetSubmitBtn, { backgroundColor: theme.brand[500] }]} 
                 onPress={submitReschedule} 
                 disabled={submitting}
+                activeOpacity={0.85}
               >
                 {submitting ? (
-                  <ActivityIndicator color="#3D2E3D" />
+                  <ActivityIndicator color={theme.brand[900]} />
                 ) : (
-                  <Text style={[styles.submitBtnText, { color: '#3D2E3D', fontFamily: fonts.bold }]}>
+                  <Text style={[styles.sheetSubmitBtnText, { color: theme.brand[900], fontFamily: fonts.bold }]}>
                     CONFIRM RESCHEDULE
                   </Text>
                 )}
               </TouchableOpacity>
+
             </ScrollView>
           </View>
         </View>
       </Modal>
 
-      {/* ── Slot Booking Modal ──────────────────────────────────── */}
+      {/* Quick Slot Booking Modal */}
       <Modal visible={slotModalVisible} animationType="slide" transparent>
-        <View style={styles.modalBgPremium}>
-          <View style={[styles.slotModalCard, { backgroundColor: theme.bg.main }]}>
-            <View style={styles.dragHandleContainer}>
-              <View style={styles.dragHandle} />
-            </View>
-            <View style={styles.slotModalHeader}>
-              <View>
-                <Text style={[styles.slotModalTitle, { color: theme.text.primary, fontFamily: fonts.bold }]}>Book a Slot</Text>
-                <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: theme.text.secondary, marginTop: 4 }}>Select your preferred time</Text>
-              </View>
-              <TouchableOpacity style={styles.closeSlotBtn} onPress={() => setSlotModalVisible(false)}>
-                <X size={20} color={theme.text.primary} />
+        <View style={styles.modalOverlay}>
+          <View style={[styles.bottomSheetCard, { backgroundColor: theme.bg.card }]}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <Text style={[styles.sheetTitle, { color: theme.brand[900], fontFamily: fonts.bold }]}>
+                Book a Slot
+              </Text>
+              <TouchableOpacity style={styles.sheetCloseBtn} onPress={() => setSlotModalVisible(false)}>
+                <X size={18} color={theme.brand[900]} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={styles.slotModalScroll} showsVerticalScrollIndicator={false}>
+            <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={styles.sheetScroll} showsVerticalScrollIndicator={false}>
 
-              {/* Date Picker */}
+              <Text style={[styles.inputLabel, { color: theme.text.secondary, fontFamily: fonts.semiBold }]}>DATE</Text>
               <TouchableOpacity
-                style={[styles.premiumInputContainer, { backgroundColor: theme.bg.card, borderColor: slotErrors.date ? '#ef4444' : theme.border }]}
+                style={[styles.minimalInputField, { backgroundColor: theme.bg.main, borderColor: slotErrors.date ? '#ef4444' : theme.border }]}
                 onPress={() => {
                   setCalendarTarget('SLOT');
                   setShowCalendarModal(true);
                 }}
                 activeOpacity={0.7}
               >
-                <View style={styles.premiumInputIcon}>
-                  <Calendar size={22} color={theme.brand[500]} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 11, color: theme.text.muted, fontFamily: fonts.medium, marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>Date</Text>
-                  <Text style={[styles.premiumInputText, { color: slotDate ? theme.text.primary : theme.text.muted, fontFamily: fonts.semiBold }]}>
-                    {slotDate ? slotDate.toDateString() : 'Select a date'}
-                  </Text>
-                </View>
-                <ChevronDown size={20} color={theme.text.muted} />
+                <Calendar size={18} color={theme.brand[700]} />
+                <Text style={[styles.minimalInputText, { color: slotDate ? theme.brand[900] : theme.text.secondary, fontFamily: fonts.medium }]}>
+                  {slotDate ? slotDate.toDateString() : 'Select date'}
+                </Text>
+                <ChevronDown size={18} color={theme.text.secondary} />
               </TouchableOpacity>
-              {slotErrors.date && <Text style={styles.errorTextPremium}>{slotErrors.date}</Text>}
+              {slotErrors.date && <Text style={styles.errorTextMinimal}>{slotErrors.date}</Text>}
 
-              {/* Time Slots */}
-              <View style={{ marginTop: 24, marginBottom: 16 }}>
-                <Text style={{ fontFamily: fonts.semiBold, fontSize: 13, color: theme.text.primary, marginBottom: 12 }}>Available Times</Text>
-                {slotErrors.time && <Text style={[styles.errorTextPremium, { marginTop: -4, marginBottom: 8 }]}>{slotErrors.time}</Text>}
-                
-                {!slotDate ? (
-                  <View style={styles.noSlotsContainer}>
-                    <Calendar size={24} color={theme.text.muted} />
-                    <Text style={{ fontFamily: fonts.medium, color: theme.text.secondary, marginTop: 8 }}>Please select a date</Text>
-                  </View>
-                ) : getFilteredAvailableSlots(slotDate).length === 0 ? (
-                  <View style={styles.noSlotsContainer}>
-                    <Clock3 size={24} color={theme.text.muted} />
-                    <Text style={{ fontFamily: fonts.medium, color: theme.text.secondary, marginTop: 8 }}>No slots available</Text>
-                  </View>
-                ) : (
-                  <View style={styles.premiumSlotsGrid}>
-                    {getFilteredAvailableSlots(slotDate).map(s => (
-                      <TouchableOpacity
-                        key={s}
-                        style={[
-                          styles.premiumSlotOption, 
-                          { backgroundColor: theme.bg.card, borderColor: theme.border }, 
-                          slotTime === s && { backgroundColor: theme.brand[500], borderColor: theme.brand[500] }
-                        ]}
-                        onPress={() => setSlotTime(s)}
-                        activeOpacity={0.7}
-                      >
-                        {slotTime === s && <CheckCircle2 size={14} color="#ffffff" style={{ marginRight: 6 }} />}
-                        <Text style={[
-                          styles.premiumSlotText, 
-                          { color: theme.text.primary, fontFamily: fonts.medium }, 
-                          slotTime === s && { color: '#ffffff', fontFamily: fonts.bold }
-                        ]}>
-                          {s}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-              </View>
+              <Text style={[styles.inputLabel, { color: theme.text.secondary, fontFamily: fonts.semiBold, marginTop: 16 }]}>AVAILABLE TIME SLOTS</Text>
+              {slotErrors.time && <Text style={styles.errorTextMinimal}>{slotErrors.time}</Text>}
+              
+              {!slotDate ? (
+                <View style={styles.noSlotsBox}>
+                  <Text style={{ fontFamily: fonts.medium, color: theme.text.secondary, fontSize: 13 }}>Please select a date to view available time slots.</Text>
+                </View>
+              ) : getFilteredAvailableSlots(slotDate).length === 0 ? (
+                <View style={styles.noSlotsBox}>
+                  <Text style={{ fontFamily: fonts.medium, color: theme.text.secondary, fontSize: 13 }}>No slots available for selected date.</Text>
+                </View>
+              ) : (
+                <View style={styles.slotsRowMinimal}>
+                  {getFilteredAvailableSlots(slotDate).map(s => (
+                    <TouchableOpacity
+                      key={s}
+                      style={[
+                        styles.slotChipMinimal, 
+                        { borderColor: theme.border, backgroundColor: theme.bg.main }, 
+                        slotTime === s && { backgroundColor: theme.brand[500], borderColor: theme.brand[500] }
+                      ]}
+                      onPress={() => setSlotTime(s)}
+                      activeOpacity={0.8}
+                    >
+                      {slotTime === s && <CheckCircle2 size={12} color={theme.brand[900]} style={{ marginRight: 4 }} />}
+                      <Text style={[
+                        styles.slotChipTextMinimal, 
+                        { color: theme.text.secondary, fontFamily: fonts.medium }, 
+                        slotTime === s && { color: theme.brand[900], fontFamily: fonts.bold }
+                      ]}>
+                        {s}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
 
-              {/* Description */}
-              <View style={[styles.premiumInputContainer, { backgroundColor: theme.bg.card, borderColor: theme.border, alignItems: 'flex-start', paddingVertical: 16 }]}>
-                <View style={[styles.premiumInputIcon, { marginTop: 2 }]}>
-                  <Info size={22} color={theme.text.muted} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 11, color: theme.text.muted, fontFamily: fonts.medium, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Note (Optional)</Text>
-                  <TextInput
-                    style={[styles.premiumTextInput, { color: theme.text.primary, fontFamily: fonts.regular }]}
-                    placeholder="E.g. discuss fabric fitting..."
-                    placeholderTextColor={theme.text.muted}
-                    multiline
-                    value={slotDescription}
-                    onChangeText={setSlotDescription}
-                  />
-                </View>
-              </View>
+              <Text style={[styles.inputLabel, { color: theme.text.secondary, fontFamily: fonts.semiBold, marginTop: 16 }]}>NOTE (OPTIONAL)</Text>
+              <TextInput
+                style={[styles.minimalTextInputArea, { backgroundColor: theme.bg.main, borderColor: theme.border, color: theme.brand[900], fontFamily: fonts.regular }]}
+                placeholder="E.g. consultation topics or styling requests"
+                placeholderTextColor={theme.text.secondary}
+                multiline
+                value={slotDescription}
+                onChangeText={setSlotDescription}
+              />
 
               <TouchableOpacity
-                style={[styles.premiumSubmitBtn, { backgroundColor: theme.brand[500], marginTop: 32 }]}
+                style={[styles.sheetSubmitBtn, { backgroundColor: theme.brand[500], marginTop: 24 }]}
                 onPress={handleSlotBooking}
                 disabled={slotSubmitting}
-                activeOpacity={0.8}
+                activeOpacity={0.85}
               >
-                {slotSubmitting
-                  ? <ActivityIndicator color="#ffffff" />
-                  : (
-                    <>
-                      <Text style={[styles.premiumSubmitBtnText, { color: '#ffffff', fontFamily: fonts.bold }]}>Confirm Booking</Text>
-                      <ArrowRight size={20} color="#ffffff" />
-                    </>
-                  )
-                }
+                {slotSubmitting ? (
+                  <ActivityIndicator color={theme.brand[900]} />
+                ) : (
+                  <Text style={[styles.sheetSubmitBtnText, { color: theme.brand[900], fontFamily: fonts.bold }]}>
+                    CONFIRM SLOT BOOKING
+                  </Text>
+                )}
               </TouchableOpacity>
 
             </ScrollView>
           </View>
         </View>
       </Modal>
+
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fcfaf7' },
-  headerBar: {
+  container: {
+    flex: 1,
+  },
+  
+  /* Minimalist Header */
+  minimalHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
-    paddingBottom: 10,
+    paddingTop: Platform.OS === 'ios' ? 56 : 24,
+    paddingBottom: 14,
   },
-  headerBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
+  headerTitleContainer: {
+    flex: 1,
   },
-  headerTitle: {
-    fontSize: 18,
+  minimalHeaderTitle: {
+    fontSize: 24,
+    letterSpacing: -0.5,
   },
-  skeletonCard: {
-    height: 120,
-    borderRadius: 20,
-    marginBottom: 16,
+  minimalHeaderSubtitle: {
+    fontSize: 13,
+    marginTop: 2,
   },
-  bookingTypeToggle: { flexDirection: 'row', marginHorizontal: 24, marginTop: 14, backgroundColor: '#ffffff', borderRadius: 16, padding: 6 },
-  toggleBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 12 },
-  activeToggle: { backgroundColor: '#d8bfd8' },
-  toggleText: { fontSize: 13, color: '#767676' },
-  activeToggleText: { color: '#ffffff' },
-  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  listPadding: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 100 },
-  premiumBookingCard: { 
-    borderRadius: 24, 
-    marginBottom: 16, 
+  headerPlusBtn: {
     flexDirection: 'row',
-    overflow: 'hidden',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 15,
+    paddingVertical: 9,
+    borderRadius: 20,
+    shadowColor: '#D8BFD8',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  headerPlusBtnText: {
+    fontSize: 12,
+  },
+
+  /* Segmented Control Tab Bar */
+  tabBarContainer: {
+    flexDirection: 'row',
+    marginHorizontal: 20,
+    marginTop: 6,
+    marginBottom: 14,
+    padding: 4,
+    borderRadius: 16,
     borderWidth: 1,
   },
-  cardAccentLeft: {
-    width: 6,
-    height: '100%',
-  },
-  cardContent: {
-    flex: 1,
-    padding: 20,
-  },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
-  typeBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
-  typeBadgeText: { fontSize: 10, letterSpacing: 0.5 },
-  statusBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
-  statusText: { fontSize: 10, letterSpacing: 0.5 },
-  cardBody: { flexDirection: 'row', gap: 16, alignItems: 'center' },
-  dateBlock: {
-    backgroundColor: 'rgba(0,0,0,0.02)',
-    padding: 12,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 80,
-  },
-  dateMonthText: { fontSize: 12, textTransform: 'uppercase' },
-  dateDayText: { fontSize: 24, marginTop: 2, marginBottom: 2 },
-  timeSlotText: { fontSize: 11 },
-  detailsBlock: { flex: 1, gap: 8 },
-  infoRowPremium: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  infoTextPremium: { fontSize: 13, flex: 1 },
-  cardActionsPremium: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginTop: 20,
-    borderTopWidth: 1,
-    paddingTop: 16,
-  },
-  cardActionBtnPremium: {
+  tabBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  cardActionBtnTextPremium: {
-    fontSize: 13,
-  },
-  fab: { position: 'absolute', bottom: 30, right: 24, width: 60, height: 60, borderRadius: 30, backgroundColor: '#d8bfd8', alignItems: 'center', justifyContent: 'center', elevation: 8 },
-  slotHeaderBtn: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalCard: { backgroundColor: '#ffffff', borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, paddingBottom: 0 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
-  modalTitle: { fontSize: 18, color: '#1e293b' },
-  modalScroll: { paddingBottom: 30 },
-  inputField: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0', marginBottom: 16 },
-  inputText: { flex: 1, marginLeft: 12, fontSize: 15, color: '#1e293b' },
-  textInput: { backgroundColor: '#f8fafc', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0', fontSize: 15, color: '#1e293b', marginBottom: 16, textAlignVertical: 'top' },
-  slotsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
-  slot: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0' },
-  activeSlot: { backgroundColor: '#d8bfd8', borderColor: '#d8bfd8' },
-  slotText: { fontSize: 12, color: '#64748b' },
-  activeSlotText: { color: '#3D2E3D' },
-  submitBtn: { backgroundColor: '#d8bfd8', height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginTop: 10 },
-  submitBtnText: { color: '#3D2E3D', fontSize: 16 },
-  errorText: { color: '#ef4444', fontSize: 12, marginTop: -12, marginBottom: 12, marginLeft: 4 },
-  calendarOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 24 },
-  calendarCard: { backgroundColor: '#ffffff', borderRadius: 24, padding: 20 },
-  calendarHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  calendarMonthText: { fontSize: 18, color: '#1e293b' },
-  weekDaysRow: { flexDirection: 'row', marginBottom: 10 },
-  weekDayText: { width: '14.28%', textAlign: 'center', fontSize: 12, textTransform: 'uppercase' },
-  daysGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  dayCell: { width: '14.28%', height: 45, alignItems: 'center', justifyContent: 'center' },
-  dayText: { fontSize: 14 },
-  closeCalendarBtn: { marginTop: 20, alignItems: 'center', padding: 12 },
-  closeCalendarBtnText: { color: '#ad83ad' },
-  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16, paddingBottom: 100 },
-  emptyTitle: { fontSize: 18, color: '#64748b' },
-  mainBookBtn: { backgroundColor: '#d8bfd8', paddingHorizontal: 24, paddingVertical: 14, borderRadius: 16 },
-  mainBookBtnText: { color: '#3D2E3D', fontSize: 15 },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  headerSubtitle: {
-    fontSize: 10,
-    letterSpacing: 2,
-    textAlign: 'center',
-  },
-  emptyIconContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 30,
-  },
-  bookBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 30,
-    paddingVertical: 16,
-    borderRadius: 16,
-  },
-  bookBtnText: {
-    fontSize: 13,
-    letterSpacing: 1,
-  },
-  listContainer: {
-    flex: 1,
-  },
-  apptCard: {
-    borderRadius: 24,
-    padding: 20,
-    marginBottom: 16,
-  },
-  typeBadgeText: {
-    fontSize: 10,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-  },
-  statusBadgeText: {
-    fontSize: 10,
-    textTransform: 'uppercase',
-  },
-  iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  infoLabel: {
-    fontSize: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  infoValue: {
-    fontSize: 14,
-  },
-  notesContainer: {
-    flexDirection: 'row',
     gap: 8,
-    padding: 12,
+    paddingVertical: 10,
     borderRadius: 12,
-    marginBottom: 16,
   },
-  notesText: {
+  activeTabBtn: {
+    shadowColor: '#D8BFD8',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  tabText: {
+    fontSize: 13,
+  },
+
+  /* List & Cards */
+  listPadding: {
+    paddingHorizontal: 20,
+    paddingTop: 6,
+    paddingBottom: 100,
+  },
+  minimalCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 14,
+    shadowColor: '#101828',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  minimalCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  typeBadgeMinimal: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+  },
+  typeBadgeTextMinimal: {
+    fontSize: 10,
+    letterSpacing: 0.3,
+  },
+  statusBadgeMinimal: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusTextMinimal: {
+    fontSize: 10,
+    letterSpacing: 0.4,
+  },
+
+  minimalCardBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  minimalDateBox: {
+    width: 62,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  minimalDateDay: {
+    fontSize: 21,
+    lineHeight: 23,
+  },
+  minimalDateMonth: {
+    fontSize: 11,
+    textTransform: 'uppercase',
+  },
+  minimalTimeChip: {
+    marginTop: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  minimalTimeText: {
+    fontSize: 9,
+  },
+
+  minimalDetailsCol: {
+    flex: 1,
+    gap: 4,
+  },
+  minimalTitleText: {
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  minimalMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  minimalMetaText: {
     fontSize: 12,
     flex: 1,
-    lineHeight: 18,
   },
-  cancelBtn: {
+  minimalThumbImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+
+  minimalCardActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+  },
+  minimalActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  minimalActionBtnText: {
+    fontSize: 12,
+  },
+  minimalActionBtnCancel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  minimalActionBtnTextCancel: {
+    fontSize: 12,
+  },
+
+  /* Empty State */
+  emptyStateContainer: {
+    flex: 1,
+    alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 14,
+    paddingHorizontal: 32,
+    paddingBottom: 80,
   },
-  cancelBtnText: {
-    fontSize: 11,
-    letterSpacing: 1,
+  emptyIconCircle: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
   },
-  fab: {
-    position: 'absolute',
-    bottom: 30,
-    right: 20,
+  emptyStateTitle: {
+    fontSize: 18,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  emptyStateSubtitle: {
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  primaryActionBtn: {
+    paddingHorizontal: 26,
+    paddingVertical: 14,
+    borderRadius: 16,
+    shadowColor: '#D8BFD8',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  primaryActionBtnText: {
+    fontSize: 12,
+    letterSpacing: 0.8,
+  },
+
+  /* Skeleton Cards */
+  skeletonCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 14,
+  },
+  skeletonHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  skeletonPill: {
+    width: 90,
+    height: 14,
+    borderRadius: 7,
+  },
+  skeletonPillSmall: {
+    width: 60,
+    height: 14,
+    borderRadius: 7,
+  },
+  skeletonBody: {
+    flexDirection: 'row',
+    gap: 14,
+    alignItems: 'center',
+  },
+  skeletonSquare: {
     width: 60,
     height: 60,
-    borderRadius: 30,
+    borderRadius: 12,
+  },
+  skeletonLine: {
+    height: 12,
+    borderRadius: 6,
+  },
+
+  /* Floating Purple Plus Button */
+  fabBtn: {
+    position: 'absolute',
+    bottom: 24,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#D8BFD8',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 6,
   },
-  modalBg: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalCard: {
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    height: '85%',
-    padding: 24,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 24,
-  },
-  modalTitle: {
-    fontSize: 20,
-    letterSpacing: 2,
-  },
-  modalSubtitle: {
-    fontSize: 9,
-    letterSpacing: 1.5,
-    marginTop: 4,
-  },
-  closeModalBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalScroll: {
-    paddingBottom: 40,
-  },
-  inputContainer: {
-    marginBottom: 24,
-  },
-  labelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  label: {
-    fontSize: 11,
-    letterSpacing: 1,
-  },
-  errorText: {
-    color: '#ef4444',
-    fontSize: 10,
-  },
-  input: {
-    height: 56,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    fontSize: 15,
-  },
-  datePickerSelector: {
-    height: 56,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  dateSelectorContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  dateSelectorText: {
-    fontSize: 14,
-  },
+
+  /* Calendar Modal */
   calendarOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   calendarCard: {
     width: '100%',
-    borderRadius: 24,
+    borderRadius: 22,
+    borderWidth: 1,
     padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    elevation: 10,
   },
   calendarHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
+  },
+  monthNavBtn: {
+    padding: 6,
   },
   calendarMonthText: {
     fontSize: 16,
-    letterSpacing: 1,
   },
   weekDaysRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   weekDayText: {
     width: (width - 80) / 7,
     textAlign: 'center',
-    fontSize: 10,
+    fontSize: 11,
   },
   daysGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
   },
   dayCell: {
     width: (width - 80) / 7,
-    height: 45,
-    justifyContent: 'center',
+    height: 40,
     alignItems: 'center',
-    marginBottom: 4,
+    justifyContent: 'center',
   },
   dayText: {
     fontSize: 14,
   },
   closeCalendarBtn: {
-    marginTop: 20,
-    height: 50,
-    borderRadius: 15,
-    justifyContent: 'center',
+    marginTop: 16,
     alignItems: 'center',
+    paddingVertical: 8,
   },
   closeCalendarBtnText: {
     fontSize: 12,
-    letterSpacing: 1,
+    letterSpacing: 0.5,
   },
-  dateScroll: {
-    gap: 12,
-    paddingRight: 20,
+
+  /* Bottom Sheet Modal */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
   },
-  dateOption: {
-    width: 65,
-    height: 85,
-    borderRadius: 18,
-    borderWidth: 1,
-    justifyContent: 'center',
+  bottomSheetCard: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 20,
+    maxHeight: '90%',
+  },
+  sheetHandle: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#cbd5e1',
+    alignSelf: 'center',
+    marginBottom: 14,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'space-between',
+    marginBottom: 20,
   },
-  dateDay: {
-    fontSize: 10,
-    letterSpacing: 1,
-  },
-  dateNum: {
+  sheetTitle: {
     fontSize: 20,
   },
-  slotsGrid: {
+  sheetCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.04)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetScroll: {
+    paddingBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 11,
+    letterSpacing: 0.5,
+    marginBottom: 6,
+    marginTop: 12,
+  },
+  minimalInputField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  minimalInputText: {
+    flex: 1,
+    fontSize: 14,
+  },
+  minimalTextInput: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    fontSize: 14,
+  },
+  minimalTextInputArea: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    fontSize: 14,
+    height: 80,
+    textAlignVertical: 'top',
+  },
+  errorTextMinimal: {
+    color: '#ef4444',
+    fontSize: 11,
+    marginTop: 4,
+    marginLeft: 4,
+  },
+  slotsRowMinimal: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 8,
+    marginTop: 4,
   },
-  slotOption: {
+  slotChipMinimal: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 12,
     borderWidth: 1,
-    minWidth: '30%',
-    alignItems: 'center',
   },
-  slotText: {
+  slotChipTextMinimal: {
     fontSize: 12,
   },
-  submitBtn: {
-    height: 64,
-    borderRadius: 20,
+  prefillPreviewCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: 12,
-  },
-  modalBgPremium: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  slotModalCard: {
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
-    maxHeight: '90%',
-  },
-  dragHandleContainer: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  dragHandle: {
-    width: 40,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: '#cbd5e1',
-  },
-  slotModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 24,
-  },
-  slotModalTitle: {
-    fontSize: 24,
-  },
-  closeSlotBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  slotModalScroll: {
-    paddingBottom: 20,
-  },
-  premiumInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 20,
+    padding: 12,
+    borderRadius: 14,
     borderWidth: 1,
+    marginBottom: 8,
   },
-  premiumInputIcon: {
-    marginRight: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: 'rgba(0,0,0,0.03)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  prefillThumb: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
   },
-  premiumInputText: {
-    fontSize: 16,
-  },
-  premiumTextInput: {
-    fontSize: 15,
-    padding: 0,
-    margin: 0,
-    minHeight: 60,
-    textAlignVertical: 'top',
-  },
-  errorTextPremium: {
-    color: '#ef4444',
-    fontSize: 12,
-    marginTop: 6,
-    marginLeft: 8,
-  },
-  premiumSlotsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  premiumSlotOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    minWidth: '30%',
-  },
-  premiumSlotText: {
-    fontSize: 14,
-  },
-  noSlotsContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 30,
+  noSlotsBox: {
+    padding: 16,
+    borderRadius: 14,
     backgroundColor: 'rgba(0,0,0,0.02)',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
+    alignItems: 'center',
   },
-  premiumSubmitBtn: {
-    height: 60,
-    borderRadius: 20,
-    flexDirection: 'row',
+  sheetSubmitBtn: {
+    height: 54,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
+    marginTop: 24,
+    shadowColor: '#D8BFD8',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
     elevation: 4,
   },
-  premiumSubmitBtnText: {
-    fontSize: 16,
+  sheetSubmitBtnText: {
+    fontSize: 13,
+    letterSpacing: 0.8,
   },
-  submitBtnText: {
-    fontSize: 16,
-    letterSpacing: 1.5,
+  loadingMoreFooter: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
   },
-  skeletonCard: {
-    borderRadius: 22,
-    marginBottom: 16,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+  loadingMoreText: {
+    fontSize: 11,
   },
 });

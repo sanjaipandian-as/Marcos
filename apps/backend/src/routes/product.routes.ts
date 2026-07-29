@@ -14,6 +14,7 @@ router.post('/cart/coupon', authenticate, validate(couponValidateSchema), Produc
 // Favorites
 router.get('/favorites', authenticate, ProductController.getFavorites);
 router.post('/favorites', authenticate, validate(favoriteAddSchema), ProductController.addToFavorites);
+router.post('/favorites/toggle', authenticate, validate(favoriteAddSchema), ProductController.addToFavorites);
 router.delete('/favorites/:productId', authenticate, ProductController.removeFromFavorites);
 
 // Product catalog

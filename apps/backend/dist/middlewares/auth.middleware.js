@@ -11,12 +11,12 @@ const redis_js_1 = __importDefault(require("../config/redis.js"));
 const db_js_1 = __importDefault(require("../config/db.js"));
 const audit_js_1 = require("../utils/audit.js");
 // In-memory cache for token blacklist checks to reduce Redis commands
-// Tokens verified as NOT blacklisted are cached for 30 seconds
+// Tokens verified as NOT blacklisted are cached for 60 seconds
 const blacklistCache = new Map();
-const BLACKLIST_CACHE_TTL = 30_000; // 30 seconds
-// User existence cache — verified users are cached for 5 minutes
+const BLACKLIST_CACHE_TTL = 60_000; // 60 seconds
+// User existence cache — verified users are cached for 10 minutes
 const userExistsCache = new Map();
-const USER_CACHE_TTL = 300_000; // 5 minutes
+const USER_CACHE_TTL = 600_000; // 10 minutes
 // Periodically clean expired cache entries to prevent memory leaks
 setInterval(() => {
     const now = Date.now();

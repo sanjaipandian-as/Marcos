@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { LayoutGrid } from 'lucide-react-native';
 
-export default function CategoryList({ categories, theme, fonts, shadows, navigation }) {
+const CategoryList = memo(function CategoryList({ categories, theme, fonts, shadows, navigation }) {
   return (
-    <View style={{ marginBottom: 24 }}>
+    <View style={{ marginBottom: 8 }}>
       <View style={styles.sectionHeader}>
         <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
           Categories
@@ -62,7 +62,9 @@ export default function CategoryList({ categories, theme, fonts, shadows, naviga
       </View>
     </View>
   );
-}
+});
+
+export default CategoryList;
 
 const styles = StyleSheet.create({
   sectionHeader: {

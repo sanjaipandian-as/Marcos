@@ -40,10 +40,11 @@ export function rateLimiter(options: RateLimitOptions) {
         });
       }
 
-      const count = await redis.incr(redisKey);
-      if (count === 1) {
-        await redis.pexpire(redisKey, options.windowMs);
-      }
+      const pipeline = redis.pipeline();
+      pipeline.incr(redisKey);
+      pipeline.pexpire(redisKey, options.windowMs);
+      const results = await pipeline.exec();
+      const count = results && results[0] && results[0][1] ? (results[0][1] as number) : 1;
 
       if (count > options.max) {
         // Automatically block for 15 minutes if it violates the sensitive rate limit threshold
@@ -77,10 +78,10 @@ export function rateLimiter(options: RateLimitOptions) {
   };
 }
 
-// 300 requests per 15 minutes per IP
+// 1500 requests per 15 minutes per IP (for 10K concurrent users)
 export const globalRateLimiter = rateLimiter({
   windowMs: 15 * 60 * 1000,
-  max: 300,
+  max: 1500,
   prefix: 'global',
   keyGenerator: (req) => req.ip || 'unknown-ip',
 });

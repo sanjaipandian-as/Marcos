@@ -310,12 +310,11 @@ class AuthController {
                 : !user.passwordHash
                     ? 'SETUP_REQUIRED'
                     : 'PASSWORD_REQUIRED';
-            const end = process.hrtime.bigint();
-            const elapsedMs = Number(end - start) / 1000000;
-            if (elapsedMs < 150) {
-                await new Promise(resolve => setTimeout(resolve, 150 - elapsedMs));
-            }
-            return res.status(200).json({ success: true, status: state });
+            return res.status(200).json({
+                success: true,
+                status: state,
+                fullName: user ? user.fullName : null
+            });
         }
         catch (error) {
             next(error);
@@ -908,6 +907,11 @@ class AuthController {
     static async getProfile(req, res, next) {
         try {
             const userId = req.user.id;
+            const cacheKey = `cache:profile:${userId}`;
+            const cached = await redis_js_1.default.get(cacheKey);
+            if (cached) {
+                return res.status(200).json(JSON.parse(cached));
+            }
             const [user, orderCount, rewardCount] = await Promise.all([
                 db_js_1.default.user.findUnique({
                     where: { id: userId },
@@ -954,7 +958,9 @@ class AuthController {
                     rewards: rewardCount,
                 }
             };
-            return res.status(200).json({ success: true, data: userData });
+            const responsePayload = { success: true, data: userData };
+            await redis_js_1.default.set(cacheKey, JSON.stringify(responsePayload), 'EX', 120);
+            return res.status(200).json(responsePayload);
         }
         catch (error) {
             next(error);
@@ -989,6 +995,8 @@ class AuthController {
                     referralCode: true,
                 },
             });
+            // Invalidate profile cache
+            await redis_js_1.default.del(`cache:profile:${userId}`);
             await (0, audit_js_1.createAuditLog)({
                 userId,
                 action: 'PROFILE_UPDATED',

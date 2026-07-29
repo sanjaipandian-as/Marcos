@@ -130,6 +130,7 @@ model Product {
   @@index([createdAt])
   @@index([targetGender])
   @@index([salesCount])
+  @@index([categoryId, createdAt])
 }
 
 model ProductPriceHistory {
@@ -166,6 +167,7 @@ model Favorite {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, productId])
+  @@index([userId, createdAt])
 }
 
 model Coupon {
@@ -571,6 +573,7 @@ model Offer {
 
   @@index([isActive])
   @@index([startDate, endDate])
+  @@index([isActive, startDate, endDate])
 }
 
 model StoreLocation {

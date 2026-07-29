@@ -16,7 +16,6 @@ import { useTheme } from '../../styles/ThemeContext';
 import api from '../../utils/api';
 import { Alert } from 'react-native';
 import { ArrowLeft, Sparkles, ShoppingBag, ShoppingCart, SlidersHorizontal } from 'lucide-react-native';
-import { CustomCartAddIcon, CustomCartAddedIcon } from '../../components/CartIcons';
 
 const { width } = Dimensions.get('window');
 
@@ -38,7 +37,6 @@ export default function NewArrivalsScreen({ navigation }) {
       ]);
 
       if (prodRes.success) {
-        // Sort by newest added
         const items = [...prodRes.data].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
         setProducts(items);
       }
@@ -83,61 +81,58 @@ export default function NewArrivalsScreen({ navigation }) {
     }
   };
 
-
-
   const renderProductItem = ({ item }) => {
     const isFav = favorites.has(item.id);
-
-    const originalPrice = item.price === "item.price" ? (item.originalPrice ? Number(item.originalPrice) : null) : (typeof product !== "undefined" && product.originalPrice ? Number(product.originalPrice) : (typeof item !== "undefined" && item.originalPrice ? Number(item.originalPrice) : null));
+    const originalPrice = item?.originalPrice ? Number(item.originalPrice) : null;
 
     return (
       <TouchableOpacity 
-        style={[styles.prodCard, shadows.premium, { backgroundColor: theme.bg.card }]}
+        style={[styles.prodCard, shadows.premium, { backgroundColor: theme.bg.card, borderColor: theme.border }]}
         onPress={() => navigation.navigate('ProductDetails', { productId: item.id })}
         activeOpacity={0.9}
       >
-        <View style={styles.prodImageWrapper}>
+        <View style={[styles.prodImageWrapper, { backgroundColor: theme.bg.hover }]}>
           <Image 
             source={{ uri: (item.images && item.images[0]) || 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?q=80&w=300&auto=format&fit=crop' }} 
             style={styles.prodImage}
+            resizeMode="cover"
           />
           
+          <View style={[styles.newBadge, { backgroundColor: theme.brand[500] }]}>
+            <Text style={[styles.newBadgeText, { fontFamily: fonts.bold, color: theme.brand[900] }]}>NEW</Text>
+          </View>
+
           <TouchableOpacity 
             style={styles.favBtn}
             onPress={() => toggleFavorite(item.id)}
-            activeOpacity={0.7}
+            activeOpacity={0.8}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <WishlistIcon 
-              size={14} 
-              color={isFav ? '#3D2E3D' : '#767676'} 
-              fill={isFav ? '#3D2E3D' : 'transparent'} 
+              size={15} 
+              color={isFav ? '#ef4444' : theme.brand[900]} 
+              fill={isFav ? '#ef4444' : 'transparent'} 
             />
           </TouchableOpacity>
-
-          <View style={[styles.newBadge, { backgroundColor: theme.text.primary }]}>
-            <Text style={[styles.newBadgeText, { fontFamily: fonts.bold }]}>NEW</Text>
-          </View>
         </View>
 
         <View style={styles.prodInfo}>
-          <Text style={[styles.prodName, { fontFamily: fonts.semiBold, color: '#3D2E3D' }]} numberOfLines={2}>
+          <Text style={[styles.prodCategoryText, { fontFamily: fonts.bold, color: theme.brand[700] }]}>
+            NEW ARRIVAL
+          </Text>
+          <Text style={[styles.prodName, { fontFamily: fonts.bold, color: theme.brand[900] }]} numberOfLines={1}>
             {item.name}
           </Text>
           
           <View style={styles.priceRow}>
-            <View style={styles.priceContainer}>
-              <Text style={{ fontSize: 10, color: '#7A6B7A', marginBottom: 2 }}>Starts from</Text>
-              <Text style={[styles.prodPrice, { fontFamily: fonts.bold, color: '#3D2E3D' }]}>
-                ₹{Number(item.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-              </Text>
-              {originalPrice ? (
-              <Text style={styles.originalPriceText}>
+            <Text style={[styles.prodPrice, { fontFamily: fonts.bold, color: theme.brand[900] }]}>
+              ₹{Number(item.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+            </Text>
+            {originalPrice ? (
+              <Text style={[styles.originalPriceText, { fontFamily: fonts.medium }]}>
                 ₹{originalPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
               </Text>
             ) : null}
-            </View>
-            
-
           </View>
         </View>
       </TouchableOpacity>
@@ -162,10 +157,10 @@ export default function NewArrivalsScreen({ navigation }) {
           onPress={() => navigation.goBack()}
           activeOpacity={0.7}
         >
-          <ArrowLeft size={22} color={theme.text.primary} />
+          <ArrowLeft size={20} color={theme.brand[900]} />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-          <Text style={[styles.headerTitle, { fontFamily: fonts.bold, color: '#3D2E3D' }]}>
+          <Text style={[styles.headerTitle, { fontFamily: fonts.bold, color: theme.brand[900] }]}>
             New Arrivals
           </Text>
           <Text style={[styles.headerSubtitle, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
@@ -177,7 +172,7 @@ export default function NewArrivalsScreen({ navigation }) {
           activeOpacity={0.7} 
           onPress={() => setShowCategories(v => !v)}
         >
-          <SlidersHorizontal size={18} color={showCategories ? '#3D2E3D' : theme.text.primary} />
+          <SlidersHorizontal size={18} color={theme.brand[900]} />
         </TouchableOpacity>
       </View>
 
@@ -201,7 +196,7 @@ export default function NewArrivalsScreen({ navigation }) {
                   style={[
                     styles.categoryTabText,
                     { fontFamily: fonts.medium },
-                    isActive ? { color: '#ffffff' } : { color: '#3D2E3D' }
+                    isActive ? { color: theme.brand[900], fontFamily: fonts.bold } : { color: theme.text.secondary }
                   ]}
                 >
                   {tab}
@@ -248,7 +243,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   header: {
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: Platform.OS === 'ios' ? 56 : 24,
     paddingBottom: 16,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
@@ -261,7 +256,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    marginRight: 12,
     borderWidth: 1,
   },
   headerTitleContainer: {
@@ -309,13 +304,14 @@ const styles = StyleSheet.create({
   },
   prodCard: {
     width: '48%',
-    borderRadius: 20,
+    borderRadius: 18,
+    borderWidth: 1,
     overflow: 'hidden',
     marginBottom: 16,
   },
   prodImageWrapper: {
     position: 'relative',
-    height: 160,
+    height: 185,
     width: '100%',
   },
   prodImage: {
@@ -326,10 +322,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 8,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#ffffff',
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 5,
@@ -338,46 +334,41 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     left: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 8,
     zIndex: 5,
   },
   newBadgeText: {
-    color: '#ffffff',
     fontSize: 9,
     letterSpacing: 0.5,
   },
   prodInfo: {
     padding: 10,
-    gap: 4,
+    gap: 3,
+  },
+  prodCategoryText: {
+    fontSize: 9,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   prodName: {
     fontSize: 13,
+    lineHeight: 17,
   },
   priceRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  priceContainer: {
-    flex: 1,
+    alignItems: 'baseline',
+    gap: 6,
+    marginTop: 4,
   },
   prodPrice: {
-    fontSize: 13,
+    fontSize: 14,
   },
   originalPriceText: {
-    fontSize: 10,
+    fontSize: 11,
     color: '#B8A8B8',
     textDecorationLine: 'line-through',
-    marginTop: 1,
-  },
-  cartIconBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   emptyContainer: {
     flex: 1,

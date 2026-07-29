@@ -43,6 +43,16 @@ export const storeLocationUpdateSchema = z.object({
   }),
 });
 
+import redis from '../config/redis.js';
+
+async function invalidateStoreCache() {
+  try {
+    await redis.del('cache:stores:public');
+  } catch (err) {
+    console.error('Failed to invalidate store cache:', err);
+  }
+}
+
 export class StoreLocationController {
   /**
    * GET /admin/stores
@@ -93,6 +103,8 @@ export class StoreLocationController {
         },
       });
 
+      await invalidateStoreCache();
+
       return res.status(201).json({
         success: true,
         message: 'Store location created successfully',
@@ -130,6 +142,8 @@ export class StoreLocationController {
         },
       });
 
+      await invalidateStoreCache();
+
       return res.status(200).json({
         success: true,
         message: 'Store location updated successfully',
@@ -164,6 +178,8 @@ export class StoreLocationController {
         },
       });
 
+      await invalidateStoreCache();
+
       return res.status(200).json({
         success: true,
         message: 'Store location deleted successfully',
@@ -178,15 +194,25 @@ export class StoreLocationController {
    */
   static async getPublicStores(req: Request, res: Response, next: NextFunction) {
     try {
+      const cacheKey = 'cache:stores:public';
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return res.status(200).json(JSON.parse(cached));
+      }
+
       const stores = await prisma.storeLocation.findMany({
         where: { isActive: true },
         orderBy: { name: 'asc' },
       });
 
-      return res.status(200).json({
+      const responsePayload = {
         success: true,
         data: stores,
-      });
+      };
+
+      await redis.set(cacheKey, JSON.stringify(responsePayload), 'EX', 600); // 10 minutes
+
+      return res.status(200).json(responsePayload);
     } catch (error) {
       next(error);
     }

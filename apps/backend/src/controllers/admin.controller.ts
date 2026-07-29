@@ -126,7 +126,7 @@ export class AdminController {
 
       const cacheKey = `cache:admin:dashboard:${selectedWeekStartStr}`;
       const cached = await redis.get(cacheKey);
-      // if (cached) return res.status(200).json(JSON.parse(cached));
+      if (cached) return res.status(200).json(JSON.parse(cached));
 
       const now = new Date();
       const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -484,7 +484,7 @@ export class AdminController {
         }
       };
 
-      await redis.set(cacheKey, JSON.stringify(responsePayload), 'EX', 300);
+      await redis.set(cacheKey, JSON.stringify(responsePayload), 'EX', 600);
       return res.status(200).json(responsePayload);
     } catch (error) {
       next(error);
@@ -515,6 +515,12 @@ export class AdminController {
       const nextDayStart = new Date(dayEnd);
       const nextDayEnd = new Date(nextDayStart);
       nextDayEnd.setUTCDate(nextDayEnd.getUTCDate() + 1);
+
+      const cacheKey = `cache:admin:date-stats:${dayStart.toISOString().substring(0, 10)}`;
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return res.status(200).json(JSON.parse(cached));
+      }
 
       const [ordersCount, deliveriesCount, ordersList, appointmentsList, nextDayOrders, nextDayAppts] = await Promise.all([
         prisma.order.count({
@@ -547,7 +553,7 @@ export class AdminController {
         }),
       ]);
 
-      return res.status(200).json({
+      const responsePayload = {
         success: true,
         data: {
           date: dayStart.toISOString().substring(0, 10),
@@ -560,7 +566,10 @@ export class AdminController {
             appointments: nextDayAppts,
           }
         }
-      });
+      };
+
+      await redis.set(cacheKey, JSON.stringify(responsePayload), 'EX', 120);
+      return res.status(200).json(responsePayload);
     } catch (error) {
       next(error);
     }

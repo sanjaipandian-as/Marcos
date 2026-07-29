@@ -9,15 +9,16 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
-  Platform
+  Platform,
+  Share
 } from 'react-native';
 import { useTheme } from '../../styles/ThemeContext';
 import api from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
+import WishlistIcon from '../../components/common/WishlistIcon';
 import {
   ChevronLeft,
   Share2,
-  Heart,
   CalendarCheck,
   Sparkles,
   Truck
@@ -70,13 +71,8 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
         if (allProductsRes.success) {
           const allProds = allProductsRes.data || [];
-          const others = allProds.filter(p => p.id !== prod.id);
-          const bySubCat = prod.subCategoryId 
-            ? others.filter(p => p.subCategoryId === prod.subCategoryId).slice(0, 10)
-            : [];
-          const byCat = others.filter(p => p.categoryId === prod.categoryId && p.subCategoryId !== prod.subCategoryId).slice(0, 10);
-          setSimilarCategoryProducts(byCat);
-          setSimilarSubCategoryProducts(bySubCat);
+          const sameCategoryProds = allProds.filter(p => p.id !== prod.id && p.categoryId === prod.categoryId);
+          setSimilarCategoryProducts(sameCategoryProds);
         }
 
         if (offersRes.success && offersRes.data) {
@@ -191,6 +187,26 @@ export default function ProductDetailsScreen({ route, navigation }) {
         prefillProductImage: product.images && product.images[0] ? product.images[0] : ''
       });
     });
+  };
+
+  const handleShareProduct = async () => {
+    if (!product) return;
+    try {
+      const mainImage = product.images && product.images[0] ? product.images[0] : '';
+      const priceText = `₹${Number(product.price).toLocaleString('en-IN')}`;
+      const productDeepLink = `marcos://product/${product.id}`;
+
+      // Amazon-Style Rich Share Message with App Name & Deep Link
+      const shareMessage = `🛍️ *MARCOS Bespoke Couture*\n\n✨ *${product.name}*\n💰 Price: ${priceText}\n\n📲 Tap to view in MARCOS App:\n${productDeepLink}`;
+
+      await Share.share({
+        title: `${product.name} | MARCOS Bespoke Couture`,
+        message: shareMessage,
+        url: mainImage || undefined,
+      });
+    } catch (error) {
+      console.warn('Share error:', error.message);
+    }
   };
 
   if (loading && (!product || product.id !== productId)) {
@@ -321,7 +337,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
         <Text style={[styles.headerTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
           Details
         </Text>
-        <TouchableOpacity style={[styles.headerBtn, shadows.premium]}>
+        <TouchableOpacity style={[styles.headerBtn, shadows.premium]} onPress={handleShareProduct} activeOpacity={0.7}>
           <Share2 size={20} color="#1e1e1e" />
         </TouchableOpacity>
       </View>
@@ -345,7 +361,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
             resizeMode="cover"
           />
           <TouchableOpacity style={styles.heartBtn} activeOpacity={0.7} onPress={toggleFavorite}>
-            <Heart size={20} color={isFav ? '#ef4444' : '#767676'} fill={isFav ? '#ef4444' : 'transparent'} />
+            <WishlistIcon size={20} color={isFav ? '#ef4444' : theme.brand[900]} fill={isFav ? '#ef4444' : 'transparent'} />
           </TouchableOpacity>
         </View>
         
@@ -450,50 +466,20 @@ export default function ProductDetailsScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* Similar Products - SubCategory first (vertical 2-per-row grid), then Category (horizontal scroll) */}
-        {product.subCategoryId && similarSubCategoryProducts.length > 0 && (
-          <View style={styles.similarSection}>
-            <View style={styles.similarHeader}>
-              <Text style={[styles.similarTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-                Similar Styles
-              </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('ProductsCatalog', { categoryId: product.categoryId, subCategoryId: product.subCategoryId })}>
-                <Text style={[styles.seeAllText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>See All</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.gridContainer}>
-              {similarSubCategoryProducts.map(renderGridProduct)}
-            </View>
-          </View>
-        )}
-
+        {/* Same Category Products Section (2 Cards per Row Grid) */}
         {similarCategoryProducts.length > 0 && (
           <View style={styles.similarSection}>
             <View style={styles.similarHeader}>
               <Text style={[styles.similarTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
                 More in {categoryName || 'this Category'}
               </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('ProductsCatalog', { categoryId: product.categoryId })}>
+              <TouchableOpacity onPress={() => navigation.navigate('MainTabs', { screen: 'Browse', params: { categoryId: product.categoryId } })}>
                 <Text style={[styles.seeAllText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>See All</Text>
               </TouchableOpacity>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.similarScroll}>
-              {similarCategoryProducts.map(renderHorizontalProduct)}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* If no subcategory, but subcategory products exist (fallback) */}
-        {!product.subCategoryId && similarSubCategoryProducts.length > 0 && (
-          <View style={styles.similarSection}>
-            <View style={styles.similarHeader}>
-              <Text style={[styles.similarTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-                You May Also Like
-              </Text>
+            <View style={styles.gridContainer}>
+              {similarCategoryProducts.map(renderGridProduct)}
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.similarScroll}>
-              {similarSubCategoryProducts.map(renderHorizontalProduct)}
-            </ScrollView>
           </View>
         )}
       </ScrollView>
@@ -509,9 +495,9 @@ export default function ProductDetailsScreen({ route, navigation }) {
           onPress={toggleFavorite}
           activeOpacity={0.8}
         >
-          <Heart
+          <WishlistIcon
             size={24}
-            color={isFav ? '#ef4444' : theme.text.secondary}
+            color={isFav ? '#ef4444' : theme.brand[900]}
             fill={isFav ? '#ef4444' : 'transparent'}
           />
         </TouchableOpacity>

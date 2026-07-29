@@ -1,10 +1,8 @@
-import React from 'react';
+import React, { memo } from 'react';
 import WishlistIcon from '../common/WishlistIcon';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import {} from 'lucide-react-native';
-import { CustomCartAddIcon, CustomCartAddedIcon } from '../CartIcons';
 
-export default function ProductCard({
+const ProductCard = memo(function ProductCard({
   item,
   isHorizontal = false,
   isFav,
@@ -16,7 +14,7 @@ export default function ProductCard({
   toggleFavorite,
   handleAddToCart,
 }) {
-  const originalPrice = item.price === "item.price" ? (item.originalPrice ? Number(item.originalPrice) : null) : (typeof product !== "undefined" && product.originalPrice ? Number(product.originalPrice) : (typeof item !== "undefined" && item.originalPrice ? Number(item.originalPrice) : null));
+  const originalPrice = item?.originalPrice ? Number(item.originalPrice) : null;
 
   return (
     <TouchableOpacity
@@ -74,7 +72,9 @@ export default function ProductCard({
       </View>
     </TouchableOpacity>
   );
-}
+});
+
+export default ProductCard;
 
 const styles = StyleSheet.create({
   productCard: {

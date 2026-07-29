@@ -13,6 +13,7 @@ import {
   Image,
   Animated,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
@@ -26,18 +27,17 @@ import {
   Clock,
   AlertTriangle,
   Locate,
-  ExternalLink,
   Store,
   ChevronRight,
-  Star,
   Route,
   Compass,
   RefreshCw,
+  SlidersHorizontal,
+  CheckCircle2,
 } from 'lucide-react-native';
 
 const { width, height } = Dimensions.get('window');
-const MAP_HEIGHT = height * 0.42;
-const CARD_WIDTH = width * 0.82;
+const MAP_HEIGHT = height * 0.38;
 
 // Haversine Formula for distance calculation
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -49,8 +49,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const d = R * c; // Distance in km
-  return d;
+  return R * c;
 }
 
 function deg2rad(deg) {
@@ -60,6 +59,7 @@ function deg2rad(deg) {
 // Check if store is currently open
 function isStoreOpen(openingHours, closingHours) {
   try {
+    if (!openingHours || !closingHours) return true;
     const now = new Date();
     const currentTime = now.getHours() * 60 + now.getMinutes();
 
@@ -78,16 +78,17 @@ function isStoreOpen(openingHours, closingHours) {
 // Format time to 12-hour format
 function formatTime(timeStr) {
   try {
+    if (!timeStr) return '';
     const [h, m] = timeStr.split(':').map(Number);
     const ampm = h >= 12 ? 'PM' : 'AM';
     const hour = h % 12 || 12;
-    return `${hour}:${(m || 0).toString().padStart(2, '0')} ${ampm}`;
+    return `${hour}:${(m || 0).toString().padStart(2, '0')}${ampm}`;
   } catch {
     return timeStr;
   }
 }
 
-// Leaflet OSM HTML template - Premium styled dark map
+// Leaflet OSM HTML template - Sleek minimalist light map styling
 const LEAFLET_MAP_HTML = `
 <!DOCTYPE html>
 <html>
@@ -97,14 +98,14 @@ const LEAFLET_MAP_HTML = `
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
-    body { padding: 0; margin: 0; background-color: #f8fafc; }
+    body { padding: 0; margin: 0; background-color: #f4f4f5; }
     html, body, #map { height: 100%; width: 100vw; }
     .leaflet-control-attribution { display: none !important; }
     .store-marker {
-      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      transition: transform 0.25s ease-out;
     }
     .store-marker.selected {
-      transform: scale(1.25);
+      transform: scale(1.2);
     }
   </style>
 </head>
@@ -124,17 +125,17 @@ const LEAFLET_MAP_HTML = `
     }
 
     function addStoreMarker(id, name, lat, lng, isSelected) {
-      var markerSize = isSelected ? 42 : 34;
-      var bgColor = isSelected ? "#d8bfd8" : "#ffffff";
-      var iconColor = isSelected ? "#ffffff" : "#d8bfd8";
-      var shadowSpread = isSelected ? "0 4px 16px rgba(216,191,216,0.4)" : "0 2px 8px rgba(0,0,0,0.15)";
-      var borderColor = isSelected ? "#d8bfd8" : "#f0f0f2";
+      var markerSize = isSelected ? 38 : 30;
+      var bgColor = isSelected ? "#18181B" : "#ffffff";
+      var iconColor = isSelected ? "#ffffff" : "#18181B";
+      var borderColor = isSelected ? "#18181B" : "#e4e4e7";
+      var shadow = isSelected ? "0 4px 14px rgba(0,0,0,0.3)" : "0 2px 6px rgba(0,0,0,0.12)";
       
       var icon = L.divIcon({
         className: 'store-marker' + (isSelected ? ' selected' : ''),
-        html: "<div style='background:" + bgColor + "; width:" + markerSize + "px; height:" + markerSize + "px; border-radius:14px; border:2.5px solid " + borderColor + "; display:flex; align-items:center; justify-content:center; box-shadow:" + shadowSpread + ";'><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='" + iconColor + "' stroke-width='2.5'><path d='M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z'/><circle cx='12' cy='10' r='3'/></svg></div>",
+        html: "<div style='background:" + bgColor + "; width:" + markerSize + "px; height:" + markerSize + "px; border-radius:50%; border:2px solid " + borderColor + "; display:flex; align-items:center; justify-content:center; box-shadow:" + shadow + ";'><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='" + iconColor + "' stroke-width='2.5'><path d='M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z'/><circle cx='12' cy='10' r='3'/></svg></div>",
         iconSize: [markerSize, markerSize],
-        iconAnchor: [markerSize / 2, markerSize]
+        iconAnchor: [markerSize / 2, markerSize / 2]
       });
 
       if (markers[id]) {
@@ -154,7 +155,7 @@ const LEAFLET_MAP_HTML = `
       }
       var icon = L.divIcon({
         className: 'user-icon',
-        html: "<div style='position:relative;'><div style='background:rgba(59,130,246,0.15); width:32px; height:32px; border-radius:50%; position:absolute; top:-8px; left:-8px;'></div><div style='background-color:#3b82f6; width:16px; height:16px; border-radius:50%; border:3px solid white; box-shadow:0 0 12px rgba(59,130,246,0.5);'></div></div>",
+        html: "<div style='position:relative;'><div style='background:rgba(24,24,27,0.15); width:32px; height:32px; border-radius:50%; position:absolute; top:-8px; left:-8px;'></div><div style='background-color:#18181B; width:16px; height:16px; border-radius:50%; border:3px solid white; box-shadow:0 0 10px rgba(0,0,0,0.3);'></div></div>",
         iconSize: [16, 16],
         iconAnchor: [8, 8]
       });
@@ -174,35 +175,18 @@ export default function StoreLocatorScreen() {
   const webViewRef = useRef(null);
   const flatListRef = useRef(null);
   const [mapReady, setMapReady] = useState(false);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
 
   const [stores, setStores] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isRelocating, setIsRelocating] = useState(false);
   const [error, setError] = useState(null);
 
   const [userCoords, setUserCoords] = useState(null);
   const [permissionGranted, setPermissionGranted] = useState(false);
   const [selectedStoreId, setSelectedStoreId] = useState(null);
-  const [viewMode, setViewMode] = useState('list'); // 'list' or 'map'
+  const [storeFilter, setStoreFilter] = useState('all'); // 'all', 'open'
 
-  // Entrance animation
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
-
-  // Fetch user location
+  // Request GPS location
   const requestLocation = async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -218,6 +202,8 @@ export default function StoreLocatorScreen() {
           }
           return location.coords;
         }
+      } else {
+        setPermissionGranted(false);
       }
     } catch (err) {
       console.log('Error requesting location permission:', err);
@@ -225,7 +211,7 @@ export default function StoreLocatorScreen() {
     return null;
   };
 
-  // Fetch stores and sort them
+  // Fetch stores and sort by distance
   const loadStores = async (coords = null) => {
     try {
       setLoading(true);
@@ -238,7 +224,6 @@ export default function StoreLocatorScreen() {
           lngNum: Number(store.longitude),
         }));
 
-        // Calculate distance if coordinates are available
         const activeCoords = coords || userCoords;
         if (activeCoords) {
           storeList = storeList.map(store => {
@@ -250,21 +235,19 @@ export default function StoreLocatorScreen() {
             );
             return { ...store, distance: dist };
           });
-          // Sort by distance (nearest to farthest)
           storeList.sort((a, b) => a.distance - b.distance);
         }
 
         setStores(storeList);
 
-        // Auto-select the first store as active
         if (storeList.length > 0) {
-          setSelectedStoreId(storeList[0].id);
+          setSelectedStoreId(prev => (prev && storeList.some(s => s.id === prev) ? prev : storeList[0].id));
         }
       } else {
-        setError('Failed to retrieve active store locations.');
+        setError('Unable to retrieve store locations.');
       }
     } catch (err) {
-      setError(err.message || 'An error occurred while loading store locations.');
+      setError(err.message || 'An error occurred while loading stores.');
     } finally {
       setLoading(false);
     }
@@ -277,7 +260,7 @@ export default function StoreLocatorScreen() {
     })();
   }, [mapReady]);
 
-  // Inject JavaScript to draw markers on webview when ready or selections change
+  // Sync Leaflet map markers
   const syncMapState = useCallback(() => {
     if (!mapReady || !webViewRef.current || stores.length === 0) return;
 
@@ -288,7 +271,6 @@ export default function StoreLocatorScreen() {
 
     const selectedStore = stores.find(s => s.id === selectedStoreId);
     let centerCode = selectedStore ? `centerMap(${selectedStore.latNum}, ${selectedStore.lngNum}, 14);` : '';
-
     let userLocCode = userCoords ? `updateUserLocation(${userCoords.latitude}, ${userCoords.longitude});` : '';
 
     webViewRef.current.injectJavaScript(`
@@ -302,14 +284,28 @@ export default function StoreLocatorScreen() {
     syncMapState();
   }, [syncMapState]);
 
+  // Relocate trigger handler
   const handleCenterOnUser = async () => {
-    const coords = await requestLocation();
-    if (coords && webViewRef.current) {
-      webViewRef.current.injectJavaScript(`
-        updateUserLocation(${coords.latitude}, ${coords.longitude});
-        centerMap(${coords.latitude}, ${coords.longitude}, 12);
-      `);
-      loadStores(coords);
+    try {
+      setIsRelocating(true);
+      const coords = await requestLocation();
+      if (coords && webViewRef.current) {
+        webViewRef.current.injectJavaScript(`
+          updateUserLocation(${coords.latitude}, ${coords.longitude});
+          centerMap(${coords.latitude}, ${coords.longitude}, 13);
+        `);
+        await loadStores(coords);
+      } else {
+        Alert.alert(
+          'Location Access',
+          'Please enable location services in your phone settings to automatically find nearby stores.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (err) {
+      console.log('Relocate error:', err);
+    } finally {
+      setIsRelocating(false);
     }
   };
 
@@ -320,330 +316,275 @@ export default function StoreLocatorScreen() {
     }
     if (flatListRef.current && index !== undefined && index >= 0) {
       try {
-        flatListRef.current.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+        flatListRef.current.scrollToIndex({ index, animated: true, viewPosition: 0.3 });
       } catch (e) { }
     }
   }, [mapReady]);
 
   const handleGetDirections = (store) => {
-    // Navigation uses Google Maps link as requested
     const url = `https://www.google.com/maps/dir/?api=1&destination=${store.latNum},${store.lngNum}`;
     Linking.openURL(url).catch(() => {
-      Alert.alert('Directions Error', 'Unable to open Google Maps navigation.');
+      Alert.alert('Error', 'Could not open Google Maps navigation.');
     });
   };
 
-  // Premium store card - horizontal layout
+  const getFilteredStores = () => {
+    if (storeFilter === 'open') {
+      return stores.filter(s => isStoreOpen(s.openingHours, s.closingHours));
+    }
+    return stores;
+  };
+
+  const filteredStores = getFilteredStores();
+
+  // Minimalist Store Card Item
   const renderStoreCard = ({ item, index }) => {
     const isSelected = selectedStoreId === item.id;
     const distanceText = item.distance !== undefined
       ? item.distance < 1
-        ? `${(item.distance * 1000).toFixed(0)}m`
-        : `${item.distance.toFixed(1)}km`
+        ? `${(item.distance * 1000).toFixed(0)} m away`
+        : `${item.distance.toFixed(1)} km away`
       : null;
     const storeOpen = isStoreOpen(item.openingHours, item.closingHours);
 
     return (
-      <Animated.View
-        style={{
-          opacity: fadeAnim,
-          transform: [{ translateY: slideAnim }],
-        }}
+      <TouchableOpacity
+        style={[
+          styles.storeCard,
+          {
+            backgroundColor: isSelected ? '#18181B' : theme.bg.card,
+            borderColor: isSelected ? '#18181B' : '#E4E4E7',
+          },
+        ]}
+        onPress={() => handleSelectStore(item, index)}
+        activeOpacity={0.88}
       >
-        <TouchableOpacity
-          style={[
-            styles.storeCard,
-            {
-              backgroundColor: isSelected ? theme.brand[500] : theme.bg.card,
-              borderColor: isSelected ? theme.brand[500] : theme.border,
-            },
-            isSelected && styles.storeCardSelected,
-            !isSelected && styles.storeCardDefault,
-          ]}
-          onPress={() => {
-            handleSelectStore(item, index);
-            handleGetDirections(item);
-          }}
-          activeOpacity={0.88}
-        >
-          {/* Left: Store Icon / Image */}
-          <View style={[
-            styles.storeCardIconWrap,
-            {
-              backgroundColor: isSelected ? 'rgba(255,255,255,0.2)' : theme.brand[500] + '0F',
-            }
-          ]}>
-            {item.imageUrl ? (
-              <Image source={{ uri: item.imageUrl }} style={styles.storeCardImage} />
-            ) : (
-              <Store size={24} color={isSelected ? '#ffffff' : theme.brand[500]} />
-            )}
-          </View>
-
-          {/* Center: Store Details */}
-          <View style={styles.storeCardContent}>
-            {/* Name Row */}
-            <View style={styles.storeNameRow}>
+        {/* Top Meta Row */}
+        <View style={styles.storeCardTopRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+            <View style={[
+              styles.storeIconWrap,
+              { backgroundColor: isSelected ? 'rgba(255,255,255,0.15)' : '#F4F4F5' }
+            ]}>
+              <Store size={18} color={isSelected ? '#FFFFFF' : '#18181B'} />
+            </View>
+            <View style={{ flex: 1 }}>
               <Text
                 style={[
                   styles.storeCardName,
-                  {
-                    fontFamily: fonts.bold,
-                    color: isSelected ? '#ffffff' : theme.text.primary,
-                  },
+                  { fontFamily: fonts.bold, color: isSelected ? '#FFFFFF' : theme.text.primary }
                 ]}
                 numberOfLines={1}
               >
                 {item.name}
               </Text>
+              <Text
+                style={[
+                  styles.storeCardCity,
+                  { fontFamily: fonts.medium, color: isSelected ? 'rgba(255,255,255,0.7)' : theme.text.secondary }
+                ]}
+              >
+                {item.city}
+              </Text>
             </View>
+          </View>
 
-            {/* Address */}
-            <Text
-              style={[
-                styles.storeCardAddress,
-                {
-                  fontFamily: fonts.regular,
-                  color: isSelected ? 'rgba(255,255,255,0.75)' : theme.text.secondary,
-                },
-              ]}
-              numberOfLines={1}
-            >
-              {item.address}, {item.city}
+          {/* Open / Closed Status Pill */}
+          <View style={[
+            styles.statusPill,
+            { backgroundColor: isSelected ? (storeOpen ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)') : (storeOpen ? '#ECFDF5' : '#FEF2F2') }
+          ]}>
+            <View style={[styles.statusDot, { backgroundColor: storeOpen ? '#10B981' : '#EF4444' }]} />
+            <Text style={[
+              styles.statusText,
+              { fontFamily: fonts.bold, color: isSelected ? (storeOpen ? '#6EE7B7' : '#FCA5A5') : (storeOpen ? '#059669' : '#DC2626') }
+            ]}>
+              {storeOpen ? 'OPEN' : 'CLOSED'}
             </Text>
+          </View>
+        </View>
 
-            {/* Meta Row: Status + Hours */}
-            <View style={styles.storeCardMeta}>
-              {/* Open/Closed */}
-              <View style={[
-                styles.statusChip,
-                {
-                  backgroundColor: isSelected
-                    ? (storeOpen ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)')
-                    : (storeOpen ? '#f0fdf4' : '#fef2f2'),
-                }
+        {/* Address */}
+        <Text
+          style={[
+            styles.storeCardAddress,
+            { fontFamily: fonts.regular, color: isSelected ? 'rgba(255,255,255,0.8)' : theme.text.secondary }
+          ]}
+          numberOfLines={2}
+        >
+          {item.address}
+        </Text>
+
+        {/* Hours + Distance Info Row */}
+        <View style={styles.storeCardInfoRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+            <Clock size={13} color={isSelected ? 'rgba(255,255,255,0.6)' : '#71717A'} />
+            <Text style={[
+              styles.storeCardInfoText,
+              { fontFamily: fonts.medium, color: isSelected ? 'rgba(255,255,255,0.6)' : '#71717A' }
+            ]}>
+              {formatTime(item.openingHours)} – {formatTime(item.closingHours)}
+            </Text>
+          </View>
+
+          {distanceText && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Navigation size={12} color={isSelected ? '#6EE7B7' : theme.brand[500]} />
+              <Text style={[
+                styles.storeCardInfoText,
+                { fontFamily: fonts.bold, color: isSelected ? '#6EE7B7' : theme.brand[500] }
               ]}>
-                <View style={[
-                  styles.statusDotSmall,
-                  { backgroundColor: storeOpen ? '#22c55e' : '#ef4444' }
-                ]} />
-                <Text style={[
-                  styles.statusChipText,
-                  {
-                    fontFamily: fonts.semiBold,
-                    color: isSelected
-                      ? (storeOpen ? '#86efac' : '#fca5a5')
-                      : (storeOpen ? '#16a34a' : '#dc2626'),
-                  }
-                ]}>
-                  {storeOpen ? 'Open' : 'Closed'}
-                </Text>
-              </View>
-
-              {/* Hours */}
-              <View style={styles.hoursChip}>
-                <Clock size={10} color={isSelected ? 'rgba(255,255,255,0.6)' : theme.text.muted} />
-                <Text style={[
-                  styles.hoursText,
-                  {
-                    fontFamily: fonts.medium,
-                    color: isSelected ? 'rgba(255,255,255,0.6)' : theme.text.muted,
-                  }
-                ]}>
-                  {formatTime(item.openingHours)} – {formatTime(item.closingHours)}
-                </Text>
-              </View>
+                {distanceText}
+              </Text>
             </View>
-          </View>
+          )}
+        </View>
 
-          {/* Right: Distance + Action */}
-          <View style={styles.storeCardRight}>
-            {distanceText && (
-              <View style={[
-                styles.distancePill,
-                {
-                  backgroundColor: isSelected ? 'rgba(255,255,255,0.2)' : theme.brand[500] + '12',
-                }
-              ]}>
-                <Navigation size={10} color={isSelected ? '#ffffff' : theme.brand[500]} />
-                <Text style={[
-                  styles.distancePillText,
-                  {
-                    fontFamily: fonts.bold,
-                    color: isSelected ? '#ffffff' : theme.brand[500],
-                  }
-                ]}>
-                  {distanceText}
-                </Text>
-              </View>
-            )}
-            <TouchableOpacity
-              style={[
-                styles.directionIconBtn,
-                {
-                  backgroundColor: isSelected ? 'rgba(255,255,255,0.2)' : theme.bg.input,
-                }
-              ]}
-              onPress={() => handleGetDirections(item)}
-              activeOpacity={0.7}
-            >
-              <Route size={16} color={isSelected ? '#ffffff' : theme.brand[500]} />
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-
-        {/* Phone row - below the card for the selected store */}
-        {isSelected && item.phone && (
+        {/* Action Buttons Row */}
+        <View style={styles.storeCardActionsRow}>
           <TouchableOpacity
-            style={[styles.phoneRow, { backgroundColor: theme.bg.card, borderColor: theme.border }]}
-            onPress={() => Linking.openURL(`tel:${item.phone}`)}
-            activeOpacity={0.7}
+            style={[
+              styles.directionsPrimaryBtn,
+              { backgroundColor: isSelected ? '#FFFFFF' : '#18181B' }
+            ]}
+            onPress={() => handleGetDirections(item)}
+            activeOpacity={0.8}
           >
-            <View style={[styles.phoneIconWrap, { backgroundColor: '#f0fdf4' }]}>
-              <Phone size={14} color="#16a34a" />
-            </View>
-            <Text style={[styles.phoneText, { fontFamily: fonts.medium, color: theme.text.primary }]}>
-              {item.phone}
-            </Text>
-            <Text style={[styles.phoneCta, { fontFamily: fonts.semiBold, color: '#16a34a' }]}>
-              Call Now
+            <Route size={14} color={isSelected ? '#18181B' : '#FFFFFF'} />
+            <Text style={[
+              styles.directionsPrimaryBtnText,
+              { fontFamily: fonts.bold, color: isSelected ? '#18181B' : '#FFFFFF' }
+            ]}>
+              Directions
             </Text>
           </TouchableOpacity>
-        )}
-      </Animated.View>
+
+          {item.phone && (
+            <TouchableOpacity
+              style={[
+                styles.phoneSecondaryBtn,
+                { backgroundColor: isSelected ? 'rgba(255,255,255,0.15)' : '#F4F4F5' }
+              ]}
+              onPress={() => Linking.openURL(`tel:${item.phone}`)}
+              activeOpacity={0.7}
+            >
+              <Phone size={14} color={isSelected ? '#FFFFFF' : '#18181B'} />
+            </TouchableOpacity>
+          )}
+        </View>
+      </TouchableOpacity>
     );
   };
 
-  // Floating header inside the map area
-  const renderMapOverlay = () => (
-    <>
-      {/* Top gradient overlay for header readability */}
-      <LinearGradient
-        colors={['rgba(0,0,0,0.35)', 'rgba(0,0,0,0.15)', 'transparent']}
-        style={styles.mapTopGradient}
-        pointerEvents="none"
-      />
+  // Header above Store List
+  const renderListHeader = () => (
+    <View style={styles.listHeaderWrap}>
+      {/* Top Handle Bar */}
+      <View style={styles.sheetHandle} />
 
-      {/* Header */}
-      <View style={styles.floatingHeader}>
-        <View style={styles.floatingHeaderLeft}>
-          <View style={styles.headerPinIcon}>
-            <MapPin size={16} color="#ffffff" />
-          </View>
-          <View>
-            <Text style={[styles.floatingTitle, { fontFamily: fonts.bold }]}>
-              Our Stores
-            </Text>
-            <Text style={[styles.floatingSubtitle, { fontFamily: fonts.regular }]}>
-              {stores.length} {stores.length === 1 ? 'location' : 'locations'} near you
-            </Text>
-          </View>
+      {/* Title & Relocate Row */}
+      <View style={styles.headerTitleRow}>
+        <View>
+          <Text style={[styles.headerTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+            Boutique & Stores
+          </Text>
+          <Text style={[styles.headerSubtext, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
+            {filteredStores.length} {filteredStores.length === 1 ? 'store' : 'stores'} available
+          </Text>
         </View>
+
+        {/* Relocate Me Button */}
+        <TouchableOpacity
+          style={[
+            styles.relocateHeaderBtn,
+            { backgroundColor: isRelocating ? '#EDE0ED' : '#F4F4F5' }
+          ]}
+          onPress={handleCenterOnUser}
+          activeOpacity={0.8}
+          disabled={isRelocating}
+        >
+          {isRelocating ? (
+            <ActivityIndicator size="small" color={theme.brand[500]} />
+          ) : (
+            <Locate size={16} color="#18181B" />
+          )}
+          <Text style={[
+            styles.relocateHeaderBtnText,
+            { fontFamily: fonts.bold, color: isRelocating ? theme.brand[500] : '#18181B' }
+          ]}>
+            {isRelocating ? 'Locating...' : 'Relocate'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Bottom gradient overlay for list transition */}
-      <LinearGradient
-        colors={['transparent', theme.bg.main]}
-        style={styles.mapBottomGradient}
-        pointerEvents="none"
-      />
-
-      {/* Locate user FAB */}
-      {permissionGranted && (
+      {/* Filter Tabs Row */}
+      <View style={styles.filterTabsRow}>
         <TouchableOpacity
-          style={[styles.locateFab, { backgroundColor: theme.bg.card }]}
-          onPress={handleCenterOnUser}
-          activeOpacity={0.85}
+          style={[
+            styles.filterTabPill,
+            storeFilter === 'all' && styles.filterTabPillActive
+          ]}
+          onPress={() => setStoreFilter('all')}
         >
-          <Compass size={22} color={theme.brand[500]} />
+          <Text style={[
+            styles.filterTabPillText,
+            { fontFamily: storeFilter === 'all' ? fonts.bold : fonts.medium, color: storeFilter === 'all' ? '#FFFFFF' : theme.text.primary }
+          ]}>
+            All Stores ({stores.length})
+          </Text>
         </TouchableOpacity>
-      )}
-    </>
-  );
 
-  const renderSectionHeader = () => (
-    <View style={styles.sectionHeaderWrap}>
-      {/* Drag handle indicator */}
-      <View style={[styles.dragHandle, { backgroundColor: theme.border }]} />
-
-      {/* Section heading */}
-      <View style={styles.sectionTitleRow}>
-        <View>
-          <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-            Nearby Stores
-          </Text>
-          <Text style={[styles.sectionSubtext, { fontFamily: fonts.regular, color: theme.text.muted }]}>
-            Sorted by distance from you
-          </Text>
-        </View>
         <TouchableOpacity
-          style={[styles.refreshBtn, { backgroundColor: theme.brand[500] + '0F' }]}
-          onPress={() => loadStores(userCoords)}
-          activeOpacity={0.7}
+          style={[
+            styles.filterTabPill,
+            storeFilter === 'open' && styles.filterTabPillActive
+          ]}
+          onPress={() => setStoreFilter('open')}
         >
-          <RefreshCw size={16} color={theme.brand[500]} />
+          <Text style={[
+            styles.filterTabPillText,
+            { fontFamily: storeFilter === 'open' ? fonts.bold : fonts.medium, color: storeFilter === 'open' ? '#FFFFFF' : theme.text.primary }
+          ]}>
+            Open Now
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 
-  // Loading state
   if (loading && stores.length === 0) {
     return (
       <View style={[styles.container, { backgroundColor: theme.bg.main }]}>
-        <StatusBar barStyle="dark-content" translucent={false} />
+        <StatusBar barStyle="dark-content" />
         <View style={styles.loadingWrap}>
-          <View style={[styles.loaderCard, { backgroundColor: theme.bg.card }]}>
-            <View style={[styles.loaderIconWrap, { backgroundColor: theme.brand[500] + '14' }]}>
-              <ActivityIndicator size="large" color={theme.brand[500]} />
-            </View>
-            <Text style={[styles.loaderTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-              Finding stores
-            </Text>
-            <Text style={[styles.loaderSubtext, { fontFamily: fonts.regular, color: theme.text.muted }]}>
-              Locating the nearest stores to you…
-            </Text>
-            {/* Skeleton cards */}
-            {[1, 2, 3].map(i => (
-              <View key={i} style={[styles.skeletonCard, { backgroundColor: theme.bg.input }]}>
-                <View style={[styles.skeletonCircle, { backgroundColor: theme.border }]} />
-                <View style={styles.skeletonLines}>
-                  <View style={[styles.skeletonLine, { backgroundColor: theme.border, width: '70%' }]} />
-                  <View style={[styles.skeletonLine, { backgroundColor: theme.border, width: '45%' }]} />
-                </View>
-              </View>
-            ))}
-          </View>
+          <ActivityIndicator size="large" color={theme.brand[500]} />
+          <Text style={[styles.loaderTitle, { fontFamily: fonts.bold, color: theme.text.primary, marginTop: 16 }]}>
+            Locating nearby stores...
+          </Text>
         </View>
       </View>
     );
   }
 
-  // Error state
   if (error) {
     return (
       <View style={[styles.container, { backgroundColor: theme.bg.main }]}>
-        <StatusBar barStyle="dark-content" translucent={false} />
+        <StatusBar barStyle="dark-content" />
         <View style={styles.loadingWrap}>
-          <View style={[styles.errorCard, { backgroundColor: theme.bg.card }]}>
-            <View style={styles.errorIconWrap}>
-              <AlertTriangle size={36} color="#f59e0b" />
-            </View>
-            <Text style={[styles.errorTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-              Unable to load stores
-            </Text>
-            <Text style={[styles.errorMsg, { fontFamily: fonts.regular, color: theme.text.muted }]}>
-              {error}
-            </Text>
-            <TouchableOpacity
-              style={[styles.retryBtn, { backgroundColor: theme.brand[500] }]}
-              onPress={() => loadStores()}
-              activeOpacity={0.85}
-            >
-              <RefreshCw size={16} color="#ffffff" />
-              <Text style={[styles.retryText, { fontFamily: fonts.bold }]}>Try Again</Text>
-            </TouchableOpacity>
-          </View>
+          <AlertTriangle size={40} color="#F59E0B" />
+          <Text style={[styles.loaderTitle, { fontFamily: fonts.bold, color: theme.text.primary, marginTop: 12 }]}>
+            Unable to load stores
+          </Text>
+          <Text style={{ fontSize: 13, color: theme.text.secondary, textAlign: 'center', marginBottom: 20 }}>
+            {error}
+          </Text>
+          <TouchableOpacity
+            style={styles.retryBtn}
+            onPress={() => loadStores()}
+          >
+            <RefreshCw size={16} color="#FFFFFF" />
+            <Text style={{ fontFamily: fonts.bold, color: '#FFFFFF', fontSize: 14 }}>Try Again</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -651,9 +592,9 @@ export default function StoreLocatorScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg.main }]}>
-      <StatusBar barStyle="light-content" translucent={false} backgroundColor="transparent" />
+      <StatusBar barStyle="dark-content" />
 
-      {/* Full-bleed Map */}
+      {/* Top Map View */}
       <View style={styles.mapContainer}>
         <WebView
           ref={webViewRef}
@@ -674,26 +615,39 @@ export default function StoreLocatorScreen() {
                 }
               }
             } catch (e) {
-              console.log('Error parsing WebView message:', e);
+              console.log('WebView message error:', e);
             }
           }}
           javaScriptEnabled={true}
           domStorageEnabled={true}
         />
-        {renderMapOverlay()}
+
+        {/* Floating Relocate FAB on Map */}
+        <TouchableOpacity
+          style={styles.mapCompassFab}
+          onPress={handleCenterOnUser}
+          activeOpacity={0.85}
+          disabled={isRelocating}
+        >
+          {isRelocating ? (
+            <ActivityIndicator size="small" color="#18181B" />
+          ) : (
+            <Compass size={20} color="#18181B" />
+          )}
+        </TouchableOpacity>
       </View>
 
-      {/* Store List - bottom sheet style */}
+      {/* Store List Bottom Sheet */}
       <FlatList
         ref={flatListRef}
-        data={stores}
+        data={filteredStores}
         renderItem={renderStoreCard}
         keyExtractor={item => item.id}
-        ListHeaderComponent={renderSectionHeader}
+        ListHeaderComponent={renderListHeader}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        style={[styles.storeList, { backgroundColor: theme.bg.main }]}
-        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+        style={styles.storeList}
+        ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         ListFooterComponent={<View style={{ height: 40 }} />}
       />
     </View>
@@ -705,7 +659,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // ===== Map Area =====
+  // ===== Map View =====
   mapContainer: {
     height: MAP_HEIGHT,
     position: 'relative',
@@ -714,405 +668,201 @@ const styles = StyleSheet.create({
   map: {
     ...StyleSheet.absoluteFillObject,
   },
-  mapTopGradient: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 100,
-    zIndex: 2,
-  },
-  mapBottomGradient: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 60,
-    zIndex: 2,
-  },
-
-  // ===== Floating Header =====
-  floatingHeader: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 52 : 14,
-    left: 16,
-    right: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    zIndex: 10,
-  },
-  floatingHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  headerPinIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: 'rgba(216,191,216,0.9)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Platform.select({
-      android: { elevation: 6 },
-      ios: {
-        shadowColor: '#d8bfd8',
-        shadowOpacity: 0.35,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 3 },
-      },
-    }),
-  },
-  floatingTitle: {
-    fontSize: 17,
-    color: '#ffffff',
-    letterSpacing: -0.3,
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
-  floatingSubtitle: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.85)',
-    marginTop: 1,
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
-
-  // ===== Locate FAB =====
-  locateFab: {
+  mapCompassFab: {
     position: 'absolute',
     right: 16,
-    bottom: 70,
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+    bottom: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 10,
-    ...Platform.select({
-      android: { elevation: 8 },
-      ios: {
-        shadowColor: '#000',
-        shadowOpacity: 0.15,
-        shadowRadius: 12,
-        shadowOffset: { width: 0, height: 4 },
-      },
-    }),
+    zIndex: 20,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: '#E4E4E7',
   },
 
-  // ===== Store List =====
+  // ===== Store List Sheet =====
   storeList: {
     flex: 1,
-    marginTop: -20,
+    marginTop: -16,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    zIndex: 5,
-    ...Platform.select({
-      android: { elevation: 12 },
-      ios: {
-        shadowColor: '#000',
-        shadowOpacity: 0.08,
-        shadowRadius: 16,
-        shadowOffset: { width: 0, height: -4 },
-      },
-    }),
+    backgroundColor: '#FFFFFF',
+    zIndex: 10,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 8,
   },
   listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 100,
+    paddingHorizontal: 20,
+    paddingBottom: 40,
   },
 
-  // ===== Section Header =====
-  sectionHeaderWrap: {
+  // ===== List Header =====
+  listHeaderWrap: {
     paddingTop: 12,
-    paddingBottom: 14,
+    paddingBottom: 16,
   },
-  dragHandle: {
+  sheetHandle: {
     width: 36,
     height: 4,
     borderRadius: 2,
+    backgroundColor: '#E4E4E7',
     alignSelf: 'center',
     marginBottom: 16,
   },
-  sectionTitleRow: {
+  headerTitleRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
   },
-  sectionTitle: {
+  headerTitle: {
     fontSize: 20,
-    letterSpacing: -0.4,
+    letterSpacing: -0.3,
   },
-  sectionSubtext: {
+  headerSubtext: {
     fontSize: 12,
     marginTop: 2,
   },
-  refreshBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
+  relocateHeaderBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 18,
+  },
+  relocateHeaderBtnText: {
+    fontSize: 12,
   },
 
-  // ===== Store Card =====
+  // ===== Filter Tabs =====
+  filterTabsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  filterTabPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: '#F4F4F5',
+  },
+  filterTabPillActive: {
+    backgroundColor: '#18181B',
+  },
+  filterTabPillText: {
+    fontSize: 12,
+  },
+
+  // ===== Minimalist Store Card =====
   storeCard: {
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    gap: 10,
+  },
+  storeCardTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 20,
-    padding: 14,
-    borderWidth: 1,
-    gap: 12,
+    justifyContent: 'space-between',
   },
-  storeCardSelected: {
-    ...Platform.select({
-      android: { elevation: 8 },
-      ios: {
-        shadowColor: '#d8bfd8',
-        shadowOpacity: 0.25,
-        shadowRadius: 16,
-        shadowOffset: { width: 0, height: 6 },
-      },
-    }),
-  },
-  storeCardDefault: {
-    ...Platform.select({
-      android: { elevation: 2 },
-      ios: {
-        shadowColor: '#000',
-        shadowOpacity: 0.04,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 2 },
-      },
-    }),
-  },
-  storeCardIconWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
+  storeIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  storeCardImage: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-  },
-  storeCardContent: {
-    flex: 1,
-    gap: 3,
-  },
-  storeNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   storeCardName: {
     fontSize: 15,
     letterSpacing: -0.2,
-    flex: 1,
   },
-  storeCardAddress: {
+  storeCardCity: {
     fontSize: 12,
-    lineHeight: 16,
   },
-  storeCardMeta: {
+  statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginTop: 4,
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
-
-  // ===== Status Chip =====
-  statusChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  statusDotSmall: {
-    width: 5,
-    height: 5,
+  statusDot: {
+    width: 6,
+    height: 6,
     borderRadius: 3,
   },
-  statusChipText: {
+  statusText: {
     fontSize: 10,
+    letterSpacing: 0.3,
   },
-
-  // ===== Hours Chip =====
-  hoursChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  hoursText: {
-    fontSize: 10,
-  },
-
-  // ===== Right Column =====
-  storeCardRight: {
-    alignItems: 'center',
-    gap: 8,
-  },
-  distancePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-  },
-  distancePillText: {
-    fontSize: 11,
-  },
-  directionIconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  // ===== Phone Row =====
-  phoneRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 6,
-    marginLeft: 14,
-    marginRight: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 10,
-  },
-  phoneIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  phoneText: {
-    flex: 1,
+  storeCardAddress: {
     fontSize: 13,
+    lineHeight: 18,
   },
-  phoneCta: {
+  storeCardInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 2,
+  },
+  storeCardInfoText: {
     fontSize: 12,
   },
-
-  // ===== Loading State =====
-  loadingWrap: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  loaderCard: {
-    width: '100%',
-    alignItems: 'center',
-    padding: 32,
-    borderRadius: 28,
-    ...Platform.select({
-      android: { elevation: 4 },
-      ios: {
-        shadowColor: '#000',
-        shadowOpacity: 0.08,
-        shadowRadius: 16,
-        shadowOffset: { width: 0, height: 4 },
-      },
-    }),
-  },
-  loaderIconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  loaderTitle: {
-    fontSize: 18,
-    marginBottom: 6,
-  },
-  loaderSubtext: {
-    fontSize: 13,
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  skeletonCard: {
+  storeCardActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: '100%',
-    padding: 14,
-    borderRadius: 16,
-    marginBottom: 8,
-    gap: 12,
+    gap: 10,
+    marginTop: 4,
   },
-  skeletonCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-  },
-  skeletonLines: {
+  directionsPrimaryBtn: {
     flex: 1,
-    gap: 8,
-  },
-  skeletonLine: {
-    height: 10,
-    borderRadius: 5,
-  },
-
-  // ===== Error State =====
-  errorCard: {
-    alignItems: 'center',
-    padding: 36,
-    borderRadius: 28,
-    width: '100%',
-    ...Platform.select({
-      android: { elevation: 4 },
-      ios: {
-        shadowColor: '#000',
-        shadowOpacity: 0.08,
-        shadowRadius: 16,
-        shadowOffset: { width: 0, height: 4 },
-      },
-    }),
-  },
-  errorIconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#fef3c7',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
   },
-  errorTitle: {
-    fontSize: 18,
-    marginBottom: 8,
-  },
-  errorMsg: {
+  directionsPrimaryBtnText: {
     fontSize: 13,
-    textAlign: 'center',
-    marginBottom: 28,
-    lineHeight: 19,
+  },
+  phoneSecondaryBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // ===== Loading / Error =====
+  loadingWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  loaderTitle: {
+    fontSize: 16,
   },
   retryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    borderRadius: 16,
-  },
-  retryText: {
-    color: '#ffffff',
-    fontSize: 14,
+    backgroundColor: '#18181B',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 14,
   },
 });

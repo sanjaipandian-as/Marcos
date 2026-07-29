@@ -1,22 +1,67 @@
-import React from 'react';
+import React, { memo, useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, useWindowDimensions } from 'react-native';
 
-export default function BannerCarousel({ banners, categories, theme, fonts, navigation }) {
+const BannerCarousel = memo(function BannerCarousel({ banners, categories, theme, fonts, navigation }) {
   const { width } = useWindowDimensions();
+  const [activeIndex, setActiveIndex] = useState(0);
+  const scrollViewRef = useRef(null);
 
-  if (banners && banners.length > 0) {
-    return (
+  const cardWidth = width - 40;
+  const cardGap = 12;
+  const snapInterval = cardWidth + cardGap;
+
+  const displayBanners = banners && banners.length > 0 ? banners : [
+    {
+      id: 'fallback-1',
+      title: 'Get Your\nSpecial Sale\nUp to 40%',
+      imageUrl: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&q=80',
+    }
+  ];
+
+  // Auto-slide banners every 3.5 seconds
+  useEffect(() => {
+    if (displayBanners.length <= 1) return;
+    const interval = setInterval(() => {
+      setActiveIndex((prev) => {
+        const nextIndex = (prev + 1) % displayBanners.length;
+        if (scrollViewRef.current) {
+          scrollViewRef.current.scrollTo({
+            x: nextIndex * snapInterval,
+            animated: true,
+          });
+        }
+        return nextIndex;
+      });
+    }, 3500);
+
+    return () => clearInterval(interval);
+  }, [displayBanners.length, snapInterval]);
+
+  const handleScroll = (event) => {
+    const scrollOffset = event.nativeEvent.contentOffset.x;
+    const index = Math.round(scrollOffset / snapInterval);
+    if (index >= 0 && index < displayBanners.length && index !== activeIndex) {
+      setActiveIndex(index);
+    }
+  };
+
+  return (
+    <View style={styles.container}>
       <ScrollView
+        ref={scrollViewRef}
         horizontal
-        pagingEnabled
         showsHorizontalScrollIndicator={false}
-        style={styles.bannerSlider}
-        contentContainerStyle={styles.bannerSliderContent}
+        decelerationRate="fast"
+        snapToInterval={snapInterval}
+        snapToAlignment="start"
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={[styles.bannerSliderContent, { gap: cardGap }]}
       >
-        {banners.map((banner) => (
+        {displayBanners.map((banner, index) => (
           <TouchableOpacity
-            key={banner.id}
-            style={[styles.bannerCard, { backgroundColor: theme.brand[500], width: width - 40 }]}
+            key={banner.id || index}
+            style={[styles.bannerCard, { backgroundColor: theme.brand[500], width: cardWidth }]}
             activeOpacity={0.9}
             onPress={() => {
               if (banner.targetUrl && banner.targetUrl.includes('categories/')) {
@@ -40,7 +85,7 @@ export default function BannerCarousel({ banners, categories, theme, fonts, navi
                 style={styles.bannerBtn}
                 onPress={() => navigation.navigate('Browse')}
               >
-                <Text style={[styles.bannerBtnText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>
+                <Text style={[styles.bannerBtnText, { fontFamily: fonts.bold, color: theme.brand[900] }]}>
                   Shop Now
                 </Text>
               </TouchableOpacity>
@@ -55,44 +100,37 @@ export default function BannerCarousel({ banners, categories, theme, fonts, navi
           </TouchableOpacity>
         ))}
       </ScrollView>
-    );
-  }
 
-  // Fallback banner if empty
-  return (
-    <TouchableOpacity
-      style={[styles.bannerCard, { backgroundColor: theme.brand[500] }]}
-      activeOpacity={0.9}
-      onPress={() => navigation.navigate('Browse')}
-    >
-      <View style={styles.bannerLeft}>
-        <Text style={[styles.bannerTitleText, { fontFamily: fonts.bold }]}>
-          Get Your{'\n'}Special Sale{'\n'}Up to 40%
-        </Text>
-        <TouchableOpacity style={styles.bannerBtn} onPress={() => navigation.navigate('Browse')}>
-          <Text style={[styles.bannerBtnText, { fontFamily: fonts.bold, color: theme.brand[500] }]}>
-            Shop Now
-          </Text>
-        </TouchableOpacity>
-      </View>
-      <View style={styles.bannerRight}>
-        <Image
-          source={{ uri: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&q=80' }}
-          style={styles.bannerImage}
-          resizeMode="cover"
-        />
-      </View>
-    </TouchableOpacity>
+      {/* Animated Pagination Indicators */}
+      {displayBanners.length > 1 && (
+        <View style={styles.paginationContainer}>
+          {displayBanners.map((_, index) => {
+            const isActive = index === activeIndex;
+            return (
+              <View
+                key={index}
+                style={[
+                  styles.dot,
+                  { backgroundColor: isActive ? theme.brand[500] : theme.border },
+                  isActive && styles.activeDot,
+                ]}
+              />
+            );
+          })}
+        </View>
+      )}
+    </View>
   );
-}
+});
+
+export default BannerCarousel;
 
 const styles = StyleSheet.create({
-  bannerSlider: {
-    marginBottom: 20,
+  container: {
+    marginBottom: 16,
   },
   bannerSliderContent: {
     paddingHorizontal: 20,
-    gap: 16,
   },
   bannerCard: {
     borderRadius: 20,
@@ -107,14 +145,14 @@ const styles = StyleSheet.create({
   },
   bannerLeft: {
     flex: 1,
-    padding: 24,
+    padding: 22,
     justifyContent: 'center',
   },
   bannerTitleText: {
-    fontSize: 24,
-    color: '#ffffff',
-    lineHeight: 32,
-    marginBottom: 16,
+    fontSize: 22,
+    color: '#3D2E3D',
+    lineHeight: 28,
+    marginBottom: 14,
   },
   bannerBtn: {
     backgroundColor: '#ffffff',
@@ -135,5 +173,22 @@ const styles = StyleSheet.create({
     height: '100%',
     borderTopLeftRadius: 50,
     borderBottomLeftRadius: 50,
+  },
+  paginationContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  activeDot: {
+    width: 18,
+    height: 6,
+    borderRadius: 3,
   },
 });

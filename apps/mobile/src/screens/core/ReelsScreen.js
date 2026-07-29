@@ -8,10 +8,13 @@ import {
   FlatList,
   Linking,
   Platform,
-  StatusBar
+  StatusBar,
+  ActivityIndicator,
+  Image
 } from 'react-native';
 import { useTheme } from '../../styles/ThemeContext';
 import { useVideoPlayer, VideoView } from 'expo-video';
+import { useEventListener } from 'expo';
 import api from '../../utils/api';
 import {
   ShoppingBag,
@@ -28,31 +31,104 @@ import { useCachedVideoUrl } from '../../utils/useCachedVideoUrl';
 
 // Individual Full Screen Reel Item
 function FullScreenReelItem({ promo, isActive, inCart, onAddToCart, onShopPress, theme, fonts, insets }) {
-  const player = useVideoPlayer(promo.videoUrl, (p) => {
+  const isMounted = useRef(false);
+  const [isReady, setIsReady] = useState(false);
+  const [hasError, setHasError] = useState(false);
+
+  // Cache the video URL!
+  const cachedVideoUrl = useCachedVideoUrl(promo.videoUrl);
+
+  const player = useVideoPlayer(cachedVideoUrl || promo.videoUrl, (p) => {
     p.loop = true;
+    if (isActive) {
+      p.play();
+    }
   });
 
-  // Play/Pause based on whether this item is currently focused on screen
-  useEffect(() => {
-    if (player) {
-      player.loop = true;
+  // Listen to status changes of the player
+  useEventListener(player, 'statusChange', ({ status, error }) => {
+    if (status === 'readyToPlay') {
+      setIsReady(true);
+      setHasError(false);
       if (isActive) {
         player.play();
-      } else {
-        player.pause();
+      }
+    } else if (status === 'error') {
+      setHasError(true);
+      console.warn('Video load error in FullScreenReelItem:', error);
+    }
+  });
+
+  // Dynamically play/pause based on active/inactive status
+  useEffect(() => {
+    if (!player) return;
+    const t = setTimeout(() => {
+      if (!isMounted.current) return;
+      try {
+        if (isActive) {
+          if (player.status === 'readyToPlay') {
+            player.play();
+          }
+        } else {
+          player.pause();
+        }
+      } catch (e) {
+        // Ignore
+      }
+    }, 150);
+    return () => clearTimeout(t);
+  }, [isActive, player]);
+
+  // Keep player source updated if cached URL finishes downloading
+  useEffect(() => {
+    if (player && cachedVideoUrl) {
+      try {
+        player.replaceAsync(cachedVideoUrl);
+        if (isActive) {
+          player.play();
+        }
+      } catch (e) {
+        console.warn('Error replacing player source with cached URL:', e);
       }
     }
-  }, [isActive, player]);
+  }, [player, cachedVideoUrl, isActive]);
+
+  // Clean up
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+      try { player?.pause(); } catch (_) {}
+    };
+  }, [player]);
+
+  const fallbackThumbnail = promo.thumbnailUrl || 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=500&q=80';
 
   return (
     <View style={[styles.reelContainer, { height }]}>
-      {/* Video Player */}
-      <VideoView
-        player={player}
-        style={StyleSheet.absoluteFill}
-        nativeControls={false}
-        contentFit="cover"
+      {/* Thumbnail/Placeholder background */}
+      <Image
+        source={{ uri: fallbackThumbnail }}
+        style={StyleSheet.absoluteFillObject}
+        resizeMode="cover"
       />
+
+      {/* Video Player */}
+      {isReady && !hasError && (
+        <VideoView
+          player={player}
+          style={StyleSheet.absoluteFill}
+          nativeControls={false}
+          contentFit="cover"
+        />
+      )}
+
+      {/* Loading overlay if video is active but not loaded yet */}
+      {isActive && !isReady && !hasError && (
+        <View style={styles.loaderOverlay} pointerEvents="none">
+          <ActivityIndicator size="large" color="#ffffff" />
+        </View>
+      )}
 
       {/* Dark overlay for text readability at the bottom */}
       <View style={styles.overlayGradient} />
@@ -305,5 +381,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 50,
+  },
+  loaderOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 5,
   }
 });

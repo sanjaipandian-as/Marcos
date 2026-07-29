@@ -9,13 +9,26 @@ import { RootNavigator } from './src/navigation/AppNavigator';
 import { ToastProvider } from './src/components/ToastContext';
 import { AuthProvider } from './src/contexts/AuthContext';
 
+const linking = {
+  prefixes: ['marcos://', 'https://marcos.app', 'https://marcos-xxza.onrender.com'],
+  config: {
+    screens: {
+      MainApp: {
+        screens: {
+          ProductDetails: 'product/:productId',
+        },
+      },
+    },
+  },
+};
+
 export default function App() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
         <ToastProvider>
           <AuthProvider>
-            <NavigationContainer ref={navigationRef}>
+            <NavigationContainer ref={navigationRef} linking={linking}>
               <RootNavigator />
               <StatusBar style="auto" />
             </NavigationContainer>

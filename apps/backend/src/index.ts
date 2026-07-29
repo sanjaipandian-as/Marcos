@@ -15,6 +15,10 @@ const server = app.listen(port, () => {
   logger.info(`🚀 ${env.APP_NAME} Backend Engine v${env.APP_VERSION} running in ${mode} mode on port ${port}`);
 });
 
+// Configure Keep-Alive timeouts for high concurrency reverse proxies / CDNs
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;
+
 // 1. Initialize Real-Time WebSockets
 initSocket(server);
 

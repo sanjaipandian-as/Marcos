@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../../styles/ThemeContext';
 import api from '../../utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Search,
   SlidersHorizontal,
@@ -29,11 +30,41 @@ import {
   ChevronDown,
   X,
   CheckSquare,
-  Square
+  Square,
+  Check
 } from 'lucide-react-native';
 import { CustomCartAddIcon, CustomCartAddedIcon } from '../../components/CartIcons';
 
 const { width } = Dimensions.get('window');
+
+// Recursive helper to search categories tree
+const findCategoryNode = (nodes, id) => {
+  for (const n of nodes) {
+    if (n.id === id) return n;
+    if (n.subCategories) {
+      const found = findCategoryNode(n.subCategories, id);
+      if (found) return found;
+    }
+  }
+  return null;
+};
+
+// Helper to find root category of any category/subcategory node
+const getRootCategoryOfNode = (nodes, id) => {
+  const isDescendantOf = (node, targetId) => {
+    if (node.id === targetId) return true;
+    if (node.subCategories) {
+      return node.subCategories.some(child => isDescendantOf(child, targetId));
+    }
+    return false;
+  };
+  for (const root of nodes) {
+    if (isDescendantOf(root, id)) {
+      return root;
+    }
+  }
+  return null;
+};
 
 export default function ProductsCatalogScreen({ navigation, route }) {
   const { theme, fonts, shadows } = useTheme();
@@ -43,13 +74,21 @@ export default function ProductsCatalogScreen({ navigation, route }) {
   const [categories, setCategories] = useState([]);
   const [favorites, setFavorites] = useState(new Set());
   const [cartItems, setCartItems] = useState(new Set());
-  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedCategory, setSelectedCategory] = useState(() => route.params?.categoryId || 'All');
   const [activeFilterTab, setActiveFilterTab] = useState('Product'); // 'Product' or 'Price'
   const [minPrice, setMinPrice] = useState('0');
   const [maxPrice, setMaxPrice] = useState('50000');
   const [absoluteMin, setAbsoluteMin] = useState(0);
   const [absoluteMax, setAbsoluteMax] = useState(50000);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(() => route.params?.searchQuery || '');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(() => route.params?.searchQuery || '');
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 400);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
   const [loading, setLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const [activeThumb, setActiveThumb] = useState('right');
@@ -58,6 +97,7 @@ export default function ProductsCatalogScreen({ navigation, route }) {
   const [expandedCategories, setExpandedCategories] = useState(new Set());
   const [showCategoryHierarchyModal, setShowCategoryHierarchyModal] = useState(false);
   const [activePopupSubCategory, setActivePopupSubCategory] = useState(null);
+  const [isDraggingSlider, setIsDraggingSlider] = useState(false);
 
   const toggleExpand = (catId) => {
     setExpandedCategories(prev => {
@@ -146,6 +186,9 @@ export default function ProductsCatalogScreen({ navigation, route }) {
     );
   };
 
+  // Prevents focus listener from double-firing on first screen mount
+  const hasMountedRef = useRef(false);
+
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
@@ -169,6 +212,7 @@ export default function ProductsCatalogScreen({ navigation, route }) {
   };
 
   const closeFilters = () => {
+    setIsDraggingSlider(false);
     Animated.timing(slideAnim, {
       toValue: width,
       duration: 250,
@@ -220,9 +264,10 @@ export default function ProductsCatalogScreen({ navigation, route }) {
   const leftThumbPanResponder = useMemo(() =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 2,
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 1,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
+         setIsDraggingSlider(true);
          setActiveThumb('left');
          leftStartX.current = minPriceRef.current;
       },
@@ -231,13 +276,20 @@ export default function ProductsCatalogScreen({ navigation, route }) {
          const aMax = absoluteMaxRef.current;
          const sWidth = sliderWidthRef.current;
          const range = aMax - aMin;
-         const minGapPrice = Math.max(1, Math.round(range * 0.01)); // 1% gap for smooth sliding
+         const minGapPrice = Math.max(100, Math.round(range * 0.02));
          if (range <= 0 || sWidth <= 0) return;
          const deltaPrice = (gestureState.dx / sWidth) * range;
-         let newMin = Math.round(leftStartX.current + deltaPrice);
+         let rawMin = leftStartX.current + deltaPrice;
+         let newMin = Math.round(rawMin / 100) * 100;
          if (newMin < aMin) newMin = aMin;
          if (newMin > maxPriceRef.current - minGapPrice) newMin = maxPriceRef.current - minGapPrice;
          setMinPrice(newMin.toString());
+      },
+      onPanResponderRelease: () => {
+        setIsDraggingSlider(false);
+      },
+      onPanResponderTerminate: () => {
+        setIsDraggingSlider(false);
       },
     }),
   []);
@@ -245,9 +297,10 @@ export default function ProductsCatalogScreen({ navigation, route }) {
   const rightThumbPanResponder = useMemo(() =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 2,
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 1,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
+         setIsDraggingSlider(true);
          setActiveThumb('right');
          rightStartX.current = maxPriceRef.current;
       },
@@ -256,21 +309,29 @@ export default function ProductsCatalogScreen({ navigation, route }) {
          const aMax = absoluteMaxRef.current;
          const sWidth = sliderWidthRef.current;
          const range = aMax - aMin;
-         const minGapPrice = Math.max(1, Math.round(range * 0.01)); // 1% gap for smooth sliding
+         const minGapPrice = Math.max(100, Math.round(range * 0.02));
          if (range <= 0 || sWidth <= 0) return;
          const deltaPrice = (gestureState.dx / sWidth) * range;
-         let newMax = Math.round(rightStartX.current + deltaPrice);
+         let rawMax = rightStartX.current + deltaPrice;
+         let newMax = Math.round(rawMax / 100) * 100;
          if (newMax > aMax) newMax = aMax;
          if (newMax < minPriceRef.current + minGapPrice) newMax = minPriceRef.current + minGapPrice;
          setMaxPrice(newMax.toString());
       },
+      onPanResponderRelease: () => {
+        setIsDraggingSlider(false);
+      },
+      onPanResponderTerminate: () => {
+        setIsDraggingSlider(false);
+      },
     }),
   []);
 
-  // Sync search query or category parameter from HomeScreen if passed
+  // Sync search query or category parameter from HomeScreen when params change (re-navigation)
   useEffect(() => {
     if (route?.params?.searchQuery) {
       setSearchQuery(route.params.searchQuery);
+      setDebouncedSearchQuery(route.params.searchQuery);
     }
     if (route?.params?.categoryId) {
       setSelectedCategory(route.params.categoryId);
@@ -289,7 +350,7 @@ export default function ProductsCatalogScreen({ navigation, route }) {
   // Set the default Level 2 subcategory and auto-expand all dropdowns when category changes
   useEffect(() => {
     if (selectedCategory && selectedCategory !== 'All' && categories.length > 0) {
-      const activeCat = categories.find(c => c.id === selectedCategory);
+      const activeCat = findCategoryNode(categories, selectedCategory);
       if (activeCat && activeCat.subCategories && activeCat.subCategories.length > 0) {
         setActivePopupSubCategory(activeCat.subCategories[0].id);
         
@@ -308,38 +369,44 @@ export default function ProductsCatalogScreen({ navigation, route }) {
     }
   }, [selectedCategory, categories]);
 
-  // Reload products from server when category filter changes
-  useEffect(() => {
-    if (categories.length > 0) {
-      setCurrentPage(1);
-      setHasMore(true);
-      loadData(1, false);
-    }
-  }, [selectedCategory]);
-
-  const loadData = async (page = 1, append = false) => {
+  // Bug 3 fix: useCallback captures fresh selectedCategory/debouncedSearchQuery on every change,
+  // preventing stale closure bugs in loadMore and the focus listener.
+  const loadData = React.useCallback(async (page = 1, append = false) => {
     try {
       if (!append) {
-        if (products.length === 0) setLoading(true);
+        setLoading(true);
       } else {
         setLoadingMore(true);
       }
 
-      const productsUrl = selectedCategory !== 'All'
+      let productsUrl = selectedCategory !== 'All'
         ? `/products?page=${page}&limit=${PAGE_SIZE}&categoryId=${selectedCategory}`
         : `/products?page=${page}&limit=${PAGE_SIZE}`;
+
+      if (debouncedSearchQuery.trim()) {
+        productsUrl += `&search=${encodeURIComponent(debouncedSearchQuery.trim())}`;
+      }
 
       const requests = [
         api.get(productsUrl).catch(() => ({ success: false, data: [], pagination: {} })),
       ];
 
-      // Only fetch meta data on first load
+      // Fetch categories, and only fetch favorites/cart if user is logged in
       if (!append) {
-        requests.push(
-          api.get('/categories').catch(() => ({ success: false, data: [] })),
-          api.get('/products/favorites').catch(() => ({ success: false, data: [] })),
-          api.get('/products/cart').catch(() => ({ success: false, data: [] }))
-        );
+        const token = await AsyncStorage.getItem('accessToken').catch(() => null);
+        requests.push(api.get('/categories').catch(() => ({ success: false, data: [] })));
+        
+        if (token) {
+          requests.push(
+            api.get('/products/favorites').catch(() => ({ success: false, data: [] })),
+            api.get('/products/cart').catch(() => ({ success: false, data: [] }))
+          );
+        } else {
+          requests.push(
+            Promise.resolve({ success: false, data: [] }),
+            Promise.resolve({ success: false, data: [] })
+          );
+        }
       }
 
       const results = await Promise.all(requests);
@@ -351,25 +418,27 @@ export default function ProductsCatalogScreen({ navigation, route }) {
 
         if (append) {
           setProducts(prev => [...prev, ...prods]);
+          if (prods.length > 0) {
+            const prices = prods.map(p => Number(p.price) || 0);
+            setAbsoluteMin(prev => Math.min(prev, Math.floor(Math.min(...prices))));
+            setAbsoluteMax(prev => Math.max(prev, Math.ceil(Math.max(...prices))));
+          }
         } else {
           setProducts(prods);
+          if (prods.length > 0) {
+            const prices = prods.map(p => Number(p.price) || 0);
+            const lowest = Math.floor(Math.min(...prices));
+            const highest = Math.ceil(Math.max(...prices));
+            setAbsoluteMin(lowest);
+            setAbsoluteMax(highest);
+            setMinPrice(lowest.toString());
+            setMaxPrice(highest.toString());
+          }
         }
 
-        // Check if there are more pages
         const totalPages = pagination.pages || 1;
         setHasMore(page < totalPages);
         setCurrentPage(page);
-
-        // Dynamically calculate the real lowest and highest product budgets on first load
-        if (!append && prods.length > 0 && minPrice === '0' && maxPrice === '50000') {
-           const prices = prods.map(p => Number(p.price) || 0);
-           const lowest = Math.floor(Math.min(...prices));
-           const highest = Math.ceil(Math.max(...prices));
-           setAbsoluteMin(lowest);
-           setAbsoluteMax(highest);
-           setMinPrice(lowest.toString());
-           setMaxPrice(highest.toString());
-        }
       }
 
       if (!append) {
@@ -390,7 +459,14 @@ export default function ProductsCatalogScreen({ navigation, route }) {
       setLoading(false);
       setLoadingMore(false);
     }
-  };
+  }, [selectedCategory, debouncedSearchQuery]);
+
+  // Reload products whenever category or search changes (also fires on initial mount)
+  useEffect(() => {
+    setCurrentPage(1);
+    setHasMore(true);
+    loadData(1, false);
+  }, [selectedCategory, debouncedSearchQuery]);
 
   const loadMoreProducts = () => {
     if (!loadingMore && hasMore && !loading) {
@@ -398,39 +474,49 @@ export default function ProductsCatalogScreen({ navigation, route }) {
     }
   };
 
+  // Lightweight favorites+cart refresh helper used by focus listener
+  const refreshFavoritesAndCart = React.useCallback(async () => {
+    try {
+      const token = await AsyncStorage.getItem('accessToken').catch(() => null);
+      if (!token) return;
+      
+      const [favRes, cartRes] = await Promise.all([
+        api.get('/products/favorites').catch(() => ({ success: false, data: [] })),
+        api.get('/products/cart').catch(() => ({ success: false, data: [] })),
+      ]);
+      if (favRes?.success && favRes.data) {
+        setFavorites(new Set(favRes.data.map(item => item.productId)));
+      }
+      if (cartRes?.success && cartRes.data) {
+        setCartItems(new Set(cartRes.data.map(item => item.productId)));
+      }
+    } catch (err) {
+      console.error('Error refreshing favorites/cart:', err);
+    }
+  }, []);
+
+  // Bug 1 & 4 fix: focus listener only does a lightweight favorites/cart refresh on re-focus.
+  // The initial load is driven entirely by the [selectedCategory, debouncedSearchQuery] effect above.
+  // hasMountedRef prevents the first focus event from triggering a duplicate full reload.
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-      setCurrentPage(1);
-      setHasMore(true);
-      loadData(1, false);
+      if (!hasMountedRef.current) {
+        hasMountedRef.current = true;
+        return; // skip — initial load already handled by category/search useEffect
+      }
+      refreshFavoritesAndCart();
     });
     return unsubscribe;
-  }, [navigation]);
+  }, [navigation, refreshFavoritesAndCart]);
 
-  // Recalculate price range when category changes
-  useEffect(() => {
-    if (products.length === 0) return;
-    
-    let relevantProducts = products;
-    if (selectedCategory !== 'All') {
-      relevantProducts = products.filter(p => p.categoryId === selectedCategory);
-    }
-    
-    if (relevantProducts.length > 0) {
-      const prices = relevantProducts.map(p => Number(p.price) || 0);
-      const lowest = Math.floor(Math.min(...prices));
-      const highest = Math.ceil(Math.max(...prices));
-      setAbsoluteMin(lowest);
-      setAbsoluteMax(highest);
-      setMinPrice(lowest.toString());
-      setMaxPrice(highest.toString());
-    }
-  }, [selectedCategory, products]);
+  // Bug 2 fix: price range is now managed entirely inside loadData.
+  // The old useEffect([products]) that reset min/maxPrice on every pagination
+  // has been removed — slider position is now only reset on fresh category/search loads.
 
   // Load Subcategories when Category changes
   useEffect(() => {
     if (selectedCategory !== 'All' && categories.length > 0) {
-      const category = categories.find(c => c.id === selectedCategory);
+      const category = findCategoryNode(categories, selectedCategory);
       setSubCategories(category?.subCategories || []);
     } else {
       setSubCategories([]);
@@ -482,32 +568,9 @@ export default function ProductsCatalogScreen({ navigation, route }) {
     }
   };
 
-  // Filter products locally for instant category and search filtering
+  // Filter products locally for price range
   const getFilteredProducts = () => {
     let result = products;
-
-    // Filter by selected category — collect all descendant IDs so sub/sub-sub products show too
-    if (selectedCategory !== 'All') {
-      const findNode = (nodes, id) => {
-        for (const n of nodes) {
-          if (n.id === id) return n;
-          if (n.subCategories) {
-            const found = findNode(n.subCategories, id);
-            if (found) return found;
-          }
-        }
-        return null;
-      };
-      const selectedNode = findNode(categories, selectedCategory);
-      
-      // Determine valid category IDs (selected category itself + all its descendants)
-      const validIds = selectedNode ? getAllDescendantIds(selectedNode) : [selectedCategory];
-      const filtered = result.filter(product => validIds.includes(product.categoryId));
-      
-      if (filtered.length > 0) {
-        result = filtered;
-      }
-    }
 
     // Filter by Price Range
     if (minPrice !== '' && maxPrice !== '') {
@@ -519,14 +582,7 @@ export default function ProductsCatalogScreen({ navigation, route }) {
       });
     }
 
-    // Filter by Search Query
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim();
-      result = result.filter(product => 
-        product.name.toLowerCase().includes(query) ||
-        (product.description && product.description.toLowerCase().includes(query))
-      );
-    }
+    // No client-side filtering by searchQuery or category since the backend already handles those
 
     return result;
   };
@@ -590,53 +646,67 @@ export default function ProductsCatalogScreen({ navigation, route }) {
     const isChecked = selectedCategory === node.id;
     const hasSub = node.subCategories && node.subCategories.length > 0;
     const isExpanded = expandedCategories.has(node.id);
-    const indentLeft = depth * 16;
 
     return (
-      <View key={node.id}>
-        <View style={[styles.popupTreeRow, { paddingLeft: indentLeft }]}>
-          <TouchableOpacity
-            style={styles.popupTreeExpandIcon}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            onPress={() => { if (hasSub) toggleExpand(node.id); }}
-          >
-            {hasSub ? (
-              isExpanded ? <ChevronDown size={16} color="#71717a" /> : <ChevronRight size={16} color="#71717a" />
-            ) : (
-              <View style={{ width: 16 }} />
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.popupTreeRowContent}
-            activeOpacity={0.7}
-            onPress={() => {
-              setSelectedCategory(node.id);
-              setSelectedSubCategory(null);
-              setShowCategoryHierarchyModal(false);
-            }}
-          >
+      <View key={node.id} style={{ marginBottom: 8 }}>
+        <TouchableOpacity
+          style={[
+            styles.popupCategoryCard,
+            {
+              backgroundColor: isChecked ? '#EDE0ED' : (depth === 0 ? '#F8F8FA' : '#FFFFFF'),
+              borderColor: isChecked ? theme.brand[500] : '#F4F4F5',
+              marginLeft: depth * 14,
+            }
+          ]}
+          activeOpacity={0.75}
+          onPress={() => {
+            setSelectedCategory(node.id);
+            setSelectedSubCategory(null);
+            setShowCategoryHierarchyModal(false);
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 }}>
+            {/* Minimalist Selection Radio Check */}
             <View style={[
-              styles.popupTreeCheckbox,
+              styles.popupRadioCircle,
               isChecked && { backgroundColor: theme.brand[500], borderColor: theme.brand[500] }
             ]}>
-              {isChecked && <View style={styles.popupTreeCheckboxInner} />}
+              {isChecked && <Check size={12} color="#FFFFFF" strokeWidth={3} />}
             </View>
+
             <Text style={[
               styles.popupTreeLabel,
               {
-                fontFamily: isChecked ? fonts.semiBold : fonts.regular,
+                fontFamily: isChecked ? fonts.bold : (depth === 0 ? fonts.semiBold : fonts.regular),
                 color: isChecked ? theme.brand[500] : theme.text.primary,
-                fontSize: depth === 0 ? 15 : 13
+                fontSize: depth === 0 ? 14.5 : 13.5
               }
             ]}>
               {node.name}
             </Text>
-          </TouchableOpacity>
-        </View>
+
+            {hasSub && (
+              <View style={styles.popupSubBadge}>
+                <Text style={[styles.popupSubBadgeText, { fontFamily: fonts.medium }]}>
+                  {node.subCategories.length} {node.subCategories.length === 1 ? 'item' : 'items'}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {hasSub && (
+            <TouchableOpacity
+              style={styles.popupTreeExpandIcon}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              onPress={() => toggleExpand(node.id)}
+            >
+              {isExpanded ? <ChevronDown size={18} color="#71717A" /> : <ChevronRight size={18} color="#71717A" />}
+            </TouchableOpacity>
+          )}
+        </TouchableOpacity>
 
         {isExpanded && hasSub && (
-          <View style={{ paddingLeft: 8 }}>
+          <View style={{ marginTop: 4 }}>
             {node.subCategories.map(child => renderPopupCategoryNode(child, depth + 1))}
           </View>
         )}
@@ -647,7 +717,7 @@ export default function ProductsCatalogScreen({ navigation, route }) {
   const renderCategoryHierarchyModal = () => {
     if (selectedCategory === 'All') return null;
 
-    const parentCat = categories.find(c => c.id === selectedCategory);
+    const parentCat = getRootCategoryOfNode(categories, selectedCategory);
     if (!parentCat) return null;
 
     return (
@@ -664,23 +734,29 @@ export default function ProductsCatalogScreen({ navigation, route }) {
         >
           <TouchableOpacity 
             activeOpacity={1} 
-            style={[styles.popupModalContainer, { backgroundColor: theme.bg.card }, shadows.premium]}
+            style={[styles.popupModalContainer, { backgroundColor: theme.bg.card }]}
           >
+            {/* Top Drag Indicator */}
+            <View style={styles.popupDragHandle} />
+
             {/* Header */}
             <View style={styles.popupModalHeader}>
               <View>
-                <Text style={[styles.popupModalTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-                  {parentCat.name}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={[styles.popupModalTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                    {parentCat.name}
+                  </Text>
+                </View>
                 <Text style={[styles.popupModalSubtitle, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
-                  Choose subcategory dropdowns
+                  Select a collection or subcategory
                 </Text>
               </View>
               <TouchableOpacity 
+                style={styles.popupCloseBtn}
                 onPress={() => setShowCategoryHierarchyModal(false)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <X size={20} color={theme.text.muted} />
+                <X size={16} color={theme.text.primary} />
               </TouchableOpacity>
             </View>
 
@@ -692,17 +768,18 @@ export default function ProductsCatalogScreen({ navigation, route }) {
             </ScrollView>
 
             {/* View All / Reset Footer */}
-            <View style={[styles.popupModalFooter, { borderTopColor: theme.border }]}>
+            <View style={[styles.popupModalFooter, { borderTopColor: '#F4F4F5' }]}>
               <TouchableOpacity
-                style={[styles.popupModalBtn, { backgroundColor: theme.brand[500] }]}
+                style={styles.popupViewAllBtn}
+                activeOpacity={0.85}
                 onPress={() => {
                   setSelectedCategory(parentCat.id);
                   setSelectedSubCategory(null);
                   setShowCategoryHierarchyModal(false);
                 }}
               >
-                <Text style={[styles.popupModalBtnText, { fontFamily: fonts.bold }]}>
-                  Show All {parentCat.name}
+                <Text style={[styles.popupViewAllBtnText, { fontFamily: fonts.bold }]}>
+                  View All {parentCat.name}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -750,23 +827,99 @@ export default function ProductsCatalogScreen({ navigation, route }) {
         </TouchableOpacity>
       </View>
 
-      <FlatList
-        data={filteredProducts}
-        keyExtractor={(item) => item.id}
-        numColumns={2}
-        columnWrapperStyle={styles.gridRow}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        onEndReached={loadMoreProducts}
-        onEndReachedThreshold={0.3}
+      {/* Floating Filter Loader Indicator */}
+      {loading && products.length > 0 && (
+        <View style={styles.filteringFloatingLoader}>
+          <ActivityIndicator size="small" color={theme.brand[500]} />
+          <Text style={[styles.filteringFloatingLoaderText, { fontFamily: fonts.semiBold, color: theme.text.primary }]}>
+            Filtering products...
+          </Text>
+        </View>
+      )}
+
+      <View style={{ flex: 1, opacity: loading ? 0.5 : 1 }}>
+        <FlatList
+          data={filteredProducts}
+          keyExtractor={(item) => item.id}
+          numColumns={2}
+          columnWrapperStyle={styles.gridRow}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          onEndReached={loadMoreProducts}
+          onEndReachedThreshold={0.3}
         ListHeaderComponent={
           <>
-            {/* Popular Product Header */}
+            {/* Active Category Header */}
             <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-                Products
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                  {selectedCategory === 'All' ? 'Products' : (findCategoryNode(categories, selectedCategory)?.name || 'Products')}
+                </Text>
+                {selectedCategory !== 'All' && (
+                  <TouchableOpacity
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: '#EDE0ED',
+                      paddingHorizontal: 10,
+                      paddingVertical: 5,
+                      borderRadius: 12,
+                      gap: 4,
+                    }}
+                    onPress={() => setShowCategoryHierarchyModal(true)}
+                  >
+                    <Text style={{ fontSize: 11, fontFamily: fonts.semiBold, color: '#3D2E3D' }}>Subcategories</Text>
+                    <ChevronDown size={12} color="#3D2E3D" />
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
+
+            {/* Horizontal Subcategory Filter Pills */}
+            {subCategories.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 12, gap: 8 }}
+              >
+                <TouchableOpacity
+                  style={[
+                    styles.subCategoryPill,
+                    selectedSubCategory === null && { backgroundColor: theme.brand[500], borderColor: theme.brand[500] }
+                  ]}
+                  onPress={() => {
+                    const parentCat = getRootCategoryOfNode(categories, selectedCategory);
+                    if (parentCat) setSelectedCategory(parentCat.id);
+                    setSelectedSubCategory(null);
+                  }}
+                >
+                  <Text style={[
+                    styles.subCategoryText,
+                    { fontFamily: fonts.medium, color: selectedSubCategory === null ? '#ffffff' : theme.text.secondary }
+                  ]}>All</Text>
+                </TouchableOpacity>
+                {subCategories.map(sub => (
+                  <TouchableOpacity
+                    key={sub.id}
+                    style={[
+                      styles.subCategoryPill,
+                      (selectedCategory === sub.id || selectedSubCategory === sub.id) && { backgroundColor: theme.brand[500], borderColor: theme.brand[500] }
+                    ]}
+                    onPress={() => {
+                      setSelectedCategory(sub.id);
+                      setSelectedSubCategory(sub.id);
+                    }}
+                  >
+                    <Text style={[
+                      styles.subCategoryText,
+                      { fontFamily: fonts.medium, color: (selectedCategory === sub.id || selectedSubCategory === sub.id) ? '#ffffff' : theme.text.secondary }
+                    ]}>
+                      {sub.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
           </>
         }
         renderItem={({ item }) => {
@@ -847,6 +1000,7 @@ export default function ProductsCatalogScreen({ navigation, route }) {
           ) : null
         }
       />
+      </View>
 
       {/* Filters Modal */}
       <Modal
@@ -855,25 +1009,159 @@ export default function ProductsCatalogScreen({ navigation, route }) {
         transparent={true}
         onRequestClose={closeFilters}
       >
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeFilters}>
-          <Animated.View style={[styles.sideDrawer, { backgroundColor: theme.bg.main, transform: [{ translateX: slideAnim }] }, shadows.premium]}>
-            <TouchableOpacity activeOpacity={1} style={{ flex: 1 }}>
-            <View style={styles.filterDrawerHeader}>
-              <Text style={[styles.filterDrawerTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>Filter by category</Text>
-              <TouchableOpacity onPress={closeFilters} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <X size={20} color={theme.text.muted} />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.filterDrawerSubheader}>
-               <Text style={[styles.filterDrawerSubText, { color: theme.text.secondary }]}>
-                 {selectedCategory === 'All' && !selectedSubCategory ? 'No filters selected' : '1 filter selected'}
-               </Text>
-            </View>
+        <View style={styles.modalOverlay}>
+          {/* Backdrop pressable area */}
+          <TouchableOpacity 
+            style={StyleSheet.absoluteFill} 
+            activeOpacity={1} 
+            onPress={closeFilters} 
+          />
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
+          <Animated.View style={[styles.sideDrawer, { backgroundColor: theme.bg.main, transform: [{ translateX: slideAnim }] }, shadows.premium]}>
+            <View style={{ flex: 1 }}>
+              <View style={styles.filterDrawerHeader}>
+                <Text style={[styles.filterDrawerTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>Filter by category</Text>
+                <TouchableOpacity onPress={closeFilters} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <X size={20} color={theme.text.muted} />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.filterDrawerSubheader}>
+                 <Text style={[styles.filterDrawerSubText, { color: theme.text.secondary }]}>
+                   {selectedCategory === 'All' && !selectedSubCategory ? 'No filters selected' : '1 filter selected'}
+                 </Text>
+              </View>
+
+              <ScrollView 
+                scrollEnabled={!isDraggingSlider}
+                nestedScrollEnabled={true}
+                showsVerticalScrollIndicator={false} 
+                contentContainerStyle={{ paddingBottom: 24 }}
+              >
+              {/* Category Tree */}
               <View style={styles.categoryCheckboxList}>
                 {categories.map(cat => renderCategoryNode(cat, 0))}
               </View>
+
+              {/* Minimalist Premium Price Range Slider */}
+              <View style={[styles.priceFilterContainer, { marginTop: 16 }]}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <Text style={[styles.filterLabel, { fontFamily: fonts.bold, color: theme.text.primary, fontSize: 16, marginBottom: 0, marginTop: 0, paddingHorizontal: 0 }]}>
+                    Price Range
+                  </Text>
+                  <Text style={{ fontFamily: fonts.bold, color: theme.brand[500], fontSize: 13 }}>
+                    ₹{Number(minPrice).toLocaleString('en-IN')} — ₹{Number(maxPrice).toLocaleString('en-IN')}
+                  </Text>
+                </View>
+
+                {/* Minimalist Slider Visual */}
+                <View
+                  style={styles.sliderVisualContainer}
+                  onLayout={e => setSliderWidth(e.nativeEvent.layout.width)}
+                >
+                  {/* Background track line */}
+                  <View style={styles.sliderTrackLine} />
+                  {/* Active range fill */}
+                  <View style={[
+                    styles.sliderActiveLine,
+                    {
+                      left: `${getThumbLeftPercent()}%`,
+                      width: `${Math.max(0, getThumbRightPercent() - getThumbLeftPercent())}%`,
+                    }
+                  ]} />
+                  {/* Left (Min) Thumb */}
+                  <View
+                    style={[styles.sliderThumbContainer, { left: `${getThumbLeftPercent()}%` }]}
+                    {...leftThumbPanResponder.panHandlers}
+                  >
+                    <View style={styles.sliderThumbCircle} />
+                  </View>
+                  {/* Right (Max) Thumb */}
+                  <View
+                    style={[styles.sliderThumbContainer, { left: `${getThumbRightPercent()}%` }]}
+                    {...rightThumbPanResponder.panHandlers}
+                  >
+                    <View style={styles.sliderThumbCircle} />
+                  </View>
+                </View>
+
+                {/* Quick Budget Preset Chips */}
+                <Text style={{ fontFamily: fonts.medium, color: theme.text.secondary, fontSize: 12, marginBottom: 8, marginTop: 4 }}>
+                  Quick Budget Presets
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                  {[
+                    { label: 'All', min: absoluteMin, max: absoluteMax },
+                    { label: 'Under ₹5k', min: 0, max: 5000 },
+                    { label: '₹5k - ₹15k', min: 5000, max: 15000 },
+                    { label: '₹15k - ₹30k', min: 15000, max: 30000 },
+                    { label: 'Above ₹30k', min: 30000, max: Math.max(50000, absoluteMax) },
+                  ].map((preset, pIdx) => {
+                    const isActive = Number(minPrice) === preset.min && Number(maxPrice) === preset.max;
+                    return (
+                      <TouchableOpacity
+                        key={pIdx}
+                        style={{
+                          paddingHorizontal: 12,
+                          paddingVertical: 6,
+                          borderRadius: 16,
+                          borderWidth: 1,
+                          borderColor: isActive ? theme.brand[500] : '#e4e4e7',
+                          backgroundColor: isActive ? '#EDE0ED' : theme.bg.card,
+                        }}
+                        onPress={() => {
+                          setMinPrice(preset.min.toString());
+                          setMaxPrice(preset.max.toString());
+                        }}
+                      >
+                        <Text style={{
+                          fontSize: 11,
+                          fontFamily: isActive ? fonts.bold : fonts.medium,
+                          color: isActive ? theme.brand[500] : theme.text.primary,
+                        }}>
+                          {preset.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* Min / Max Editable Inputs */}
+                <View style={styles.priceInputsRow}>
+                  <View style={styles.priceInputBox}>
+                    <Text style={[styles.priceInputLabel, { fontFamily: fonts.medium }]}>MIN</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={[styles.priceCurrencySymbol, { fontFamily: fonts.bold }]}>₹</Text>
+                      <TextInput
+                        style={[styles.priceInputValue, { fontFamily: fonts.bold }]}
+                        value={minPrice}
+                        onChangeText={val => {
+                          const n = parseInt(val.replace(/[^0-9]/g, ''), 10);
+                          if (!isNaN(n)) setMinPrice(Math.min(n, Number(maxPrice) - 1).toString());
+                          else setMinPrice('');
+                        }}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  </View>
+                  <View style={styles.priceInputBox}>
+                    <Text style={[styles.priceInputLabel, { fontFamily: fonts.medium }]}>MAX</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={[styles.priceCurrencySymbol, { fontFamily: fonts.bold }]}>₹</Text>
+                      <TextInput
+                        style={[styles.priceInputValue, { fontFamily: fonts.bold }]}
+                        value={maxPrice}
+                        onChangeText={val => {
+                          const n = parseInt(val.replace(/[^0-9]/g, ''), 10);
+                          if (!isNaN(n)) setMaxPrice(Math.max(n, Number(minPrice) + 1).toString());
+                          else setMaxPrice('');
+                        }}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  </View>
+                </View>
+              </View>
+              
             </ScrollView>
             
             <View style={styles.filterActionsRowFixed}>
@@ -888,13 +1176,18 @@ export default function ProductsCatalogScreen({ navigation, route }) {
                 style={styles.applyFilterBtnBlack} 
                 onPress={closeFilters}
                 activeOpacity={0.8}
+                disabled={loading}
               >
-                <Text style={[styles.applyFilterBtnBlackText, { fontFamily: fonts.bold }]}>Apply filters</Text>
+                {loading ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={[styles.applyFilterBtnBlackText, { fontFamily: fonts.bold }]}>Apply filters</Text>
+                )}
               </TouchableOpacity>
             </View>
-            </TouchableOpacity>
+            </View>
           </Animated.View>
-        </TouchableOpacity>
+        </View>
       </Modal>
 
       {renderCategoryHierarchyModal()}
@@ -1074,60 +1367,49 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   sliderVisualContainer: {
-    height: 90,
+    height: 48,
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
     position: 'relative',
-    marginHorizontal: 20,
+    marginHorizontal: 10,
   },
   sliderTrackLine: {
-    height: 2,
+    height: 4,
     width: '100%',
-    backgroundColor: '#e5e5e5',
+    backgroundColor: '#E4E4E7',
+    borderRadius: 2,
     position: 'absolute',
-    top: 60,
+    top: 22,
   },
   sliderActiveLine: {
     height: 4,
-    backgroundColor: '#d8bfd8',
+    backgroundColor: '#18181B',
+    borderRadius: 2,
     position: 'absolute',
-    top: 59,
+    top: 22,
   },
   sliderThumbContainer: {
     position: 'absolute',
-    width: 48,
-    height: 60,
-    marginLeft: -24,
-    top: 10,
-    alignItems: 'center',
-  },
-  tooltipBubble: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: '#d8bfd8',
+    marginLeft: -18,
+    top: 6,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 10,
   },
-  tooltipPointer: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 5,
-    borderRightWidth: 5,
-    borderTopWidth: 6,
-    borderStyle: 'solid',
-    backgroundColor: 'transparent',
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderTopColor: '#d8bfd8',
-  },
-  trackDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#d8bfd8',
-    position: 'absolute',
-    bottom: 4,
+  sliderThumbCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#18181B',
+    borderWidth: 3,
+    borderColor: '#ffffff',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
   },
   priceInputsRow: {
     flexDirection: 'row',
@@ -1400,87 +1682,132 @@ const styles = StyleSheet.create({
   },
   popupModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'flex-end',
   },
   popupModalContainer: {
     width: '100%',
-    height: '65%',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 20,
-    paddingBottom: Platform.OS === 'ios' ? 30 : 20,
-    elevation: 5,
+    maxHeight: '75%',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 32 : 20,
+    elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+  },
+  popupDragHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E4E4E7',
+    alignSelf: 'center',
+    marginBottom: 16,
   },
   popupModalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 14,
+    paddingBottom: 4,
   },
   popupModalTitle: {
-    fontSize: 20,
+    fontSize: 18,
+    letterSpacing: -0.2,
   },
   popupModalSubtitle: {
     fontSize: 12,
     marginTop: 2,
   },
-  popupModalScroll: {
-    marginVertical: 10,
-  },
-  popupModalFooter: {
-    borderTopWidth: 1,
-    paddingTop: 16,
-    marginTop: 10,
-  },
-  popupModalBtn: {
+  popupCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F4F4F5',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  popupModalScroll: {
+    marginVertical: 4,
+  },
+  popupCategoryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 14,
+    borderWidth: 1,
   },
-  popupModalBtnText: {
-    color: '#3D2E3D',
-    fontSize: 14,
-  },
-  popupTreeRow: {
-    flexDirection: 'row',
+  popupRadioCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.8,
+    borderColor: '#D4D4D8',
     alignItems: 'center',
-    paddingVertical: 10,
+    justifyContent: 'center',
+  },
+  popupSubBadge: {
+    backgroundColor: '#F4F4F5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    marginLeft: 4,
+  },
+  popupSubBadgeText: {
+    fontSize: 11,
+    color: '#71717A',
   },
   popupTreeExpandIcon: {
-    width: 24,
-    height: 24,
+    width: 28,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 6,
-  },
-  popupTreeRowContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  popupTreeCheckbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: '#a1a1aa',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  popupTreeCheckboxInner: {
-    width: 8,
-    height: 8,
-    borderRadius: 2,
-    backgroundColor: '#3D2E3D',
   },
   popupTreeLabel: {
     fontSize: 14,
+  },
+  popupModalFooter: {
+    borderTopWidth: 1,
+    paddingTop: 14,
+    marginTop: 8,
+  },
+  popupViewAllBtn: {
+    backgroundColor: '#18181B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+  popupViewAllBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+  },
+  filteringFloatingLoader: {
+    position: 'absolute',
+    top: 14,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 20,
+    gap: 8,
+    zIndex: 999,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: '#E4E4E7',
+  },
+  filteringFloatingLoaderText: {
+    fontSize: 12,
   },
 });

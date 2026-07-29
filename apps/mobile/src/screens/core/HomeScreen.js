@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import WishlistIcon from '../../components/common/WishlistIcon';
 import {
   StyleSheet,
@@ -19,8 +19,10 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
-import { SvgXml } from 'react-native-svg';
+import Svg, { Path, SvgXml } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../styles/ThemeContext';
+import { APP_CONFIG } from '../../config/app.config';
 import api from '../../utils/api';
 import {
   Search,
@@ -39,8 +41,14 @@ import {
   Home,
   Navigation,
   Plus,
-  MoreVertical
+  MoreVertical,
+  Calendar,
+  Clock,
+  UserCheck,
+  Scissors,
+  Phone
 } from 'lucide-react-native';
+import { useAuth } from '../../contexts/AuthContext';
 import { CustomCartAddIcon, CustomCartAddedIcon } from '../../components/CartIcons';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import BannerCarousel from '../../components/home/BannerCarousel';
@@ -56,8 +64,24 @@ const { width } = Dimensions.get('window');
 const SUCCESS_SVG_XML = `<?xml version="1.0" encoding="utf-8"?><svg fill="none" viewBox="0 0 796 714" xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="cp-3459-3837"><rect height="3837" width="3459" y="0" x="0" /></clipPath><g id="comp_745"><g transform="matrix(1,0,0,1,1729.5,1918.5)" opacity="0.5" id="stroke1"><animate repeatCount="indefinite" begin="0s" calcMode="discrete" fill="freeze" dur="40.1s" values="visible; hidden" keyTimes="0; 1" attributeName="visibility" /><g id="Shape 1" transform="matrix(1,0,0,1,0,0)"><path stroke-linejoin="miter" stroke-linecap="round" stroke-width="92" stroke-opacity="1" stroke="#8bffac" fill="#ffffff" fill-opacity="1" d="M-1401.5,-1457.5L-1027.49,-1672.499" /></g></g><g transform="matrix(1,0,0,1,1818.5,2059.5)" opacity="0.5" visibility="hidden" id="stroke2"><animate repeatCount="indefinite" begin="0.16s" calcMode="discrete" fill="freeze" dur="40.1s" values="visible; hidden" keyTimes="0; 1" attributeName="visibility" /><g id="Shape 1" transform="matrix(1,0,0,1,0,0)"><path stroke-linejoin="miter" stroke-linecap="round" stroke-width="92" stroke-opacity="1" stroke="#8bffac" fill="#ffffff" fill-opacity="1" d="M-1401.5,-1457.5L-1027.49,-1672.499" /></g></g><g transform="matrix(1,0,0,1,2288.5,1790.5)" opacity="0.5" visibility="hidden" id="stroke4"><animate repeatCount="indefinite" begin="0.26s" calcMode="discrete" fill="freeze" dur="40.1s" values="visible; hidden" keyTimes="0; 1" attributeName="visibility" /><g id="Shape 1" transform="matrix(1,0,0,1,0,0)"><path stroke-linejoin="miter" stroke-linecap="round" stroke-width="92" stroke-opacity="1" stroke="#8bffac" fill="#ffffff" fill-opacity="1" d="M-1401.5,-1457.5L-1372.351,-1474.477" /></g></g><g transform="matrix(1,0,0,1,1950.5,2175.5)" opacity="0.5" visibility="hidden" id="stroke3"><animate repeatCount="indefinite" begin="0.36s" calcMode="discrete" fill="freeze" dur="40.1s" values="visible; hidden" keyTimes="0; 1" attributeName="visibility" /><g id="Shape 1" transform="matrix(1,0,0,1,0,0)"><path stroke-linejoin="miter" stroke-linecap="round" stroke-width="92" stroke-opacity="1" stroke="#8bffac" fill="#ffffff" fill-opacity="1" d="M-1401.5,-1457.5L-1117.454,-1623.493" /></g></g><g visibility="hidden" id="Bolas1"><animate repeatCount="indefinite" begin="0.44s" calcMode="discrete" fill="freeze" dur="40.1s" values="visible; hidden" keyTimes="0; 1" attributeName="visibility" /><g transform="translate(621.5,478.5)"><g transform="rotate(-11)"><animateTransform repeatCount="indefinite" type="rotate" attributeName="transform" dur="1.56s" begin="0.44s" calcMode="spline" values="-11; 0; 6" keyTimes="0; 0.308; 1" keySplines="0.333 0 0.833 0.921; 0.167 0.327 0.15 1" fill="freeze" /><g transform="scale(0,0)"><animateTransform repeatCount="indefinite" type="scale" attributeName="transform" dur="0.48s" begin="0.44s" calcMode="spline" values="0 0; 1 1" keyTimes="0; 1" keySplines="0.333 0 0.101 1" fill="freeze" /><g transform="translate(1108,1440)"><g id="Ellipse 3" transform="matrix(0.857,0,0,0.857,-819.535,-1371.645)"><ellipse ry="9.6775" rx="9.6775" cy="0" cx="0" stroke-linejoin="miter" stroke-linecap="butt" stroke-width="5" stroke-opacity="1" stroke="#8bffac" /></g><g id="Ellipse 1" transform="matrix(1.409,0,0,1.409,-1282.949,-1147.881)"><ellipse ry="9.6775" rx="9.6775" cy="0" cx="0" stroke-linejoin="miter" stroke-linecap="butt" stroke-width="5" stroke-opacity="1" stroke="#8bffac" /></g><g id="Ellipse 2" transform="matrix(1.409,0,0,1.409,-1151.238,-1723.625)"><ellipse ry="9.6775" rx="9.6775" cy="0" cx="0" stroke-linejoin="miter" stroke-linecap="butt" stroke-width="5" stroke-opacity="1" stroke="#8bffac" /></g></g></g></g></g></g><g visibility="hidden" id="Bolas2"><animate repeatCount="indefinite" begin="0.52s" calcMode="discrete" fill="freeze" dur="40.1s" values="visible; hidden" keyTimes="0; 1" attributeName="visibility" /><g transform="translate(617.5,490.5)"><g transform="scale(0,0)"><animateTransform repeatCount="indefinite" type="scale" attributeName="transform" dur="0.48s" begin="0.52s" calcMode="spline" values="0 0; 1 1" keyTimes="0; 1" keySplines="0.333 0 0.101 1" fill="freeze" /><g transform="translate(1112,1428)"><g id="Ellipse 2" transform="matrix(0.644,0,0,0.644,-1435.793,-1556.371)"><ellipse ry="9.6775" rx="9.6775" cy="0" cx="0" stroke-linejoin="miter" stroke-linecap="butt" stroke-width="8" stroke-opacity="1" stroke="#8bffac" /></g><g id="Ellipse 3" transform="matrix(0.644,0,0,0.644,-952.029,-1150.197)"><ellipse ry="9.6775" rx="9.6775" cy="0" cx="0" stroke-linejoin="miter" stroke-linecap="butt" stroke-width="8" stroke-opacity="1" stroke="#8bffac" /></g></g></g></g></g><g opacity="0.01" visibility="hidden" id="cruz1"><animate repeatCount="indefinite" begin="0.6s" calcMode="discrete" fill="freeze" dur="40.1s" values="visible; hidden" keyTimes="0; 1" attributeName="visibility" /><animate repeatCount="indefinite" attributeName="opacity" dur="0.4s" begin="0.6s" calcMode="spline" values="0.01; 1" keyTimes="0; 1" keySplines="0 0 1 1" fill="freeze" /><g transform="translate(614.125,462.5)"><animateTransform repeatCount="indefinite" type="translate" attributeName="transform" dur="0.4s" begin="0.6s" calcMode="spline" values="614.125 462.5; 852.125 164.5" keyTimes="0; 1" keySplines="0.333 0 0.103 1" fill="freeze" /><g transform="rotate(-28)"><animateTransform repeatCount="indefinite" type="rotate" attributeName="transform" dur="1.4s" begin="0.6s" calcMode="spline" values="-28; 18" keyTimes="0; 1" keySplines="0.333 0 0.667 1" fill="freeze" /><g transform="scale(1,1) translate(882.375,1726)"><g id="Shape 1" transform="matrix(0,-1,1,0,843.572,-2608.05)"><path stroke-linejoin="miter" stroke-linecap="butt" stroke-width="3" stroke-opacity="1" stroke="#8bffac" d="M-894.5,-1726L-869.5,-1726" /></g><g id="Shape 2"><path stroke-linejoin="miter" stroke-linecap="butt" stroke-width="3" stroke-opacity="1" stroke="#8bffac" d="M-894.5,-1726L-869.5,-1726" /></g></g></g></g></g><g opacity="0.01" visibility="hidden" id="cruz2"><animate repeatCount="indefinite" begin="0.64s" calcMode="discrete" fill="freeze" dur="40.1s" values="visible; hidden" keyTimes="0; 1" attributeName="visibility" /><animate repeatCount="indefinite" attributeName="opacity" dur="0.4s" begin="0.64s" calcMode="spline" values="0.01; 1" keyTimes="0; 1" keySplines="0 0 1 1" fill="freeze" /><g transform="translate(606.125,465.5)"><animateTransform repeatCount="indefinite" type="translate" attributeName="transform" dur="0.4s" begin="0.64s" calcMode="spline" values="606.125 465.5; 322.125 572.5" keyTimes="0; 1" keySplines="0.333 0 0 1" fill="freeze" /><g transform="rotate(-30)"><animateTransform repeatCount="indefinite" type="rotate" attributeName="transform" dur="1.36s" begin="0.64s" calcMode="spline" values="-30; 16" keyTimes="0; 1" keySplines="0.333 0 0.667 1" fill="freeze" /><g transform="scale(1,1) translate(882.375,1726)"><g id="Shape 1" transform="matrix(0,-1,1,0,843.572,-2608.05)"><path stroke-linejoin="miter" stroke-linecap="butt" stroke-width="3" stroke-opacity="1" stroke="#8bffac" d="M-894.5,-1726L-869.5,-1726" /></g><g id="Shape 2"><path stroke-linejoin="miter" stroke-linecap="butt" stroke-width="3" stroke-opacity="1" stroke="#8bffac" d="M-894.5,-1726L-869.5,-1726" /></g></g></g></g></g><g opacity="0.01" visibility="hidden" id="cruz3"><animate repeatCount="indefinite" begin="0.72s" calcMode="discrete" fill="freeze" dur="40.1s" values="visible; visible" keyTimes="0; 1" attributeName="visibility" /><animate repeatCount="indefinite" attributeName="opacity" dur="0.4s" begin="0.72s" calcMode="spline" values="0.01; 1" keyTimes="0; 1" keySplines="0 0 1 1" fill="freeze" /><g transform="translate(614.125,467.5)"><animateTransform repeatCount="indefinite" type="translate" attributeName="transform" dur="0.4s" begin="0.72s" calcMode="spline" values="614.125 467.5; 841.125 680.5" keyTimes="0; 1" keySplines="0.333 0 0 1" fill="freeze" /><g transform="rotate(-33)"><animateTransform repeatCount="indefinite" type="rotate" attributeName="transform" dur="1.28s" begin="0.72s" calcMode="spline" values="-33; 13" keyTimes="0; 1" keySplines="0.333 0 0.667 1" fill="freeze" /><g transform="scale(1,1) translate(882.375,1726)"><g id="Shape 1" transform="matrix(0,-1,1,0,843.572,-2608.05)"><path stroke-linejoin="miter" stroke-linecap="butt" stroke-width="3" stroke-opacity="1" stroke="#8bffac" d="M-894.5,-1726L-869.5,-1726" /></g><g id="Shape 2"><path stroke-linejoin="miter" stroke-linecap="butt" stroke-width="3" stroke-opacity="1" stroke="#8bffac" d="M-894.5,-1726L-869.5,-1726" /></g></g></g></g></g></g></defs><g transform="matrix(1,0,0,1,-216,-106)" id="BG"><use clip-path="url(#cp-3459-3837)" height="3837" width="3459" y="0" x="0" xlink:href="#comp_745" href="#comp_745" /></g><g visibility="hidden" id="Shape Layer 1"><animate repeatCount="indefinite" begin="0.32s" calcMode="discrete" fill="freeze" dur="2.2s" values="visible; visible" keyTimes="0; 1" attributeName="visibility" /><g transform="translate(398.111,357.031)"><g transform="scale(0.3,0.3)"><animateTransform repeatCount="indefinite" type="scale" attributeName="transform" dur="0.32s" begin="0.32s" calcMode="spline" values="0.3 0.3; 1.011 1.011" keyTimes="0; 1" keySplines="0.333 0 0 1" fill="freeze" /><g transform="translate(-9.719,-2.719)"><g id="Ellipse 1" transform="matrix(1,0,0,1,9.719,2.719)"><ellipse ry="177.719" rx="177.719" cy="0" cx="0" stroke-linejoin="miter" stroke-linecap="butt" stroke-width="0" stroke-opacity="1" stroke="#ffffff" fill="#8bffac" fill-opacity="1" /></g></g></g></g></g><g visibility="hidden" id="Shape Layer 2"><animate repeatCount="indefinite" begin="0.52s" calcMode="discrete" fill="freeze" dur="2.2s" values="visible; visible" keyTimes="0; 1" attributeName="visibility" /><g transform="translate(398,357.031)"><g transform="scale(0.3,0.3)"><animateTransform repeatCount="indefinite" type="scale" attributeName="transform" dur="0.32s" begin="0.52s" calcMode="spline" values="0.3 0.3; 0.916 0.916" keyTimes="0; 1" keySplines="0.333 0 0 1" fill="freeze" /><g transform="translate(-9.719,-2.719)"><g id="Ellipse 1" transform="matrix(1,0,0,1,9.719,2.719)"><ellipse ry="177.719" rx="177.719" cy="0" cx="0" stroke-linejoin="miter" stroke-linecap="butt" stroke-width="0" stroke-opacity="1" stroke="#ffffff" fill="#17c37e" fill-opacity="1" /></g></g></g></g></g><g transform="matrix(1,0,0,1,396.5,357)" visibility="hidden" id="Shape Layer 3"><animate repeatCount="indefinite" begin="0.72s" calcMode="discrete" fill="freeze" dur="2.2s" values="visible; visible" keyTimes="0; 1" attributeName="visibility" /><g id="Shape 1"><path stroke-linejoin="miter" stroke-linecap="butt" stroke-width="18" stroke-opacity="1" stroke="#ffffff" d="M-72,6L-28,49L75,-54" /></g></g></svg>`;
 
 
+const WhatsAppIcon = ({ size = 26, color = '#ffffff' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414-.074-.124-.272-.198-.57-.347z"
+      fill={color}
+    />
+    <Path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M12 2C6.477 2 2 6.477 2 12c0 2.223.725 4.277 1.956 5.947L2.6 21.4a.75.75 0 00.932.932l3.453-1.356A9.957 9.957 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zM3.5 12a8.5 8.5 0 1114.73 5.762.75.75 0 00-.317.485l-.752 2.86-2.86-.752a.75.75 0 00-.485.317A8.473 8.473 0 0112 20.5 8.5 8.5 0 013.5 12z"
+      fill={color}
+    />
+  </Svg>
+);
+
 export default function HomeScreen({ navigation }) {
   const { theme, fonts, shadows } = useTheme();
+  const { requireAuth } = useAuth();
 
   // Data States
   const [userProfile, setUserProfile] = useState(null);
@@ -79,6 +103,16 @@ export default function HomeScreen({ navigation }) {
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [pincodeInput, setPincodeInput] = useState('');
   const [isSavingAddress, setIsSavingAddress] = useState(false);
+
+  // Consultation Slot Booking States
+  const [showSlotBookingModal, setShowSlotBookingModal] = useState(false);
+  const [selectedConsultationType] = useState('Master Tailor Consultation');
+  const [selectedBookingDateIndex, setSelectedBookingDateIndex] = useState(0);
+  const [selectedBookingTime, setSelectedBookingTime] = useState('');
+  const [availableBackendSlots, setAvailableBackendSlots] = useState([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [bookingNotes, setBookingNotes] = useState('');
+  const [isSubmittingBooking, setIsSubmittingBooking] = useState(false);
   
   // Flipkart style address picker states
   const [addressSearchQuery, setAddressSearchQuery] = useState('');
@@ -96,6 +130,123 @@ export default function HomeScreen({ navigation }) {
   const [newAddressPincode, setNewAddressPincode] = useState('');
   
   const scrollY = useRef(new Animated.Value(0)).current;
+
+  const handleWhatsAppPress = useCallback(async () => {
+    const phone = APP_CONFIG.CONTACT_WHATSAPP || '+919876543210';
+    const text = `Hi ${APP_CONFIG.STORE_NAME || 'MARCOS'}, I need assistance with my measurements/orders.`;
+    const cleanPhoneNum = phone.replace(/[^0-9+]/g, '');
+    const url = `whatsapp://send?phone=${cleanPhoneNum}&text=${encodeURIComponent(text)}`;
+    const webUrl = `https://wa.me/${cleanPhoneNum.replace('+', '')}?text=${encodeURIComponent(text)}`;
+
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        await Linking.openURL(webUrl);
+      }
+    } catch (err) {
+      Linking.openURL(webUrl).catch(() => {
+        Alert.alert('WhatsApp Error', 'WhatsApp is not installed on this device.');
+      });
+    }
+  }, []);
+
+  const handleCallNow = useCallback(() => {
+    const phoneNum = APP_CONFIG.CONTACT_PHONE || '+919876543210';
+    Linking.openURL(`tel:${phoneNum}`).catch(() => {
+      Alert.alert('Call Error', 'Unable to initiate phone call from this device.');
+    });
+  }, []);
+
+  const bookingDateOptions = useMemo(() => {
+    const dates = [];
+    const today = new Date();
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      const dayName = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : d.toLocaleDateString('en-US', { weekday: 'short' });
+      const dateNum = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      dates.push({
+        index: i,
+        label: dayName,
+        dateStr: dateNum,
+        fullDate: d.toISOString().split('T')[0]
+      });
+    }
+    return dates;
+  }, []);
+
+  const handleConfirmSlotBooking = useCallback(async () => {
+    requireAuth(async () => {
+      setIsSubmittingBooking(true);
+      try {
+        const selectedDate = bookingDateOptions[selectedBookingDateIndex];
+        const dateStr = selectedDate ? selectedDate.fullDate : new Date().toISOString().split('T')[0];
+        const formattedDate = `${dateStr}T12:00:00.000Z`;
+
+        const slotToBook = selectedBookingTime || (availableBackendSlots.length > 0 ? availableBackendSlots[0] : '10:00 - 11:00');
+
+        const payload = {
+          date: formattedDate,
+          timeSlot: slotToBook,
+          productType: 'Bespoke Measurement',
+          type: 'CONSULTATION',
+          notes: `Master Tailor Consultation${bookingNotes ? ': ' + bookingNotes.trim() : ''}`,
+        };
+
+        const res = await api.post('/appointments', payload);
+        if (res && res.success) {
+          setShowSlotBookingModal(false);
+          setBookingNotes('');
+          Alert.alert(
+            'Slot Booked Successfully! 🎉',
+            `Your Master Tailor Consultation slot is confirmed for ${selectedDate ? selectedDate.label : 'selected date'} at ${slotToBook}.\n\nOur Master Artisan will contact you prior to the appointment.`
+          );
+        } else {
+          Alert.alert('Booking Failed', res?.message || 'Unable to book consultation slot. Please try again.');
+        }
+      } catch (err) {
+        console.error('Slot booking error:', err);
+        const errMsg = typeof err === 'string' ? err : (err?.message || err?.error || 'Unable to book consultation slot.');
+        Alert.alert('Booking Failed', errMsg);
+      } finally {
+        setIsSubmittingBooking(false);
+      }
+    });
+  }, [requireAuth, bookingDateOptions, selectedBookingDateIndex, selectedBookingTime, availableBackendSlots, bookingNotes]);
+
+  useEffect(() => {
+    if (!showSlotBookingModal) return;
+    const fetchSlots = async () => {
+      setLoadingSlots(true);
+      try {
+        const targetDateObj = bookingDateOptions[selectedBookingDateIndex];
+        const dateStr = targetDateObj ? targetDateObj.fullDate : new Date().toISOString().split('T')[0];
+        const res = await api.get(`/appointments/availability?date=${dateStr}`);
+        if (res && res.success && res.data && Array.isArray(res.data.availableSlots)) {
+          setAvailableBackendSlots(res.data.availableSlots);
+          if (res.data.availableSlots.length > 0) {
+            setSelectedBookingTime(res.data.availableSlots[0]);
+          } else {
+            setSelectedBookingTime('');
+          }
+        } else {
+          setAvailableBackendSlots([]);
+          setSelectedBookingTime('');
+        }
+      } catch (err) {
+        console.warn('Error fetching backend slot availability:', err);
+        // Fallback default slots
+        const fallback = ['09:00 - 10:00', '10:00 - 11:00', '11:00 - 12:00', '12:00 - 13:00', '14:00 - 15:00', '15:00 - 16:00', '16:00 - 17:00', '17:00 - 18:00'];
+        setAvailableBackendSlots(fallback);
+        setSelectedBookingTime(fallback[0]);
+      } finally {
+        setLoadingSlots(false);
+      }
+    };
+    fetchSlots();
+  }, [showSlotBookingModal, selectedBookingDateIndex, bookingDateOptions]);
 
   useEffect(() => {
     const checkReferralPopup = async () => {
@@ -421,69 +572,128 @@ export default function HomeScreen({ navigation }) {
     );
   };
 
-  const loadData = async () => {
+  const lastFetchRef = useRef(0);
+  const STALE_THRESHOLD_MS = 30000; // 30 seconds
+
+  const loadData = async (isBackground = false) => {
     try {
-      if (products.length === 0) {
+      if (products.length === 0 && !isBackground) {
         setLoading(true);
       }
-      const [profileRes, productsRes, categoriesRes, favRes, cartRes, bannersRes, offersRes, promosRes] = await Promise.all([
-        api.get('/auth/profile').catch(() => ({ success: false })),
+
+      // Stage 1: Load Critical Content (Products & Categories) FIRST for instant UI render (~50ms)
+      const [productsRes, categoriesRes] = await Promise.all([
         api.get('/products?page=1&limit=20').catch(() => ({ success: false, data: [] })),
-        api.get('/categories').catch(() => ({ success: false, data: [] })),
-        api.get('/products/favorites').catch(() => ({ success: false, data: [] })),
-        api.get('/products/cart').catch(() => ({ success: false, data: [] })),
+        api.get('/categories').catch(() => ({ success: false, data: [] }))
+      ]);
+
+      if (productsRes.success && Array.isArray(productsRes.data)) {
+        setProducts(productsRes.data);
+        AsyncStorage.setItem('cached_home_products', JSON.stringify(productsRes.data)).catch(() => {});
+      }
+      if (categoriesRes.success && Array.isArray(categoriesRes.data)) {
+        setCategories(categoriesRes.data);
+        AsyncStorage.setItem('cached_home_categories', JSON.stringify(categoriesRes.data)).catch(() => {});
+      }
+
+      // IMMEDIATELY dismiss skeleton loading so user sees home page right away
+      setLoading(false);
+      lastFetchRef.current = Date.now();
+
+      // Stage 2: Fetch Public Content (Banners, Offers, Promos) FIRST for all users (guests & logged in)
+      Promise.all([
         api.get('/banners').catch(() => ({ success: false, data: [] })),
         api.get('/offers/active').catch(() => ({ success: false, data: [] })),
         api.get('/promos/active').catch(() => ({ success: false, data: [] }))
-      ]);
+      ]).then(([bannersRes, offersRes, promosRes]) => {
+        if (bannersRes.success && Array.isArray(bannersRes.data)) {
+          setBanners(bannersRes.data);
+          AsyncStorage.setItem('cached_home_banners', JSON.stringify(bannersRes.data)).catch(() => {});
+        }
+        if (offersRes.success && Array.isArray(offersRes.data)) {
+          setOffers(offersRes.data);
+        }
+        if (promosRes.success && Array.isArray(promosRes.data)) {
+          setPromos(promosRes.data);
+        }
+      }).catch(err => console.warn('Public home content fetch error:', err));
 
-      if (profileRes.success && profileRes.data) {
-        setUserProfile(profileRes.data);
-      } else {
-        setUserProfile(null);
-        setCustomAddress('');
-        setSavedAddressesList([]);
-        setFavorites(new Set());
-        setCartItems(new Set());
-      }
-      if (productsRes.success) setProducts(productsRes.data || []);
-      if (categoriesRes.success) setCategories(categoriesRes.data || []);
-      if (favRes.success && favRes.data) {
-        setFavorites(new Set(favRes.data.map(item => item.productId)));
-      }
-      if (cartRes.success && cartRes.data) {
-        setCartItems(new Set(cartRes.data.map(item => item.productId)));
-      }
-      if (bannersRes.success) {
-        setBanners(bannersRes.data || []);
-      }
-      if (offersRes.success) {
-        setOffers(offersRes.data || []);
-      }
-      if (promosRes.success) {
-        setPromos(promosRes.data || []);
-      }
+      // Stage 3: Fetch User Auth Content (Profile, Favorites, Cart) ONLY if user has an access token
+      AsyncStorage.getItem('accessToken').then(token => {
+        if (!token) {
+          setUserProfile(null);
+          setFavorites(new Set());
+          setCartItems(new Set());
+          return;
+        }
+        Promise.all([
+          api.get('/auth/profile').catch(() => ({ success: false })),
+          api.get('/products/favorites').catch(() => ({ success: false, data: [] })),
+          api.get('/products/cart').catch(() => ({ success: false, data: [] }))
+        ]).then(([profileRes, favRes, cartRes]) => {
+          if (profileRes.success && profileRes.data) {
+            setUserProfile(profileRes.data);
+          } else if (profileRes.success === false) {
+            setUserProfile(null);
+          }
+          if (favRes.success && Array.isArray(favRes.data)) {
+            setFavorites(new Set(favRes.data.map(item => item.productId)));
+          }
+          if (cartRes.success && Array.isArray(cartRes.data)) {
+            setCartItems(new Set(cartRes.data.map(item => item.productId)));
+          }
+        }).catch(err => console.warn('User auth data fetch error:', err));
+      });
+
     } catch (err) {
       console.error('Error loading home data:', err);
-    } finally {
       setLoading(false);
     }
   };
 
-  // Initial load on mount
+  // Initial load on mount with instant cache hydration
   useEffect(() => {
+    const hydrateCache = async () => {
+      try {
+        const [cachedProds, cachedCats, cachedBanners] = await Promise.all([
+          AsyncStorage.getItem('cached_home_products'),
+          AsyncStorage.getItem('cached_home_categories'),
+          AsyncStorage.getItem('cached_home_banners')
+        ]);
+        if (cachedProds) {
+          const parsed = JSON.parse(cachedProds);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setProducts(parsed);
+            setLoading(false);
+          }
+        }
+        if (cachedCats) {
+          const parsedCats = JSON.parse(cachedCats);
+          if (Array.isArray(parsedCats)) setCategories(parsedCats);
+        }
+        if (cachedBanners) {
+          const parsedBanners = JSON.parse(cachedBanners);
+          if (Array.isArray(parsedBanners) && parsedBanners.length > 0) setBanners(parsedBanners);
+        }
+      } catch (e) {
+        // Ignore cache error
+      }
+    };
+    hydrateCache();
     loadData();
   }, []);
 
-  // Refresh data whenever the tab is re-focused
+  // Refresh data whenever the tab is re-focused IF data is stale (>30s) without showing full skeleton
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-      loadData();
+      if (Date.now() - lastFetchRef.current > STALE_THRESHOLD_MS) {
+        loadData(true);
+      }
     });
     return unsubscribe;
   }, [navigation]);
 
-  const toggleFavorite = async (productId) => {
+  const toggleFavorite = useCallback(async (productId) => {
     try {
       const isFav = favorites.has(productId);
       if (isFav) {
@@ -504,9 +714,9 @@ export default function HomeScreen({ navigation }) {
     } catch (err) {
       console.error('Error toggling favorite:', err);
     }
-  };
+  }, [favorites]);
 
-  const handleAddToCart = async (productId) => {
+  const handleAddToCart = useCallback(async (productId) => {
     try {
       const inCart = cartItems.has(productId);
       if (!inCart) {
@@ -526,7 +736,7 @@ export default function HomeScreen({ navigation }) {
       const errorMsg = err?.message || 'Unable to add item to cart. Please try again.';
       Alert.alert('Error', errorMsg);
     }
-  };
+  }, [cartItems, navigation]);
 
   const handleSearchSubmit = () => {
     if (searchQuery.trim()) {
@@ -566,6 +776,93 @@ export default function HomeScreen({ navigation }) {
       return false;
     });
   };
+
+  const filteredProducts = useMemo(() => getFilteredProducts(), [products, selectedTab, categories]);
+  const trendingProducts = useMemo(() => products.filter(p => p.isTrending).slice(0, 4), [products]);
+  const newArrivals = useMemo(() => [...products].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5), [products]);
+  const bestSellers = useMemo(() => [...products].sort((a, b) => {
+    if (b.salesCount !== a.salesCount) return b.salesCount - a.salesCount;
+    return Number(b.price) - Number(a.price);
+  }).slice(0, 5), [products]);
+
+  const renderProductCard = useCallback((item, isHorizontal = false) => {
+    return (
+      <ProductCard
+        key={item.id}
+        item={item}
+        isHorizontal={isHorizontal}
+        isFav={favorites.has(item.id)}
+        inCart={cartItems.has(item.id)}
+        theme={theme}
+        fonts={fonts}
+        shadows={shadows}
+        navigation={navigation}
+        toggleFavorite={toggleFavorite}
+        handleAddToCart={handleAddToCart}
+      />
+    );
+  }, [favorites, cartItems, theme, fonts, shadows, navigation, toggleFavorite, handleAddToCart]);
+
+  const renderNewArrivalMinimalCard = useCallback((item) => {
+    const isFav = favorites.has(item.id);
+    const originalPrice = item?.originalPrice ? Number(item.originalPrice) : null;
+
+    return (
+      <TouchableOpacity
+        key={item.id}
+        style={[
+          styles.minimalNewArrivalCard,
+          { backgroundColor: theme.bg.card, borderColor: theme.border }
+        ]}
+        onPress={() => navigation.navigate('ProductDetails', { productId: item.id })}
+        activeOpacity={0.9}
+      >
+        <View style={[styles.minimalNewArrivalImgWrapper, { backgroundColor: theme.bg.hover }]}>
+          <Image
+            source={{ uri: (item.images && item.images[0]) || 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=300&q=80' }}
+            style={styles.minimalNewArrivalImg}
+            resizeMode="cover"
+          />
+
+          <View style={[styles.minimalNewTag, { backgroundColor: theme.brand[500] }]}>
+            <Text style={[styles.minimalNewTagText, { color: theme.brand[900], fontFamily: fonts.bold }]}>NEW</Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.minimalFavIconBtn}
+            onPress={() => toggleFavorite(item.id)}
+            activeOpacity={0.8}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <WishlistIcon
+              size={15}
+              color={isFav ? '#ef4444' : theme.brand[900]}
+              fill={isFav ? '#ef4444' : 'transparent'}
+            />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.minimalNewArrivalInfo}>
+          <Text style={[styles.minimalNewArrivalCategory, { fontFamily: fonts.bold, color: theme.brand[700] }]}>
+            NEW ARRIVAL
+          </Text>
+          <Text style={[styles.minimalNewArrivalTitle, { fontFamily: fonts.bold, color: theme.brand[900] }]} numberOfLines={1}>
+            {item.name}
+          </Text>
+          <View style={styles.minimalNewArrivalPriceRow}>
+            <Text style={[styles.minimalNewArrivalPrice, { fontFamily: fonts.bold, color: theme.brand[900] }]}>
+              ₹{Number(item.price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+            </Text>
+            {originalPrice ? (
+              <Text style={[styles.minimalNewArrivalOriginalPrice, { fontFamily: fonts.medium }]}>
+                ₹{originalPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  }, [favorites, theme, fonts, navigation, toggleFavorite]);
 
   if (loading && products.length === 0) {
     return (
@@ -617,32 +914,6 @@ export default function HomeScreen({ navigation }) {
       </View>
     );
   }
-
-  const filteredProducts = getFilteredProducts();
-  const trendingProducts = products.filter(p => p.isTrending).slice(0, 4);
-  const newArrivals = [...products].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5);
-  const bestSellers = [...products].sort((a, b) => {
-    if (b.salesCount !== a.salesCount) return b.salesCount - a.salesCount;
-    return Number(b.price) - Number(a.price);
-  }).slice(0, 5);
-
-  const renderProductCard = (item, isHorizontal = false) => {
-    return (
-      <ProductCard
-        key={item.id}
-        item={item}
-        isHorizontal={isHorizontal}
-        isFav={favorites.has(item.id)}
-        inCart={cartItems.has(item.id)}
-        theme={theme}
-        fonts={fonts}
-        shadows={shadows}
-        navigation={navigation}
-        toggleFavorite={toggleFavorite}
-        handleAddToCart={handleAddToCart}
-      />
-    );
-  };
 
   const renderReferralPopup = () => (
     <Modal
@@ -1046,6 +1317,177 @@ export default function HomeScreen({ navigation }) {
     );
   };
 
+  const renderSlotBookingModal = () => (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={showSlotBookingModal}
+      onRequestClose={() => setShowSlotBookingModal(false)}
+    >
+      <View style={styles.addressModalOverlay}>
+        <TouchableOpacity
+          style={styles.addressModalCloseArea}
+          activeOpacity={1}
+          onPress={() => setShowSlotBookingModal(false)}
+        />
+        <View style={[styles.addressModalSheet, { backgroundColor: theme.bg.card }]}>
+          <View style={styles.addressModalHandle} />
+
+          <View style={styles.addressModalHeader}>
+            <View>
+              <Text style={[styles.addressModalTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                Book Consultation Slot
+              </Text>
+              <Text style={{ fontFamily: fonts.medium, fontSize: 12, color: theme.text.secondary, marginTop: 2 }}>
+                Select your preferred service, date & time slot
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => setShowSlotBookingModal(false)} style={styles.addressModalCloseBtn}>
+              <X size={20} color={theme.text.secondary} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 30, gap: 18 }}>
+            
+            {/* Consultation Type Display (Single Service) */}
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontFamily: fonts.bold, fontSize: 12, color: theme.text.primary, letterSpacing: 0.5 }}>
+                SERVICE TYPE
+              </Text>
+              <View style={[
+                styles.slotTypeCard,
+                { backgroundColor: theme.brand[50], borderColor: theme.brand[500] }
+              ]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontFamily: fonts.bold, fontSize: 13.5, color: theme.brand[600] }}>
+                    Master Tailor Consultation
+                  </Text>
+                  <Text style={{ fontFamily: fonts.medium, fontSize: 11, color: theme.text.secondary, marginTop: 2 }}>
+                    Precision 1-on-1 measurement & bespoke styling guidance
+                  </Text>
+                </View>
+                <Check size={18} color={theme.brand[500]} />
+              </View>
+            </View>
+
+            {/* Date Selector */}
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontFamily: fonts.bold, fontSize: 12, color: theme.text.primary, letterSpacing: 0.5 }}>
+                SELECT DATE
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+                {bookingDateOptions.map((item) => {
+                  const isSelected = selectedBookingDateIndex === item.index;
+                  return (
+                    <TouchableOpacity
+                      key={item.index}
+                      style={[
+                        styles.slotDateChip,
+                        { backgroundColor: isSelected ? theme.brand[500] : theme.bg.input, borderColor: isSelected ? theme.brand[500] : theme.border }
+                      ]}
+                      activeOpacity={0.8}
+                      onPress={() => setSelectedBookingDateIndex(item.index)}
+                    >
+                      <Text style={{ fontFamily: fonts.bold, fontSize: 12, color: isSelected ? '#ffffff' : theme.text.primary }}>
+                        {item.label}
+                      </Text>
+                      <Text style={{ fontFamily: fonts.medium, fontSize: 11, color: isSelected ? 'rgba(255,255,255,0.85)' : theme.text.secondary }}>
+                        {item.dateStr}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            {/* Time Slots Selector (Backend Timings) */}
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontFamily: fonts.bold, fontSize: 12, color: theme.text.primary, letterSpacing: 0.5 }}>
+                SELECT TIME SLOT (BACKEND SETTINGS)
+              </Text>
+              {loadingSlots ? (
+                <View style={{ paddingVertical: 18, alignItems: 'center', justifyContent: 'center' }}>
+                  <ActivityIndicator size="small" color={theme.brand[500]} />
+                  <Text style={{ fontFamily: fonts.medium, fontSize: 11.5, color: theme.text.secondary, marginTop: 6 }}>
+                    Fetching available slots from system...
+                  </Text>
+                </View>
+              ) : availableBackendSlots.length === 0 ? (
+                <Text style={{ fontFamily: fonts.medium, fontSize: 12, color: theme.text.muted, marginVertical: 6 }}>
+                  No slots available for this date. Please select another date.
+                </Text>
+              ) : (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                  {availableBackendSlots.map((slot) => {
+                    const isSelected = selectedBookingTime === slot;
+                    return (
+                      <TouchableOpacity
+                        key={slot}
+                        style={[
+                          styles.slotTimeChip,
+                          { backgroundColor: isSelected ? theme.brand[500] : theme.bg.input, borderColor: isSelected ? theme.brand[500] : theme.border }
+                        ]}
+                        activeOpacity={0.8}
+                        onPress={() => setSelectedBookingTime(slot)}
+                      >
+                        <Clock size={13} color={isSelected ? '#ffffff' : theme.text.secondary} />
+                        <Text style={{ fontFamily: fonts.bold, fontSize: 12, color: isSelected ? '#ffffff' : theme.text.primary }}>
+                          {slot}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+
+            {/* Special Notes / Remarks */}
+            <View style={{ gap: 6 }}>
+              <Text style={{ fontFamily: fonts.medium, fontSize: 12, color: theme.text.secondary }}>
+                Special Instructions (Optional)
+              </Text>
+              <TextInput
+                style={[styles.slotNotesInput, { fontFamily: fonts.regular, backgroundColor: theme.bg.input, color: theme.text.primary, borderColor: theme.border }]}
+                placeholder="e.g. Wedding outfit measurement, urgent stitching request..."
+                placeholderTextColor={theme.text.muted}
+                value={bookingNotes}
+                onChangeText={setBookingNotes}
+                multiline
+              />
+            </View>
+
+            {/* Confirm CTA */}
+            <TouchableOpacity
+              style={styles.slotConfirmBtnWrapper}
+              activeOpacity={0.85}
+              onPress={handleConfirmSlotBooking}
+              disabled={isSubmittingBooking}
+            >
+              <LinearGradient
+                colors={[theme.brand[600], theme.brand[500]]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.slotConfirmBtn}
+              >
+                {isSubmittingBooking ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <>
+                    <Calendar size={18} color="#ffffff" style={{ marginRight: 8 }} />
+                    <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: '#ffffff', letterSpacing: 0.5 }}>
+                      CONFIRM BOOKING & SLOT
+                    </Text>
+                  </>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+
   const defaultHeaderOpacity = scrollY.interpolate({
     inputRange: [0, 50],
     outputRange: [1, 0],
@@ -1074,6 +1516,7 @@ export default function HomeScreen({ navigation }) {
     <View style={[styles.container, { backgroundColor: theme.bg.main }]}>
       {renderReferralPopup()}
       {renderAddressModal()}
+      {renderSlotBookingModal()}
 
       {/* Sticky Header Row */}
       <View style={styles.headerRow}>
@@ -1127,18 +1570,16 @@ export default function HomeScreen({ navigation }) {
         {/* Scrolled Header */}
         <Animated.View style={[styles.absoluteHeader, { opacity: scrolledHeaderOpacity, transform: [{ translateY: scrolledHeaderTranslateY }] }]}>
           <View style={{ flexDirection: 'row', width: '100%', alignItems: 'center', gap: 12 }}>
-            <View style={[styles.searchBarContainer, { backgroundColor: theme.bg.card, flex: 1 }, shadows.premium]}>
+            <TouchableOpacity 
+              style={[styles.searchBarContainer, { backgroundColor: theme.bg.card, flex: 1 }, shadows.premium]}
+              activeOpacity={0.9}
+              onPress={() => navigation.navigate('Search')}
+            >
               <Search size={18} color="#9e9e9e" style={styles.searchIcon} />
-              <TextInput
-                style={[styles.searchInput, { fontFamily: fonts.regular, color: theme.text.primary }]}
-                placeholder="Search.."
-                placeholderTextColor="#9e9e9e"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                onSubmitEditing={handleSearchSubmit}
-                returnKeyType="search"
-              />
-            </View>
+              <Text style={{ fontFamily: fonts.medium, color: theme.text.muted, fontSize: 13.5 }}>
+                Search suits, tuxedos, sherwanis...
+              </Text>
+            </TouchableOpacity>
             <TouchableOpacity style={[styles.actionBtn, shadows.premium]} activeOpacity={0.7} onPress={() => navigation.navigate('Wishlist')}>
               <WishlistIcon size={20} color="#1e1e1e" />
             </TouchableOpacity>
@@ -1158,18 +1599,16 @@ export default function HomeScreen({ navigation }) {
 
         {/* Search Input Row */}
         <View style={styles.searchRow}>
-          <View style={[styles.searchBarContainer, { backgroundColor: theme.bg.card }, shadows.premium]}>
+          <TouchableOpacity 
+            style={[styles.searchBarContainer, { backgroundColor: theme.bg.card }, shadows.premium]}
+            activeOpacity={0.9}
+            onPress={() => navigation.navigate('Search')}
+          >
             <Search size={18} color="#9e9e9e" style={styles.searchIcon} />
-            <TextInput
-              style={[styles.searchInput, { fontFamily: fonts.regular, color: theme.text.primary }]}
-              placeholder="Search.."
-              placeholderTextColor="#9e9e9e"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              onSubmitEditing={handleSearchSubmit}
-              returnKeyType="search"
-            />
-          </View>
+            <Text style={{ fontFamily: fonts.medium, color: theme.text.muted, fontSize: 13.5 }}>
+              Search suits, tuxedos, sherwanis...
+            </Text>
+          </TouchableOpacity>
         </View>
 
 
@@ -1193,6 +1632,48 @@ export default function HomeScreen({ navigation }) {
             navigation={navigation}
           />
         )}
+
+        {/* Book a Consultation Section (Between Categories & Offers) */}
+        <View style={[styles.consultationCard, shadows.premium, { backgroundColor: theme.bg.card, borderColor: theme.border }]}>
+          <View style={styles.consultationHeaderRow}>
+            <View style={[styles.consultationIconBg, { backgroundColor: theme.bg.hover }]}>
+              <Calendar size={20} color={theme.brand[800]} />
+            </View>
+            <View style={styles.consultationMeta}>
+              <Text style={[styles.consultationTitleText, { fontFamily: fonts.bold, color: theme.brand[900] }]}>
+                Book a Consultation
+              </Text>
+              <Text style={[styles.consultationSubText, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
+                Schedule 1-on-1 bespoke fitting & styling advice with our Master Tailors.
+              </Text>
+            </View>
+          </View>
+
+          {/* Minimalist Action Buttons */}
+          <View style={styles.consultationActionsRow}>
+            <TouchableOpacity
+              style={[styles.consultationPrimaryBtn, { backgroundColor: theme.brand[500] }]}
+              activeOpacity={0.85}
+              onPress={() => setShowSlotBookingModal(true)}
+            >
+              <Calendar size={15} color={theme.brand[900]} style={{ marginRight: 6 }} />
+              <Text style={[styles.consultationPrimaryBtnText, { fontFamily: fonts.bold, color: theme.brand[900] }]}>
+                Book a Slot
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.consultationSecondaryBtn, { backgroundColor: theme.bg.hover, borderColor: theme.border }]}
+              activeOpacity={0.85}
+              onPress={handleCallNow}
+            >
+              <Phone size={15} color={theme.brand[800]} style={{ marginRight: 6 }} />
+              <Text style={[styles.consultationSecondaryBtnText, { fontFamily: fonts.bold, color: theme.brand[800] }]}>
+                Call Now
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
         {/* Offers Section */}
         <SpecialOffersSection
@@ -1222,11 +1703,11 @@ export default function HomeScreen({ navigation }) {
         {/* Promo Reels Section */}
         <PromoReelsSection
           promos={promos}
-          cartItems={cartItems}
+          favorites={favorites}
+          toggleFavorite={toggleFavorite}
           navigation={navigation}
           theme={theme}
           fonts={fonts}
-          handleAddToCart={handleAddToCart}
         />
 
         {/* New Arrivals Section */}
@@ -1235,7 +1716,7 @@ export default function HomeScreen({ navigation }) {
           products={newArrivals}
           type="horizontal"
           onSeeAll={() => navigation.navigate('NewArrivals')}
-          renderProductCard={renderProductCard}
+          renderProductCard={renderNewArrivalMinimalCard}
           theme={theme}
           fonts={fonts}
           shadows={shadows}
@@ -1269,6 +1750,23 @@ export default function HomeScreen({ navigation }) {
         />
 
       </Animated.ScrollView>
+
+      {/* WhatsApp Sticky Floating Button */}
+      <TouchableOpacity
+        style={styles.whatsappStickyBtn}
+        activeOpacity={0.85}
+        onPress={handleWhatsAppPress}
+      >
+        <LinearGradient
+          colors={['#25D366', '#128C7E']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.whatsappGradient}
+        >
+          <WhatsAppIcon size={26} color="#ffffff" />
+          <View style={styles.whatsappBadgeDot} />
+        </LinearGradient>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -2224,5 +2722,218 @@ const styles = StyleSheet.create({
   savedAddressCardRight: {
     padding: 8,
     alignSelf: 'center',
+  },
+  whatsappStickyBtn: {
+    position: 'absolute',
+    bottom: 24,
+    right: 20,
+    zIndex: 9999,
+    elevation: 8,
+    shadowColor: '#128C7E',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+  },
+  whatsappGradient: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  whatsappBadgeDot: {
+    position: 'absolute',
+    top: 3,
+    right: 3,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#4ADE80',
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  consultationCard: {
+    marginHorizontal: 20,
+    marginTop: 2,
+    marginBottom: 12,
+    borderRadius: 18,
+    padding: 15,
+    borderWidth: 1,
+    gap: 12,
+  },
+  consultationHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  consultationIconBg: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  consultationMeta: {
+    flex: 1,
+  },
+  consultationTitleText: {
+    fontSize: 16,
+    marginBottom: 2,
+  },
+  consultationSubText: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  consultationActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  consultationPrimaryBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    shadowColor: '#D8BFD8',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  consultationPrimaryBtnText: {
+    fontSize: 12.5,
+  },
+  consultationSecondaryBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  consultationSecondaryBtnText: {
+    fontSize: 12.5,
+  },
+  slotTypeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
+  },
+  slotDateChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 80,
+  },
+  slotTimeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  slotNotesInput: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    fontSize: 13,
+    minHeight: 70,
+    textAlignVertical: 'top',
+  },
+  slotConfirmBtnWrapper: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginTop: 10,
+  },
+  slotConfirmBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+  },
+  minimalNewArrivalCard: {
+    width: 165,
+    borderRadius: 18,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginBottom: 8,
+    shadowColor: '#101828',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  minimalNewArrivalImgWrapper: {
+    width: '100%',
+    height: 185,
+    position: 'relative',
+  },
+  minimalNewArrivalImg: {
+    width: '100%',
+    height: '100%',
+  },
+  minimalNewTag: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  minimalNewTagText: {
+    fontSize: 9,
+    letterSpacing: 0.5,
+  },
+  minimalFavIconBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  minimalNewArrivalInfo: {
+    padding: 10,
+    gap: 3,
+  },
+  minimalNewArrivalCategory: {
+    fontSize: 9,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  minimalNewArrivalTitle: {
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  minimalNewArrivalPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+    marginTop: 4,
+  },
+  minimalNewArrivalPrice: {
+    fontSize: 14,
+  },
+  minimalNewArrivalOriginalPrice: {
+    fontSize: 11,
+    color: '#B8A8B8',
+    textDecorationLine: 'line-through',
   },
 });

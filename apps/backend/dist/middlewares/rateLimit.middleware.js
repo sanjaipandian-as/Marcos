@@ -35,10 +35,11 @@ function rateLimiter(options) {
                     message: 'This identifier is temporarily locked out due to abuse or too many attempts. Please try again later.',
                 });
             }
-            const count = await redis_js_1.default.incr(redisKey);
-            if (count === 1) {
-                await redis_js_1.default.pexpire(redisKey, options.windowMs);
-            }
+            const pipeline = redis_js_1.default.pipeline();
+            pipeline.incr(redisKey);
+            pipeline.pexpire(redisKey, options.windowMs);
+            const results = await pipeline.exec();
+            const count = results && results[0] && results[0][1] ? results[0][1] : 1;
             if (count > options.max) {
                 // Automatically block for 15 minutes if it violates the sensitive rate limit threshold
                 if (options.prefix === 'sensitive') {
@@ -70,10 +71,10 @@ function rateLimiter(options) {
         }
     };
 }
-// 300 requests per 15 minutes per IP
+// 1500 requests per 15 minutes per IP (for 10K concurrent users)
 exports.globalRateLimiter = rateLimiter({
     windowMs: 15 * 60 * 1000,
-    max: 300,
+    max: 1500,
     prefix: 'global',
     keyGenerator: (req) => req.ip || 'unknown-ip',
 });

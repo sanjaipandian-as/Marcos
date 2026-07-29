@@ -45,6 +45,15 @@ exports.storeLocationUpdateSchema = zod_1.z.object({
         imageUrl: zod_1.z.string().optional().nullable(),
     }),
 });
+const redis_js_1 = __importDefault(require("../config/redis.js"));
+async function invalidateStoreCache() {
+    try {
+        await redis_js_1.default.del('cache:stores:public');
+    }
+    catch (err) {
+        console.error('Failed to invalidate store cache:', err);
+    }
+}
 class StoreLocationController {
     /**
      * GET /admin/stores
@@ -87,6 +96,7 @@ class StoreLocationController {
                     state,
                 },
             });
+            await invalidateStoreCache();
             return res.status(201).json({
                 success: true,
                 message: 'Store location created successfully',
@@ -120,6 +130,7 @@ class StoreLocationController {
                     storeId: id,
                 },
             });
+            await invalidateStoreCache();
             return res.status(200).json({
                 success: true,
                 message: 'Store location updated successfully',
@@ -150,6 +161,7 @@ class StoreLocationController {
                     storeId: id,
                 },
             });
+            await invalidateStoreCache();
             return res.status(200).json({
                 success: true,
                 message: 'Store location deleted successfully',
@@ -164,14 +176,21 @@ class StoreLocationController {
      */
     static async getPublicStores(req, res, next) {
         try {
+            const cacheKey = 'cache:stores:public';
+            const cached = await redis_js_1.default.get(cacheKey);
+            if (cached) {
+                return res.status(200).json(JSON.parse(cached));
+            }
             const stores = await db_js_1.default.storeLocation.findMany({
                 where: { isActive: true },
                 orderBy: { name: 'asc' },
             });
-            return res.status(200).json({
+            const responsePayload = {
                 success: true,
                 data: stores,
-            });
+            };
+            await redis_js_1.default.set(cacheKey, JSON.stringify(responsePayload), 'EX', 600); // 10 minutes
+            return res.status(200).json(responsePayload);
         }
         catch (error) {
             next(error);

@@ -68,7 +68,7 @@ export class AdminCategoryController {
         },
       });
 
-      await redis.del('cache:categories');
+      await redis.del('cache:categories', 'cache:all_categories_tree');
 
       return res.status(201).json({
         success: true,
@@ -111,7 +111,7 @@ export class AdminCategoryController {
         },
       });
 
-      await redis.del('cache:categories');
+      await redis.del('cache:categories', 'cache:all_categories_tree');
 
       return res.status(200).json({
         success: true,
@@ -157,7 +157,7 @@ export class AdminCategoryController {
         },
       });
 
-      await redis.del('cache:categories');
+      await redis.del('cache:categories', 'cache:all_categories_tree');
 
       return res.status(200).json({
         success: true,
@@ -183,7 +183,7 @@ export class AdminCategoryController {
           })
         )
       );
-      await redis.del('cache:categories');
+      await redis.del('cache:categories', 'cache:all_categories_tree');
 
       return res.status(200).json({
         success: true,

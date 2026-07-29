@@ -1,8 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import prisma from '../config/db.js';
-// Trigger IDE ts re-evaluation
 import { createAuditLog } from '../utils/audit.js';
+import redis from '../config/redis.js';
+
+async function invalidatePromosCache() {
+  try {
+    await redis.del('cache:promos:active');
+  } catch (err) {
+    console.error('Failed to invalidate promos cache:', err);
+  }
+}
 
 export const promoCreateSchema = z.object({
   body: z.object({
@@ -150,11 +158,21 @@ export class PromoContentController {
   /** Public: Get active promo content for mobile app */
   static async getActivePromos(req: Request, res: Response, next: NextFunction) {
     try {
+      const cacheKey = 'cache:promos:active';
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return res.status(200).json(JSON.parse(cached));
+      }
+
       const promos = await prisma.promoContent.findMany({
         where: { isActive: true },
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
       });
-      res.json({ success: true, data: promos });
+
+      const responsePayload = { success: true, data: promos };
+      await redis.set(cacheKey, JSON.stringify(responsePayload), 'EX', 300);
+
+      res.json(responsePayload);
     } catch (error) {
       next(error);
     }

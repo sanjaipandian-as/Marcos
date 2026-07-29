@@ -21,6 +21,7 @@ const router = Router();
 
 router.use('/auth', authRoutes);
 router.use('/products', productRoutes); // Maps both `/products` and `/cart` since they are combined
+router.use('/favorites', productRoutes); // Alias for direct /favorites endpoints
 router.use('/measurements', measurementRoutes);
 router.use('/appointments', appointmentRoutes);
 router.use('/visits', visitRoutes);

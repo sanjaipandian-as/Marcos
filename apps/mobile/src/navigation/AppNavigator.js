@@ -23,6 +23,7 @@ import MoreScreen from '../screens/core/MoreScreen';
 // Shop Screens
 import ProductsCatalogScreen from '../screens/shop/ProductsCatalogScreen';
 import ProductDetailsScreen from '../screens/shop/ProductDetailsScreen';
+import SearchScreen from '../screens/shop/SearchScreen';
 
 import TrendingProductsScreen from '../screens/shop/TrendingProductsScreen';
 import NewArrivalsScreen from '../screens/shop/NewArrivalsScreen';
@@ -43,6 +44,7 @@ import BespokeBookingScreen from '../screens/services/BespokeBookingScreen';
 // Account Screens
 import ProfileScreen from '../screens/account/ProfileScreen';
 import LoyaltyDashboardScreen from '../screens/account/LoyaltyDashboardScreen';
+import InviteEarnScreen from '../screens/account/InviteEarnScreen';
 import NotificationHistoryScreen from '../screens/account/NotificationHistoryScreen';
 import SupportTicketScreen from '../screens/account/SupportTicketScreen';
 import SupportTicketChatScreen from '../screens/account/SupportTicketChatScreen';
@@ -51,6 +53,8 @@ import OrderTrackingScreen from '../screens/account/OrderTrackingScreen';
 import AccountDetailsScreen from '../screens/account/AccountDetailsScreen';
 import PaymentsScreen from '../screens/account/PaymentsScreen';
 import PrivacyPolicyScreen from '../screens/account/PrivacyPolicyScreen';
+import RefundPolicyScreen from '../screens/account/RefundPolicyScreen';
+import ShippingPolicyScreen from '../screens/account/ShippingPolicyScreen';
 
 // Icon library
 import {
@@ -241,7 +245,7 @@ function TabNavigator() {
       <Tab.Screen
         name="BookingsTab"
         component={AppointmentBookingScreen}
-        options={{ tabBarLabel: 'Book' }}
+        options={{ tabBarLabel: 'Bookings' }}
       />
 
       <Tab.Screen
@@ -261,6 +265,9 @@ export function AppNavigator() {
       <Stack.Screen name="MainTabs" component={TabNavigator} />
 
       {/* Nested secondary pages */}
+      <Stack.Screen name="Browse" component={ProductsCatalogScreen} />
+      <Stack.Screen name="Search" component={SearchScreen} />
+      <Stack.Screen name="ProductsCatalog" component={ProductsCatalogScreen} />
       <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />
       <Stack.Screen name="Reels" component={ReelsScreen} />
       <Stack.Screen name="More" component={MoreScreen} />
@@ -268,6 +275,7 @@ export function AppNavigator() {
       <Stack.Screen name="Checkout" component={CheckoutScreen} />
       <Stack.Screen name="Wishlist" component={WishlistScreen} />
       <Stack.Screen name="Loyalty" component={LoyaltyDashboardScreen} />
+      <Stack.Screen name="InviteEarn" component={InviteEarnScreen} />
       <Stack.Screen name="NotificationHistory" component={NotificationHistoryScreen} />
       <Stack.Screen name="Support" component={SupportTicketScreen} />
       <Stack.Screen name="SupportTicketChat" component={SupportTicketChatScreen} />
@@ -276,6 +284,8 @@ export function AppNavigator() {
       <Stack.Screen name="AccountDetails" component={AccountDetailsScreen} />
       <Stack.Screen name="Payments" component={PaymentsScreen} />
       <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+      <Stack.Screen name="RefundPolicy" component={RefundPolicyScreen} />
+      <Stack.Screen name="ShippingPolicy" component={ShippingPolicyScreen} />
       <Stack.Screen name="Appointments" component={AppointmentBookingScreen} />
       <Stack.Screen name="StoreVisits" component={StoreVisitRequestScreen} />
       <Stack.Screen name="BespokeBooking" component={BespokeBookingScreen} />
@@ -297,6 +307,8 @@ export function RootNavigator() {
       <Stack.Screen name="MainApp" component={AppNavigator} />
       <Stack.Screen name="AuthStack" component={AuthNavigator} />
       <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+      <Stack.Screen name="RefundPolicy" component={RefundPolicyScreen} />
+      <Stack.Screen name="ShippingPolicy" component={ShippingPolicyScreen} />
       <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} />
     </Stack.Navigator>
   );

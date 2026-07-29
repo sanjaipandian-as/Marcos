@@ -1,24 +1,80 @@
-import React, { useEffect } from 'react';
-import { View, ScrollView, TouchableOpacity, Text, StyleSheet, Linking } from 'react-native';
+import React, { useEffect, useRef, useState, memo } from 'react';
+import { View, ScrollView, TouchableOpacity, Text, StyleSheet, Linking, Image, ActivityIndicator } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { ShoppingBag, Sparkles, ExternalLink } from 'lucide-react-native';
-import { CustomCartAddIcon, CustomCartAddedIcon } from '../CartIcons';
+import { useEventListener } from 'expo';
+import { ShoppingBag, Sparkles, ExternalLink, Play } from 'lucide-react-native';
+import WishlistIcon from '../common/WishlistIcon';
 import SectionHeader from './SectionHeader';
 import { useCachedVideoUrl } from '../../utils/useCachedVideoUrl';
 
-function PromoReelItemCard({ promo, onVideoPress, onShopPress, onAddToCart, inCart, theme, fonts }) {
-  const player = useVideoPlayer(promo.videoUrl, (p) => {
+const PromoReelItemCard = memo(function PromoReelItemCard({ promo, onVideoPress, onShopPress, onToggleFav, isFav, theme, fonts, isActive }) {
+  const isMounted = useRef(false);
+  const [isReady, setIsReady] = useState(false);
+  const [hasError, setHasError] = useState(false);
+
+  // Cache the video URL!
+  const cachedVideoUrl = useCachedVideoUrl(promo.videoUrl);
+
+  const player = useVideoPlayer(cachedVideoUrl || promo.videoUrl, (p) => {
     p.loop = true;
     p.muted = true;
-    p.play();
+    if (isActive) {
+      p.play();
+    }
   });
 
-  useEffect(() => {
-    if (player) {
-      player.loop = true;
-      player.play();
+  // Listen to status changes of the player
+  useEventListener(player, 'statusChange', ({ status, error }) => {
+    if (status === 'readyToPlay') {
+      setIsReady(true);
+      setHasError(false);
+      if (isActive) {
+        player.play();
+      }
+    } else if (status === 'error') {
+      setHasError(true);
+      console.warn('Video load error in PromoReelItemCard:', error);
     }
+  });
+
+  // Dynamically play/pause based on active/inactive status
+  useEffect(() => {
+    if (!player) return;
+    if (isActive) {
+      if (player.status === 'readyToPlay') {
+        player.play();
+      }
+    } else {
+      player.pause();
+    }
+  }, [isActive, player]);
+
+  // Keep player source updated if cached URL finishes downloading
+  useEffect(() => {
+    if (player && cachedVideoUrl) {
+      try {
+        player.replaceAsync(cachedVideoUrl);
+        if (isActive) {
+          player.play();
+        }
+      } catch (e) {
+        console.warn('Error replacing player source with cached URL:', e);
+      }
+    }
+  }, [player, cachedVideoUrl, isActive]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+      try {
+        player?.pause();
+      } catch (_) {}
+    };
   }, [player]);
+
+  const fallbackThumbnail = promo.thumbnailUrl || 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=500&q=80';
 
   return (
     <View style={styles.promoReelWrapper}>
@@ -30,17 +86,42 @@ function PromoReelItemCard({ promo, onVideoPress, onShopPress, onAddToCart, inCa
           { backgroundColor: theme.bg.card }
         ]}
       >
-        {/* Wrap video in pointerEvents="none" so it cannot steal touches on Android */}
-        <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-          <VideoView
-            player={player}
-            style={styles.promoReelImage}
-            nativeControls={false}
-            contentFit="cover"
-          />
-        </View>
+        {/* Thumbnail Background (always rendered as background/placeholder) */}
+        <Image
+          source={{ uri: fallbackThumbnail }}
+          style={StyleSheet.absoluteFillObject}
+          resizeMode="cover"
+        />
 
-        {/* Dark gradient overlay covering the entire card to make white text pop */}
+        {/* Video Player - Only show when ready and active */}
+        {isActive && isReady && !hasError && (
+          <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+            <VideoView
+              player={player}
+              style={styles.promoReelImage}
+              nativeControls={false}
+              contentFit="cover"
+            />
+          </View>
+        )}
+
+        {/* Loading Spinner / Placeholder when active but not ready */}
+        {isActive && !isReady && !hasError && (
+          <View style={styles.loaderOverlay} pointerEvents="none">
+            <ActivityIndicator size="large" color={theme.brand[500]} />
+          </View>
+        )}
+
+        {/* Soft Play Overlay to indicate playable media if not playing */}
+        {(!isActive || !isReady) && (
+          <View style={styles.playButtonOverlay} pointerEvents="none">
+            <View style={styles.playButtonCircle}>
+              <Play size={20} color="#ffffff" fill="#ffffff" style={{ marginLeft: 3 }} />
+            </View>
+          </View>
+        )}
+
+        {/* Dark gradient overlay */}
         <View style={styles.promoReelOverlayGradient} pointerEvents="none" />
 
         {/* Top Left Floating Badge */}
@@ -52,7 +133,6 @@ function PromoReelItemCard({ promo, onVideoPress, onShopPress, onAddToCart, inCa
 
         {/* Bottom Info Overlay */}
         <View style={[styles.promoReelBottomInfo, { paddingBottom: 40 }]} pointerEvents="none">
-          {/* Title & Description */}
           <Text style={[styles.promoReelTitleText, { fontFamily: fonts.bold }]} numberOfLines={1}>
             {promo.title}
           </Text>
@@ -64,40 +144,40 @@ function PromoReelItemCard({ promo, onVideoPress, onShopPress, onAddToCart, inCa
         </View>
       </TouchableOpacity>
 
-      {/* Floating Tinder-style Action Buttons row overlapping the bottom edge of the card */}
+      {/* Floating Action Buttons row */}
       <View style={styles.promoReelFloatingActions}>
-        {/* Shopping Button (Tinder Flame style - Solid Background) */}
+        {/* Shopping Button */}
         <TouchableOpacity
           style={[styles.promoReelActionRoundBtnLarge, { backgroundColor: theme.brand[500] }]}
           activeOpacity={0.8}
           onPress={onShopPress}
         >
           {(promo.linkType === 'PRODUCT' || promo.linkType === 'BOTH') ? (
-            <ShoppingBag size={24} color="#ffffff" />
+            <ShoppingBag size={24} color={theme.brand[900]} />
           ) : (
-            <Sparkles size={24} color="#ffffff" />
+            <Sparkles size={24} color={theme.brand[900]} />
           )}
         </TouchableOpacity>
 
-        {/* Add to Cart Button (Only if linked to a specific product) - White Button */}
+        {/* Wishlist Button (Only if linked to a specific product) */}
         {(promo.linkType === 'PRODUCT' || promo.linkType === 'BOTH') && promo.productId && (
           <TouchableOpacity
-            style={[styles.promoReelActionRoundBtnLarge, { backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0' }]}
+            style={[styles.promoReelActionRoundBtnLarge, { backgroundColor: '#ffffff', borderWidth: 1, borderColor: theme.border }]}
             activeOpacity={0.8}
-            onPress={onAddToCart}
+            onPress={onToggleFav}
           >
-            {inCart ? (
-              <CustomCartAddedIcon color={theme.brand[500]} size={24} />
-            ) : (
-              <CustomCartAddIcon color={theme.brand[500]} size={24} />
-            )}
+            <WishlistIcon
+              size={22}
+              color={isFav ? '#ef4444' : theme.brand[900]}
+              fill={isFav ? '#ef4444' : 'transparent'}
+            />
           </TouchableOpacity>
         )}
 
-        {/* External Link Button (Only if BOTH and has external URL) */}
+        {/* External Link Button */}
         {promo.linkType === 'BOTH' && promo.externalUrl && (
           <TouchableOpacity
-            style={[styles.promoReelActionRoundBtnLarge, { backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0' }]}
+            style={[styles.promoReelActionRoundBtnLarge, { backgroundColor: '#ffffff', borderWidth: 1, borderColor: theme.border }]}
             activeOpacity={0.8}
             onPress={() => Linking.openURL(promo.externalUrl).catch(() => {})}
           >
@@ -107,10 +187,20 @@ function PromoReelItemCard({ promo, onVideoPress, onShopPress, onAddToCart, inCa
       </View>
     </View>
   );
-}
+});
 
-export default function PromoReelsSection({ promos, cartItems, navigation, theme, fonts, handleAddToCart }) {
+const PromoReelsSection = memo(function PromoReelsSection({ promos, favorites, toggleFavorite, navigation, theme, fonts }) {
   if (!promos || promos.length === 0) return null;
+
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  const handleScroll = (event) => {
+    const scrollX = event.nativeEvent.contentOffset.x;
+    const index = Math.round(scrollX / 314); // 300 (card width) + 14 (gap)
+    if (index !== activeIndex && index >= 0 && index < promos.length) {
+      setActiveIndex(index);
+    }
+  };
 
   return (
     <View style={{ marginBottom: 16 }}>
@@ -120,7 +210,15 @@ export default function PromoReelsSection({ promos, cartItems, navigation, theme
         fonts={fonts}
         showSeeAll={false}
       />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 14 }}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 20, gap: 14 }}
+        snapToInterval={314}
+        decelerationRate="fast"
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+      >
         {promos.map((promo, index) => {
           const handleVideoPress = () => {
             navigation.navigate('Reels', { promos, initialIndex: index });
@@ -134,15 +232,11 @@ export default function PromoReelsSection({ promos, cartItems, navigation, theme
             }
           };
 
-          const inCart = promo.productId ? cartItems.has(promo.productId) : false;
+          const isFav = promo.productId ? (favorites ? favorites.has(promo.productId) : false) : false;
           
-          const handleCartAction = () => {
+          const handleWishlistAction = () => {
             if (!promo.productId) return;
-            if (inCart) {
-              navigation.navigate('Cart');
-            } else {
-              handleAddToCart(promo.productId);
-            }
+            toggleFavorite(promo.productId);
           };
 
           return (
@@ -151,26 +245,29 @@ export default function PromoReelsSection({ promos, cartItems, navigation, theme
               promo={promo}
               onVideoPress={handleVideoPress}
               onShopPress={handleShopPress}
-              onAddToCart={handleCartAction}
-              inCart={inCart}
+              onToggleFav={handleWishlistAction}
+              isFav={isFav}
               theme={theme}
               fonts={fonts}
+              isActive={index === activeIndex}
             />
           );
         })}
       </ScrollView>
     </View>
   );
-}
+});
+
+export default PromoReelsSection;
 
 const styles = StyleSheet.create({
   promoReelWrapper: {
     width: 300,
-    height: 460, // Total space reserved (card + floating buttons)
+    height: 460,
   },
   promoReelCard: {
     width: '100%',
-    height: 420, // Base card height without buttons
+    height: 420,
     borderRadius: 24,
     overflow: 'hidden',
     position: 'relative',
@@ -187,7 +284,29 @@ const styles = StyleSheet.create({
   },
   promoReelOverlayGradient: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.25)', // Smooth darkening to make text readable
+    backgroundColor: 'rgba(0,0,0,0.25)',
+  },
+  loaderOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playButtonOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 4,
+  },
+  playButtonCircle: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
   },
   promoReelTopLeft: {
     position: 'absolute',
@@ -230,7 +349,7 @@ const styles = StyleSheet.create({
   },
   promoReelFloatingActions: {
     position: 'absolute',
-    bottom: 14, // Centered on the bottom edge of the card
+    bottom: 14,
     left: 0,
     right: 0,
     flexDirection: 'row',

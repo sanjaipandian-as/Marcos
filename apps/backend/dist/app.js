@@ -8,6 +8,7 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
+const compression_1 = __importDefault(require("compression"));
 const path_1 = __importDefault(require("path"));
 const index_js_1 = __importDefault(require("./routes/index.js"));
 const error_middleware_js_1 = __importDefault(require("./middlewares/error.middleware.js"));
@@ -17,8 +18,13 @@ const environment_js_1 = require("./config/environment.js");
 const logger_js_1 = __importDefault(require("./utils/logger.js"));
 const app = (0, express_1.default)();
 exports.app = app;
+// 0. Response Compression (gzip/deflate for payloads > 1KB)
+app.use((0, compression_1.default)({ threshold: 1024 }));
 // Custom HTTP request logger middleware
 app.use((req, res, next) => {
+    if (req.originalUrl.startsWith('/uploads') || req.originalUrl === '/') {
+        return next();
+    }
     const start = Date.now();
     res.on('finish', () => {
         const duration = Date.now() - start;
@@ -75,8 +81,11 @@ app.use(express_1.default.urlencoded({ limit: '2mb', extended: true }));
 app.use((0, cookie_parser_1.default)());
 // 3. Rate limiting (global)
 app.use(rateLimit_middleware_js_1.globalRateLimiter);
-// 4. Local Uploads Static Folder
-app.use('/uploads', express_1.default.static(path_1.default.join(process.cwd(), 'uploads')));
+// 4. Local Uploads Static Folder with Cache-Control headers
+app.use('/uploads', express_1.default.static(path_1.default.join(process.cwd(), 'uploads'), {
+    maxAge: '7d',
+    immutable: true,
+}));
 // 5. Root health-check route — open, no auth required
 app.get('/', (_req, res) => {
     res.setHeader('Content-Type', 'text/html');

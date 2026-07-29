@@ -8,23 +8,27 @@ const ioredis_1 = __importDefault(require("ioredis"));
 const env_js_1 = __importDefault(require("./env.js"));
 const environment_js_1 = require("./environment.js");
 let redis;
+const redisOptions = {
+    maxRetriesPerRequest: null,
+    keepAlive: 10000,
+    connectTimeout: 5000,
+    enableReadyCheck: true,
+    retryStrategy(times) {
+        const delay = Math.min(times * 50, 2000);
+        return delay;
+    },
+};
 if (environment_js_1.isDevOrTest) {
-    // If we are in test or dev mode, use ioredis-mock to save real Redis commands
-    // and prevent Upstash rate limiting issues.
     try {
         const RedisMock = require('ioredis-mock');
         exports.redis = redis = new RedisMock();
     }
     catch (err) {
-        exports.redis = redis = new ioredis_1.default(env_js_1.default.REDIS_URL, {
-            maxRetriesPerRequest: null,
-        });
+        exports.redis = redis = new ioredis_1.default(env_js_1.default.REDIS_URL, redisOptions);
     }
 }
 else {
-    exports.redis = redis = new ioredis_1.default(env_js_1.default.REDIS_URL, {
-        maxRetriesPerRequest: null,
-    });
+    exports.redis = redis = new ioredis_1.default(env_js_1.default.REDIS_URL, redisOptions);
 }
 redis.on('error', (err) => {
     console.error('Redis Client Error:', err);

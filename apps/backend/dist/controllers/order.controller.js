@@ -51,6 +51,20 @@ exports.orderCheckoutSchema = zod_1.z.object({
         path: ["quickOrderReason"]
     }),
 });
+async function invalidateUserOrdersCache(userId) {
+    try {
+        let cursor = '0';
+        do {
+            const [nextCursor, keys] = await redis_js_1.default.scan(cursor, 'MATCH', `cache:orders:user:${userId}:*`, 'COUNT', '100');
+            cursor = nextCursor;
+            if (keys.length > 0)
+                await redis_js_1.default.del(...keys);
+        } while (cursor !== '0');
+    }
+    catch (err) {
+        console.error('Failed to invalidate user orders cache:', err);
+    }
+}
 class OrderController {
     /**
      * Helper: Retrieve fitting booking associated with an order's invoice number
@@ -100,7 +114,12 @@ class OrderController {
         const userId = req.user.id;
         const { page = 1, limit = 10 } = req.query;
         const skip = (Number(page) - 1) * Number(limit);
+        const cacheKey = `cache:orders:user:${userId}:${page}:${limit}`;
         try {
+            const cached = await redis_js_1.default.get(cacheKey);
+            if (cached) {
+                return res.status(200).json(JSON.parse(cached));
+            }
             const [orders, total] = await Promise.all([
                 db_js_1.default.order.findMany({
                     where: { userId },
@@ -160,7 +179,7 @@ class OrderController {
                     booking,
                 };
             });
-            return res.status(200).json({
+            const responsePayload = {
                 success: true,
                 data: ordersWithBookings,
                 pagination: {
@@ -169,7 +188,9 @@ class OrderController {
                     total,
                     pages: Math.ceil(total / Number(limit)),
                 },
-            });
+            };
+            await redis_js_1.default.set(cacheKey, JSON.stringify(responsePayload), 'EX', 60);
+            return res.status(200).json(responsePayload);
         }
         catch (error) {
             next(error);
@@ -481,6 +502,9 @@ class OrderController {
                         triggeredBy: req.user.fullName,
                     },
                 });
+            }
+            if (order.userId) {
+                await invalidateUserOrdersCache(order.userId);
             }
             return res.status(200).json({
                 success: true,

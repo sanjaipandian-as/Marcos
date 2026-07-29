@@ -6,8 +6,16 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PromoContentController = exports.promoUpdateSchema = exports.promoCreateSchema = void 0;
 const zod_1 = require("zod");
 const db_js_1 = __importDefault(require("../config/db.js"));
-// Trigger IDE ts re-evaluation
 const audit_js_1 = require("../utils/audit.js");
+const redis_js_1 = __importDefault(require("../config/redis.js"));
+async function invalidatePromosCache() {
+    try {
+        await redis_js_1.default.del('cache:promos:active');
+    }
+    catch (err) {
+        console.error('Failed to invalidate promos cache:', err);
+    }
+}
 exports.promoCreateSchema = zod_1.z.object({
     body: zod_1.z.object({
         title: zod_1.z.string().min(1),
@@ -142,11 +150,18 @@ class PromoContentController {
     /** Public: Get active promo content for mobile app */
     static async getActivePromos(req, res, next) {
         try {
+            const cacheKey = 'cache:promos:active';
+            const cached = await redis_js_1.default.get(cacheKey);
+            if (cached) {
+                return res.status(200).json(JSON.parse(cached));
+            }
             const promos = await db_js_1.default.promoContent.findMany({
                 where: { isActive: true },
                 orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
             });
-            res.json({ success: true, data: promos });
+            const responsePayload = { success: true, data: promos };
+            await redis_js_1.default.set(cacheKey, JSON.stringify(responsePayload), 'EX', 300);
+            res.json(responsePayload);
         }
         catch (error) {
             next(error);

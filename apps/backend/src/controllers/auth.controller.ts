@@ -341,12 +341,6 @@ export class AuthController {
         ? 'SETUP_REQUIRED'
         : 'PASSWORD_REQUIRED';
 
-      const end = process.hrtime.bigint();
-      const elapsedMs = Number(end - start) / 1000000;
-      if (elapsedMs < 150) {
-        await new Promise(resolve => setTimeout(resolve, 150 - elapsedMs));
-      }
-
       return res.status(200).json({ 
         success: true, 
         status: state,
@@ -1015,6 +1009,12 @@ export class AuthController {
   static async getProfile(req: Request, res: Response, next: NextFunction) {
     try {
       const userId = req.user!.id;
+      const cacheKey = `cache:profile:${userId}`;
+
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return res.status(200).json(JSON.parse(cached));
+      }
 
       const [user, orderCount, rewardCount] = await Promise.all([
         prisma.user.findUnique({
@@ -1065,7 +1065,10 @@ export class AuthController {
         }
       };
 
-      return res.status(200).json({ success: true, data: userData });
+      const responsePayload = { success: true, data: userData };
+      await redis.set(cacheKey, JSON.stringify(responsePayload), 'EX', 120);
+
+      return res.status(200).json(responsePayload);
     } catch (error) {
       next(error);
     }
@@ -1101,6 +1104,9 @@ export class AuthController {
           referralCode: true,
         },
       });
+
+      // Invalidate profile cache
+      await redis.del(`cache:profile:${userId}`);
 
       await createAuditLog({
         userId,

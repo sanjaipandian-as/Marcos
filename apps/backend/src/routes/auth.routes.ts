@@ -26,6 +26,7 @@ const router = Router();
 
 router.post('/register', validate(registerSchema), AuthController.register);
 router.post('/login/check', identifyIpLimiter, identifyTargetLimiter, validate(checkIdentifierSchema), AuthController.checkIdentifier);
+router.post('/check-identifier', identifyIpLimiter, identifyTargetLimiter, validate(checkIdentifierSchema), AuthController.checkIdentifier);
 router.post('/login', sensitiveRateLimiter, validate(loginSchema), AuthController.login);
 router.post('/setup-password', sensitiveRateLimiter, validate(setupPasswordSchema), AuthController.setupPassword);
 router.post('/otp/send', sensitiveRateLimiter, validate(otpSendSchema), AuthController.sendOtp);
@@ -39,6 +40,7 @@ router.post('/forgot-password/verify', sensitiveRateLimiter, validate(verifyRese
 router.post('/reset-password', sensitiveRateLimiter, validate(resetPasswordSchema), AuthController.resetPassword);
 router.get('/profile', authenticate, AuthController.getProfile);
 router.put('/profile', authenticate, validate(updateProfileSchema), AuthController.updateProfile);
+router.patch('/profile', authenticate, validate(updateProfileSchema), AuthController.updateProfile);
 router.post('/profile/verify-password', authenticate, validate(verifyPasswordSchema), AuthController.verifyProfilePassword);
 router.post('/profile/request-update', authenticate, validate(requestContactUpdateSchema), AuthController.requestContactUpdate);
 router.post('/profile/confirm-update', authenticate, validate(confirmContactUpdateSchema), AuthController.confirmContactUpdate);
