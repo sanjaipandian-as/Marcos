@@ -1,8 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import prisma from '../config/db.js';
-// Trigger IDE ts re-evaluation
 import { createAuditLog } from '../utils/audit.js';
+import redis from '../config/redis.js';
+
+async function invalidateOffersCache() {
+  try {
+    await redis.del('cache:offers:active', 'cache:active_offers');
+  } catch (err) {
+    console.error('Failed to invalidate offers cache:', err);
+  }
+}
 
 export const offerCreateSchema = z.object({
   body: z.object({
@@ -186,6 +194,12 @@ export class OfferController {
    */
   static async getActiveOffers(req: Request, res: Response, next: NextFunction) {
     try {
+      const cacheKey = 'cache:offers:active';
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return res.status(200).json(JSON.parse(cached));
+      }
+
       const now = new Date();
       const offers = await prisma.offer.findMany({
         where: {
@@ -196,10 +210,14 @@ export class OfferController {
         orderBy: { createdAt: 'desc' },
       });
 
-      return res.status(200).json({
+      const responsePayload = {
         success: true,
         data: offers,
-      });
+      };
+
+      await redis.set(cacheKey, JSON.stringify(responsePayload), 'EX', 300);
+
+      return res.status(200).json(responsePayload);
     } catch (error) {
       next(error);
     }

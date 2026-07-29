@@ -9,9 +9,9 @@ import {
 } from 'react-native';
 import { useTheme } from '../../styles/ThemeContext';
 import { APP_CONFIG } from '../../config/app.config';
-import { ChevronLeft, Shield, Lock, Eye, Baby, Trash2, Cpu, FileCheck, Mail, PhoneCall, Key } from 'lucide-react-native';
+import { ChevronLeft, RefreshCw, AlertCircle, ShieldAlert, FileText, CheckCircle2, PhoneCall, Mail } from 'lucide-react-native';
 
-export default function PrivacyPolicyScreen({ navigation }) {
+export default function RefundPolicyScreen({ navigation }) {
   const { theme, fonts, shadows } = useTheme();
 
   const storeName = APP_CONFIG.STORE_NAME || 'MARCOS Bespoke Tailoring';
@@ -30,7 +30,7 @@ export default function PrivacyPolicyScreen({ navigation }) {
           <ChevronLeft size={20} color="#1e1e1e" />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-          Privacy Policy
+          Refund & Cancellation
         </Text>
         <View style={{ width: 40 }} />
       </View>
@@ -39,131 +39,139 @@ export default function PrivacyPolicyScreen({ navigation }) {
         
         {/* Banner Card */}
         <View style={[styles.bannerCard, { backgroundColor: theme.brand[500] }, shadows.premium]}>
-          <Shield size={28} color="#ffffff" style={{ marginBottom: 8 }} />
+          <RefreshCw size={28} color="#ffffff" style={{ marginBottom: 8 }} />
           <Text style={[styles.bannerTitle, { fontFamily: fonts.bold }]}>
-            Privacy & Data Protection
+            Refund & Cancellation Policy
           </Text>
           <Text style={[styles.bannerSub, { fontFamily: fonts.medium }]}>
-            Compliant with GDPR & IT Act Regulations. Protecting your sizing profile, measurements, and personal data.
+            Applicable across all digital interfaces, mobile applications, and offline fulfillment centers of {storeName}.
           </Text>
         </View>
 
-        {/* Section 1: Overview & Consent */}
+        {/* Section 1: Overview & Disclaimer */}
         <View style={[styles.cardSection, shadows.premium, { backgroundColor: theme.bg.card }]}>
           <View style={styles.cardHeaderRow}>
-            <Eye size={18} color={theme.brand[500]} />
+            <FileText size={18} color={theme.brand[500]} />
             <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-              1. Overview & Data Consent
+              1. Overview & Disclaimer
             </Text>
           </View>
           <Text style={[styles.bodyText, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
-            At {storeName}, your privacy is paramount. By using our mobile application, self-styling design tools, measurement entry workflows, and payment features, you give your unambiguous consent to the collection and processing of your Personal Data as outlined in this policy.
+            The details of customer-opted and custom-made products, services, or product specifications (weight, stitching seam strength, colors, handwork details, sizes, and measurements) mentioned across all digital mediums and offline stitching fulfillment centers of {storeName} are approximate values. As these are custom-fit garments, variations may occur based on fabric quality and technical specifications.
+          </Text>
+          <Text style={[styles.bodyText, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
+            The usage of any of our interfaces warrants your acceptance of the latest terms in this disclaimer, which may be updated periodically to meet operational or regulatory requirements.
           </Text>
         </View>
 
-        {/* Section 2: Data We Collect */}
+        {/* Section 2: Crafting & Color Variation */}
         <View style={[styles.cardSection, shadows.premium, { backgroundColor: theme.bg.card }]}>
           <View style={styles.cardHeaderRow}>
-            <FileCheck size={18} color={theme.brand[500]} />
+            <AlertCircle size={18} color={theme.brand[500]} />
             <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-              2. Information We Collect
+              2. Color & Customization Variations
             </Text>
           </View>
           <Text style={[styles.bodyText, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
-            • <Text style={{ fontFamily: fonts.bold }}>Personal Identifiers:</Text> Name, email address, mobile number, shipping address, and sizing preferences.
+            All products and services are designer-styled, hand-crafted, and custom tailored. Due to digital display variations (lighting, photography settings, monitor calibrations) and fabric dye batches, minor variations in fabric colors, prints, or embroidery between display images and the actual product may occur.
           </Text>
           <Text style={[styles.bodyText, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
-            • <Text style={{ fontFamily: fonts.bold }}>Sizing & Measurement Profiles:</Text> Physical measurement data (chest, waist, shoulder, inseam, etc.) provided for custom stitching.
-          </Text>
-          <Text style={[styles.bodyText, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
-            • <Text style={{ fontFamily: fonts.bold }}>Payment Information:</Text> We do <Text style={{ fontFamily: fonts.bold }}>NOT</Text> store credit/debit card numbers or bank credentials on our servers. All transactions are securely redirected to PCI-DSS certified payment gateways.
-          </Text>
-          <Text style={[styles.bodyText, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
-            • <Text style={{ fontFamily: fonts.bold }}>App Diagnostics:</Text> Anonymous IP address, app performance logs, and device operating system to maintain platform security.
+            By placing an order, the customer acknowledges and accepts these inherent natural variations in fabric texture, dye, stretch, and handwork detailing.
           </Text>
         </View>
 
-        {/* Section 3: Child Data Protection */}
+        {/* Section 3: Refunds on Products & Services */}
         <View style={[styles.cardSection, shadows.premium, { backgroundColor: theme.bg.card }]}>
           <View style={styles.cardHeaderRow}>
-            <Baby size={18} color={theme.brand[500]} />
+            <ShieldAlert size={18} color={theme.brand[500]} />
             <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-              3. Child Data Protection Rights
+              3. Refunds Policy
             </Text>
           </View>
           <Text style={[styles.bodyText, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
-            We sell custom children's garments for purchase by adults. Users under 18 years of age may only use the app with parental or guardian involvement.
+            Since each garment ordered with {storeName} is completely customized to individual measurements and styling preferences, <Text style={{ fontFamily: fonts.bold, color: theme.text.primary }}>refunds will not be permitted once an order is placed</Text>.
           </Text>
           <View style={[styles.highlightBox, { backgroundColor: theme.bg.input, borderColor: theme.border }]}>
             <Text style={[styles.highlightText, { fontFamily: fonts.medium, color: theme.text.primary }]}>
-              • Children's sizing data is strictly protected and never shared with third parties or used for profiling.
+              • Refunds (if approved after internal process audit for issues directly attributable to our team) will be issued exclusively in the form of <Text style={{ fontFamily: fonts.bold }}>Gift Vouchers</Text>.
             </Text>
             <Text style={[styles.highlightText, { fontFamily: fonts.medium, color: theme.text.primary }]}>
-              • Parents/guardians are advised to ensure minor users do not disclose unauthorized personal information.
-            </Text>
-          </View>
-        </View>
-
-        {/* Section 4: Purposes of Data Use */}
-        <View style={[styles.cardSection, shadows.premium, { backgroundColor: theme.bg.card }]}>
-          <View style={styles.cardHeaderRow}>
-            <Cpu size={18} color={theme.brand[500]} />
-            <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-              4. How We Use Your Information
-            </Text>
-          </View>
-          <Text style={[styles.bodyText, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
-            • <Text style={{ fontFamily: fonts.bold }}>Service Fulfillment:</Text> Tailoring garments to measure, processing orders, and arranging doorstep delivery.
-          </Text>
-          <Text style={[styles.bodyText, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
-            • <Text style={{ fontFamily: fonts.bold }}>Customer Support:</Text> Communicating order status, scheduling alterations, and resolving queries.
-          </Text>
-          <Text style={[styles.bodyText, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
-            • <Text style={{ fontFamily: fonts.bold }}>Security & Fraud Prevention:</Text> Detecting illegal activities and safeguarding app infrastructure.
-          </Text>
-        </View>
-
-        {/* Section 5: GDPR Rights & Play Store Account Deletion */}
-        <View style={[styles.cardSection, shadows.premium, { backgroundColor: theme.bg.card }]}>
-          <View style={styles.cardHeaderRow}>
-            <Trash2 size={18} color={theme.brand[500]} />
-            <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-              5. GDPR Rights & Account Deletion
-            </Text>
-          </View>
-          <Text style={[styles.bodyText, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
-            In compliance with GDPR and Google Play Store policies, you hold full rights over your data, including the <Text style={{ fontFamily: fonts.bold, color: theme.text.primary }}>Right to Access, Rectify, and Erase ('Right to be Forgotten')</Text>.
-          </Text>
-          <View style={[styles.highlightBox, { backgroundColor: theme.bg.input, borderColor: theme.border }]}>
-            <Text style={[styles.highlightText, { fontFamily: fonts.medium, color: theme.text.primary }]}>
-              • <Text style={{ fontFamily: fonts.bold }}>How to Delete Account:</Text> You can initiate permanent account and data erasure directly via your Profile settings or by emailing {contactEmail}.
+              • Gift Voucher issuance takes 7–10 working days from approval date.
             </Text>
             <Text style={[styles.highlightText, { fontFamily: fonts.medium, color: theme.text.primary }]}>
-              • Upon request, all sizing profiles, order records, and credentials will be deleted within 30 days.
+              • Maximum Gift Voucher value is limited to <Text style={{ fontFamily: fonts.bold }}>Rs. 2,500</Text> or actual item cost (whichever is lower).
+            </Text>
+            <Text style={[styles.highlightText, { fontFamily: fonts.bold, color: '#ef4444' }]}>
+              • No cash or bank transfer refunds will be issued under any circumstance.
             </Text>
           </View>
         </View>
 
-        {/* Section 6: Security Safeguards */}
+        {/* Section 4: Cancellation Terms */}
         <View style={[styles.cardSection, shadows.premium, { backgroundColor: theme.bg.card }]}>
           <View style={styles.cardHeaderRow}>
-            <Lock size={18} color={theme.brand[500]} />
+            <RefreshCw size={18} color={theme.brand[500]} />
             <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
-              6. Data Security Safeguards
+              4. Order Cancellation Terms
             </Text>
           </View>
           <Text style={[styles.bodyText, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
-            We implement SSL encryption, access control tokens, and physical security measures to prevent unauthorized data access. Please keep your account password private and change it periodically.
+            Orders can be cancelled before processing starts, <Text style={{ fontFamily: fonts.bold, color: theme.text.primary }}>EXCEPT</Text> in the following scenarios:
+          </Text>
+          <View style={{ gap: 6, marginVertical: 4 }}>
+            <Text style={[styles.bulletItem, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
+              ❌ Order has been assigned to the Fulfillment Center for processing.
+            </Text>
+            <Text style={[styles.bulletItem, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
+              ❌ Fabric for the order has been washed, ironed, cut, or stitched.
+            </Text>
+            <Text style={[styles.bulletItem, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
+              ❌ Fashion designing, pattern drafting, or cutting work has commenced.
+            </Text>
+          </View>
+          <Text style={[styles.bodyText, { fontFamily: fonts.regular, color: theme.text.secondary, marginTop: 6 }]}>
+            In permitted cancellation cases, advance amounts collected will be reimbursed except for costs expended on fabrics, logistics, transport, and incidental processing charges.
+          </Text>
+          <Text style={[styles.bodyText, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
+            <Text style={{ fontFamily: fonts.bold }}>Third-Party Fabrics:</Text> If third-party fabric suppliers on our platform accept returns per their policies, refunds will follow their timeline. If the fabric supplier does not accept return/replacement, {storeName} cannot issue a fabric refund.
           </Text>
         </View>
 
-        {/* Section 7: Grievance Officer */}
+        {/* Section 5: Replacements & Alterations */}
+        <View style={[styles.cardSection, shadows.premium, { backgroundColor: theme.bg.card }]}>
+          <View style={styles.cardHeaderRow}>
+            <CheckCircle2 size={18} color={theme.brand[500]} />
+            <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+              5. Replacements & Alterations
+            </Text>
+          </View>
+          <Text style={[styles.bodyText, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
+            • <Text style={{ fontFamily: fonts.bold }}>Fabric Misplacement:</Text> Liability is limited to replacement value of the fabric or providing similar fabric (upon proof of purchase value).
+          </Text>
+          <Text style={[styles.bodyText, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
+            • <Text style={{ fontFamily: fonts.bold }}>Fit Dissatisfaction:</Text> Liability is capped up to <Text style={{ fontFamily: fonts.bold }}>INR Rs. 3,000/-</Text> or refund of stitching charges component (whichever is higher). In such cases, the garment will be retained as company property for quality audits.
+          </Text>
+          <Text style={[styles.bodyText, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
+            • <Text style={{ fontFamily: fonts.bold }}>Free Size Alterations:</Text> Complimentary size adjustments are provided at any of our studio centers if sufficient seam allowance is available.
+          </Text>
+          <Text style={[styles.bodyText, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
+            • <Text style={{ fontFamily: fonts.bold }}>Style Change Limitation:</Text> Alterations apply strictly to size adjustments, NOT style changes (e.g. converting full sleeves to sleeveless is not an alteration).
+          </Text>
+          <Text style={[styles.bodyText, { fontFamily: fonts.regular, color: theme.text.secondary }]}>
+            • <Text style={{ fontFamily: fonts.bold }}>Outstation & Shipping:</Text> Beyond 7 days from delivery date, outstation customers bear shipping costs for alteration requests. Paid pickup/delivery is available in select serviceable pincodes.
+          </Text>
+          <Text style={[styles.bodyText, { fontFamily: fonts.bold, color: '#ef4444' }]}>
+            • Coupon & Discounted Orders: Items stitched using promotional discount codes are non-refundable under any circumstance.
+          </Text>
+        </View>
+
+        {/* Section 6: Grievance Support Desk */}
         <View style={[styles.cardSection, shadows.premium, { backgroundColor: theme.bg.card }]}>
           <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary, marginBottom: 12 }]}>
-            Grievance Officer & Support
+            Grievance Support Desk
           </Text>
           <Text style={[styles.bodyText, { fontFamily: fonts.regular, color: theme.text.secondary, marginBottom: 12 }]}>
-            Appointed under the Information Technology Act 2000 & Consumer Protection Rules:
+            For any queries or concerns regarding this policy, please reach out to our grievance team:
           </Text>
           <View style={{ gap: 10 }}>
             <View style={styles.contactRow}>
@@ -264,6 +272,10 @@ const styles = StyleSheet.create({
   highlightText: {
     fontSize: 12.5,
     lineHeight: 18,
+  },
+  bulletItem: {
+    fontSize: 13,
+    lineHeight: 20,
   },
   contactRow: {
     flexDirection: 'row',

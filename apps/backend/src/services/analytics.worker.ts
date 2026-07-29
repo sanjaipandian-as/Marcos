@@ -3,7 +3,7 @@ import prisma from '../config/db.js';
 import logger from '../utils/logger.js';
 import { isDevelopment } from '../config/environment.js';
 
-const CHUNK_SIZE = 2000;
+const CHUNK_SIZE = 5000;
 
 export function startAnalyticsFlushWorker() {
   if (isDevelopment) {
@@ -12,13 +12,13 @@ export function startAnalyticsFlushWorker() {
   }
   logger.info('Background Analytics Flush Worker started.');
 
-  // Run the flush job every 5 minutes (300 seconds) to conserve Redis commands
+  // Run the flush job every 60 seconds to batch analytics writes efficiently
   setInterval(async () => {
     try {
       let totalProcessed = 0;
 
       while (true) {
-        // Check how many items are in the list FIRST (1 command instead of 2000)
+        // Check how many items are in the list FIRST (1 command instead of 5000)
         const listLength = await redis.llen('analytics:events');
         if (listLength === 0) break;
 
@@ -65,6 +65,6 @@ export function startAnalyticsFlushWorker() {
     } catch (error: any) {
       logger.error('Error flushing analytics events:', { metadata: { error: error.message } });
     }
-  }, 5000); // 5 seconds interval (was 5 minutes)
+  }, 60000); // 60 seconds interval
 }
 

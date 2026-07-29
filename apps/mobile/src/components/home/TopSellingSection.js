@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Image } from 'react-native';
 import SectionHeader from './SectionHeader';
 import { CustomCartAddIcon, CustomCartAddedIcon } from '../CartIcons';
 
 const { width: screenWidth } = Dimensions.get('window');
 
-function TopSellingCard({ item, index, onShopPress, onAddToCart, inCart, theme, fonts, shadows }) {
+const TopSellingCard = memo(function TopSellingCard({ item, index, onShopPress, onAddToCart, inCart, theme, fonts, shadows }) {
   // Rank text (1, 2, 3...)
   const rank = index + 1;
 
@@ -69,9 +69,9 @@ function TopSellingCard({ item, index, onShopPress, onAddToCart, inCart, theme, 
       </View>
     </TouchableOpacity>
   );
-}
+});
 
-export default function TopSellingSection({
+const TopSellingSection = memo(function TopSellingSection({
   title,
   products,
   onSeeAll,
@@ -133,7 +133,9 @@ export default function TopSellingSection({
       </ScrollView>
     </View>
   );
-}
+});
+
+export default TopSellingSection;
 
 const styles = StyleSheet.create({
   cardContainer: {

@@ -23,6 +23,7 @@ const promoContent_controller_js_1 = require("../controllers/promoContent.contro
 const router = (0, express_1.Router)();
 router.use('/auth', auth_routes_js_1.default);
 router.use('/products', product_routes_js_1.default); // Maps both `/products` and `/cart` since they are combined
+router.use('/favorites', product_routes_js_1.default); // Alias for direct /favorites endpoints
 router.use('/measurements', measurement_routes_js_1.default);
 router.use('/appointments', appointment_routes_js_1.default);
 router.use('/visits', visit_routes_js_1.default);

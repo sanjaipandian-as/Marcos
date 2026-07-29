@@ -8,19 +8,19 @@ const redis_js_1 = __importDefault(require("../config/redis.js"));
 const db_js_1 = __importDefault(require("../config/db.js"));
 const logger_js_1 = __importDefault(require("../utils/logger.js"));
 const environment_js_1 = require("../config/environment.js");
-const CHUNK_SIZE = 2000;
+const CHUNK_SIZE = 5000;
 function startAnalyticsFlushWorker() {
     if (environment_js_1.isDevelopment) {
         logger_js_1.default.info('Background Analytics Flush Worker disabled in development to save Redis limits.');
         return;
     }
     logger_js_1.default.info('Background Analytics Flush Worker started.');
-    // Run the flush job every 5 minutes (300 seconds) to conserve Redis commands
+    // Run the flush job every 60 seconds to batch analytics writes efficiently
     setInterval(async () => {
         try {
             let totalProcessed = 0;
             while (true) {
-                // Check how many items are in the list FIRST (1 command instead of 2000)
+                // Check how many items are in the list FIRST (1 command instead of 5000)
                 const listLength = await redis_js_1.default.llen('analytics:events');
                 if (listLength === 0)
                     break;
@@ -62,5 +62,5 @@ function startAnalyticsFlushWorker() {
         catch (error) {
             logger_js_1.default.error('Error flushing analytics events:', { metadata: { error: error.message } });
         }
-    }, 5000); // 5 seconds interval (was 5 minutes)
+    }, 60000); // 60 seconds interval
 }

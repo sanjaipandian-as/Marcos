@@ -8,6 +8,128 @@ exports.computeStockStatus = computeStockStatus;
 const zod_1 = require("zod");
 const db_js_1 = __importDefault(require("../config/db.js"));
 const redis_js_1 = __importDefault(require("../config/redis.js"));
+// Capped in-memory LRU-like cache for search variations (stores up to 200 unique queries)
+const searchVariationsCache = new Map();
+const MAX_CACHE_SIZE = 200;
+function cacheSearchVariations(query, variations) {
+    if (searchVariationsCache.size >= MAX_CACHE_SIZE) {
+        const firstKey = searchVariationsCache.keys().next().value;
+        if (firstKey)
+            searchVariationsCache.delete(firstKey);
+    }
+    searchVariationsCache.set(query, variations);
+}
+// Helper to generate search variations for singular and plural matching
+function getSearchVariations(query) {
+    if (!query)
+        return [];
+    const trimmed = query.trim();
+    if (trimmed === '')
+        return [];
+    // Check cache first
+    if (searchVariationsCache.has(trimmed)) {
+        return searchVariationsCache.get(trimmed);
+    }
+    const variations = new Set();
+    variations.add(trimmed);
+    const words = trimmed.split(/\s+/).filter(Boolean);
+    if (words.length === 0)
+        return [];
+    // Word count cap: skip combinatorial expansion for complex multi-word queries (e.g. > 3 words)
+    // to avoid combinatorial blowup and keep database clauses clean.
+    if (words.length > 3) {
+        const result = Array.from(variations);
+        cacheSearchVariations(trimmed, result);
+        return result;
+    }
+    // Singular nouns that end in s/ss and shouldn't be stripped of their ending s/ss
+    const singularEndsWithS = new Set([
+        'dress', 'jeans', 'glass', 'canvas', 'business', 'trousers', 'pants', 'tuxedo', 'suits'
+    ]);
+    // Irregular singular <-> plural mapping for clothing/catalog items
+    const irregularPlurals = {
+        scarf: 'scarves',
+        scarves: 'scarf',
+        half: 'halves',
+        halves: 'half',
+        shelf: 'shelves',
+        shelves: 'shelf',
+        foot: 'feet',
+        feet: 'foot'
+    };
+    const wordVariationsList = words.map(word => {
+        const wordVars = new Set();
+        wordVars.add(word);
+        const lowerWord = word.toLowerCase();
+        // Guard 1: Irregular Plurals
+        if (irregularPlurals[lowerWord]) {
+            wordVars.add(irregularPlurals[lowerWord]);
+            return Array.from(wordVars);
+        }
+        // Guard 2: Singular nouns ending in s/ss
+        if (singularEndsWithS.has(lowerWord)) {
+            if (lowerWord === 'dress') {
+                wordVars.add('dresses');
+            }
+            else if (lowerWord === 'glass') {
+                wordVars.add('glasses');
+            }
+            else if (lowerWord === 'jeans') {
+                wordVars.add('jean');
+            }
+            return Array.from(wordVars);
+        }
+        // Plural to singular rules
+        if (lowerWord.endsWith('s')) {
+            if (lowerWord.endsWith('ies') && lowerWord.length > 3) {
+                // accessories -> accessory
+                wordVars.add(word.slice(0, -3) + 'y');
+            }
+            else if ((lowerWord.endsWith('sses') ||
+                lowerWord.endsWith('ches') ||
+                lowerWord.endsWith('shes') ||
+                lowerWord.endsWith('xes')) && lowerWord.length > 4) {
+                // dresses -> dress, trenches -> trench, boxes -> box
+                wordVars.add(word.slice(0, -2));
+            }
+            else {
+                // shirts -> shirt, sarees -> saree (strip last s)
+                wordVars.add(word.slice(0, -1));
+            }
+        }
+        else {
+            // Singular to plural rules
+            if (lowerWord.endsWith('y') && lowerWord.length > 1) {
+                // accessory -> accessories
+                wordVars.add(word.slice(0, -1) + 'ies');
+            }
+            else if (lowerWord.endsWith('ch') ||
+                lowerWord.endsWith('sh') ||
+                lowerWord.endsWith('x') ||
+                lowerWord.endsWith('s')) {
+                wordVars.add(word + 'es');
+            }
+            else {
+                // shirt -> shirts, suit -> suits
+                wordVars.add(word + 's');
+            }
+        }
+        return Array.from(wordVars);
+    });
+    const combine = (index, current) => {
+        if (index === wordVariationsList.length) {
+            variations.add(current.trim());
+            return;
+        }
+        for (const v of wordVariationsList[index]) {
+            combine(index + 1, current + " " + v);
+        }
+    };
+    combine(0, "");
+    const result = Array.from(variations);
+    cacheSearchVariations(trimmed, result);
+    return result;
+}
 // Product query validation
 exports.productQuerySchema = zod_1.z.object({
     query: zod_1.z.object({
@@ -61,28 +183,44 @@ class ProductController {
         return offers;
     }
     /**
+     * Helper to fetch and cache all categories for hierarchy traversal
+     */
+    static async getAllCategoriesCached() {
+        const cacheKey = 'cache:all_categories_tree';
+        const cached = await redis_js_1.default.get(cacheKey);
+        if (cached) {
+            return JSON.parse(cached);
+        }
+        const categories = await db_js_1.default.category.findMany();
+        await redis_js_1.default.set(cacheKey, JSON.stringify(categories), 'EX', 300); // 5 minutes
+        return categories;
+    }
+    /**
      * GET /products
      */
     static async getProducts(req, res, next) {
         const { page, limit, category, categoryId, search, sortBy, sortOrder } = req.query;
-        const safeLimit = Math.min(Number(limit) || 20, 1000); // clamp pagination limit
-        const skip = (Number(page) - 1) * safeLimit;
-        const cacheKey = `cache:products:page-${page}-limit-${safeLimit}-cat-${category || 'all'}-catId-${categoryId || 'all'}-search-${search || 'none'}-sort-${sortBy}-${sortOrder}`;
+        const safePage = Math.max(parseInt(page, 10) || 1, 1);
+        const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+        const skip = (safePage - 1) * safeLimit;
+        const sortField = (sortBy && typeof sortBy === 'string') ? sortBy : 'createdAt';
+        const sortDir = (sortOrder === 'asc' || sortOrder === 'desc') ? sortOrder : 'desc';
+        const cacheKey = `cache:products:page-${safePage}-limit-${safeLimit}-cat-${category || 'all'}-catId-${categoryId || 'all'}-search-${search || 'none'}-sort-${sortField}-${sortDir}`;
         try {
             const cached = await redis_js_1.default.get(cacheKey);
             if (cached) {
+                res.setHeader('X-Cache', 'HIT');
                 return res.status(200).json(JSON.parse(cached));
             }
+            res.setHeader('X-Cache', 'MISS');
             const where = {};
             if (category) {
-                const targetCategory = await db_js_1.default.category.findUnique({
-                    where: { slug: category },
-                });
+                const allCategories = await ProductController.getAllCategoriesCached();
+                const targetCategory = allCategories.find((c) => c.slug === category);
                 if (targetCategory) {
-                    const allCategories = await db_js_1.default.category.findMany();
                     const getDescendants = (parentId) => {
                         const list = [parentId];
-                        allCategories.forEach(c => {
+                        allCategories.forEach((c) => {
                             if (c.parentId === parentId) {
                                 list.push(...getDescendants(c.id));
                             }
@@ -99,10 +237,10 @@ class ProductController {
                 }
             }
             else if (categoryId) {
-                const allCategories = await db_js_1.default.category.findMany();
+                const allCategories = await ProductController.getAllCategoriesCached();
                 const getDescendants = (parentId) => {
                     const list = [parentId];
-                    allCategories.forEach(c => {
+                    allCategories.forEach((c) => {
                         if (c.parentId === parentId) {
                             list.push(...getDescendants(c.id));
                         }
@@ -113,15 +251,18 @@ class ProductController {
                 where.categoryId = { in: descendantIds };
             }
             if (search) {
-                where.OR = [
-                    { name: { contains: search, mode: 'insensitive' } },
-                    { description: { contains: search, mode: 'insensitive' } },
-                ];
+                const variations = getSearchVariations(search);
+                const orConditions = [];
+                variations.forEach(term => {
+                    orConditions.push({ name: { contains: term, mode: 'insensitive' } });
+                    orConditions.push({ description: { contains: term, mode: 'insensitive' } });
+                });
+                where.OR = orConditions;
             }
             const [products, total] = await Promise.all([
                 db_js_1.default.product.findMany({
                     where,
-                    orderBy: { [sortBy]: sortOrder },
+                    orderBy: { [sortField]: sortDir },
                     skip,
                     take: safeLimit,
                     include: { category: true },
@@ -151,13 +292,13 @@ class ProductController {
                 success: true,
                 data: processedProducts,
                 pagination: {
-                    page: Number(page),
-                    limit: Number(limit),
+                    page: safePage,
+                    limit: safeLimit,
                     total,
-                    pages: Math.ceil(total / Number(limit)),
+                    pages: Math.ceil(total / safeLimit) || 1,
                 },
             };
-            await redis_js_1.default.set(cacheKey, JSON.stringify(responsePayload), 'EX', 120);
+            await redis_js_1.default.set(cacheKey, JSON.stringify(responsePayload), 'EX', 300); // 5 minutes cache
             return res.status(200).json(responsePayload);
         }
         catch (error) {

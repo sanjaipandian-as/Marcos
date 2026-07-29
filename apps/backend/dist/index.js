@@ -16,6 +16,9 @@ const port = env_js_1.default.PORT || 5000;
 const server = app_js_1.default.listen(port, () => {
     logger_js_1.default.info(`🚀 ${env_js_1.default.APP_NAME} Backend Engine v${env_js_1.default.APP_VERSION} running in ${environment_js_1.mode} mode on port ${port}`);
 });
+// Configure Keep-Alive timeouts for high concurrency reverse proxies / CDNs
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;
 // 1. Initialize Real-Time WebSockets
 (0, socket_handler_js_1.initSocket)(server);
 // 2. Initialize Background Task Workers

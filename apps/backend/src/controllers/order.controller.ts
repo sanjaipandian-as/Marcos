@@ -49,6 +49,19 @@ export const orderCheckoutSchema = z.object({
   }),
 });
 
+async function invalidateUserOrdersCache(userId: string) {
+  try {
+    let cursor = '0';
+    do {
+      const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', `cache:orders:user:${userId}:*`, 'COUNT', '100');
+      cursor = nextCursor;
+      if (keys.length > 0) await redis.del(...keys);
+    } while (cursor !== '0');
+  } catch (err) {
+    console.error('Failed to invalidate user orders cache:', err);
+  }
+}
+
 export class OrderController {
   /**
    * Helper: Retrieve fitting booking associated with an order's invoice number
@@ -103,8 +116,14 @@ export class OrderController {
     const userId = req.user!.id;
     const { page = 1, limit = 10 } = req.query as any;
     const skip = (Number(page) - 1) * Number(limit);
+    const cacheKey = `cache:orders:user:${userId}:${page}:${limit}`;
 
     try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return res.status(200).json(JSON.parse(cached));
+      }
+
       const [orders, total] = await Promise.all([
         prisma.order.findMany({
           where: { userId },
@@ -167,7 +186,7 @@ export class OrderController {
         };
       });
 
-      return res.status(200).json({
+      const responsePayload = {
         success: true,
         data: ordersWithBookings,
         pagination: {
@@ -176,7 +195,11 @@ export class OrderController {
           total,
           pages: Math.ceil(total / Number(limit)),
         },
-      });
+      };
+
+      await redis.set(cacheKey, JSON.stringify(responsePayload), 'EX', 60);
+
+      return res.status(200).json(responsePayload);
     } catch (error) {
       next(error);
     }
@@ -512,6 +535,10 @@ export class OrderController {
             triggeredBy: req.user!.fullName,
           },
         });
+      }
+
+      if (order.userId) {
+        await invalidateUserOrdersCache(order.userId);
       }
 
       return res.status(200).json({

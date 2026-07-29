@@ -114,7 +114,8 @@ class AdminController {
             const selectedWeekStartStr = selectedWeekStart.toISOString().substring(0, 10);
             const cacheKey = `cache:admin:dashboard:${selectedWeekStartStr}`;
             const cached = await redis_js_1.default.get(cacheKey);
-            // if (cached) return res.status(200).json(JSON.parse(cached));
+            if (cached)
+                return res.status(200).json(JSON.parse(cached));
             const now = new Date();
             const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
             const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -451,7 +452,7 @@ class AdminController {
                     stockRisk
                 }
             };
-            await redis_js_1.default.set(cacheKey, JSON.stringify(responsePayload), 'EX', 300);
+            await redis_js_1.default.set(cacheKey, JSON.stringify(responsePayload), 'EX', 600);
             return res.status(200).json(responsePayload);
         }
         catch (error) {
@@ -480,6 +481,11 @@ class AdminController {
             const nextDayStart = new Date(dayEnd);
             const nextDayEnd = new Date(nextDayStart);
             nextDayEnd.setUTCDate(nextDayEnd.getUTCDate() + 1);
+            const cacheKey = `cache:admin:date-stats:${dayStart.toISOString().substring(0, 10)}`;
+            const cached = await redis_js_1.default.get(cacheKey);
+            if (cached) {
+                return res.status(200).json(JSON.parse(cached));
+            }
             const [ordersCount, deliveriesCount, ordersList, appointmentsList, nextDayOrders, nextDayAppts] = await Promise.all([
                 db_js_1.default.order.count({
                     where: { createdAt: { gte: dayStart, lt: dayEnd }, status: { not: 'CANCELLED' } }
@@ -510,7 +516,7 @@ class AdminController {
                     take: 5
                 }),
             ]);
-            return res.status(200).json({
+            const responsePayload = {
                 success: true,
                 data: {
                     date: dayStart.toISOString().substring(0, 10),
@@ -523,7 +529,9 @@ class AdminController {
                         appointments: nextDayAppts,
                     }
                 }
-            });
+            };
+            await redis_js_1.default.set(cacheKey, JSON.stringify(responsePayload), 'EX', 120);
+            return res.status(200).json(responsePayload);
         }
         catch (error) {
             next(error);

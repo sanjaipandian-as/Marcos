@@ -23,7 +23,10 @@ import {
   ChevronRight,
   Shield,
   Package,
-  Gift
+  Gift,
+  RefreshCw,
+  FileText,
+  Truck
 } from 'lucide-react-native';
 
 import { PRODUCT_NAME, PRODUCT_VERSION } from '../../config/productName';
@@ -225,7 +228,7 @@ export default function ProfileScreen({ navigation }) {
           {renderSettingItem(
             <Gift size={18} color="#1e1e1e" />,
             'Invite & Earn',
-            () => requireAuth(() => navigation.navigate('Loyalty'))
+            () => requireAuth(() => navigation.navigate('InviteEarn'))
           )}
           {renderSettingItem(
             <Bell size={18} color="#1e1e1e" />,
@@ -236,6 +239,21 @@ export default function ProfileScreen({ navigation }) {
             <Shield size={18} color="#1e1e1e" />,
             'Privacy Policy',
             () => navigation.navigate('PrivacyPolicy')
+          )}
+          {renderSettingItem(
+            <RefreshCw size={18} color="#1e1e1e" />,
+            'Refund & Cancellation Policy',
+            () => navigation.navigate('RefundPolicy')
+          )}
+          {renderSettingItem(
+            <FileText size={18} color="#1e1e1e" />,
+            'Terms of Usage',
+            () => navigation.navigate('TermsOfService')
+          )}
+          {renderSettingItem(
+            <Truck size={18} color="#1e1e1e" />,
+            'Shipping Policy',
+            () => navigation.navigate('ShippingPolicy')
           )}
           {user && renderSettingItem(
             <LogOut size={18} color="#ef4444" />,

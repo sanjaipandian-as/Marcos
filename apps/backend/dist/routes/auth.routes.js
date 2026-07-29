@@ -10,6 +10,7 @@ const client_1 = require("@prisma/client");
 const router = (0, express_1.Router)();
 router.post('/register', (0, validate_middleware_js_1.validate)(auth_controller_js_1.registerSchema), auth_controller_js_1.AuthController.register);
 router.post('/login/check', rateLimit_middleware_js_1.identifyIpLimiter, rateLimit_middleware_js_1.identifyTargetLimiter, (0, validate_middleware_js_1.validate)(auth_controller_js_1.checkIdentifierSchema), auth_controller_js_1.AuthController.checkIdentifier);
+router.post('/check-identifier', rateLimit_middleware_js_1.identifyIpLimiter, rateLimit_middleware_js_1.identifyTargetLimiter, (0, validate_middleware_js_1.validate)(auth_controller_js_1.checkIdentifierSchema), auth_controller_js_1.AuthController.checkIdentifier);
 router.post('/login', rateLimit_middleware_js_1.sensitiveRateLimiter, (0, validate_middleware_js_1.validate)(auth_controller_js_1.loginSchema), auth_controller_js_1.AuthController.login);
 router.post('/setup-password', rateLimit_middleware_js_1.sensitiveRateLimiter, (0, validate_middleware_js_1.validate)(auth_controller_js_1.setupPasswordSchema), auth_controller_js_1.AuthController.setupPassword);
 router.post('/otp/send', rateLimit_middleware_js_1.sensitiveRateLimiter, (0, validate_middleware_js_1.validate)(auth_controller_js_1.otpSendSchema), auth_controller_js_1.AuthController.sendOtp);
@@ -22,6 +23,7 @@ router.post('/forgot-password/verify', rateLimit_middleware_js_1.sensitiveRateLi
 router.post('/reset-password', rateLimit_middleware_js_1.sensitiveRateLimiter, (0, validate_middleware_js_1.validate)(auth_controller_js_1.resetPasswordSchema), auth_controller_js_1.AuthController.resetPassword);
 router.get('/profile', auth_middleware_js_1.authenticate, auth_controller_js_1.AuthController.getProfile);
 router.put('/profile', auth_middleware_js_1.authenticate, (0, validate_middleware_js_1.validate)(auth_controller_js_1.updateProfileSchema), auth_controller_js_1.AuthController.updateProfile);
+router.patch('/profile', auth_middleware_js_1.authenticate, (0, validate_middleware_js_1.validate)(auth_controller_js_1.updateProfileSchema), auth_controller_js_1.AuthController.updateProfile);
 router.post('/profile/verify-password', auth_middleware_js_1.authenticate, (0, validate_middleware_js_1.validate)(auth_controller_js_1.verifyPasswordSchema), auth_controller_js_1.AuthController.verifyProfilePassword);
 router.post('/profile/request-update', auth_middleware_js_1.authenticate, (0, validate_middleware_js_1.validate)(auth_controller_js_1.requestContactUpdateSchema), auth_controller_js_1.AuthController.requestContactUpdate);
 router.post('/profile/confirm-update', auth_middleware_js_1.authenticate, (0, validate_middleware_js_1.validate)(auth_controller_js_1.confirmContactUpdateSchema), auth_controller_js_1.AuthController.confirmContactUpdate);

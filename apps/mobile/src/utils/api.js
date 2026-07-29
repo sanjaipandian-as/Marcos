@@ -78,7 +78,7 @@ export const API_URL = getApiUrl();
 
 const api = axios.create({
   baseURL: API_URL,
-  timeout: 15000,
+  timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
     'x-client-type': 'mobile',
@@ -96,7 +96,10 @@ export const setTokenRefreshHandler = (handler) => {
   tokenRefreshHandler = handler;
 };
 
-// Request interceptor: Attach Access Token
+// In-flight GET request deduplication map
+const pendingGetRequests = new Map();
+
+// Request interceptor: Attach Access Token & Deduplicate GET requests
 api.interceptors.request.use(
   async (config) => {
     try {
@@ -117,12 +120,17 @@ let isRefreshing = false;
 let refreshSubscribers = [];
 
 function onTokenRefreshed(newToken) {
-  refreshSubscribers.forEach((callback) => callback(newToken));
+  refreshSubscribers.forEach((sub) => sub.resolve(newToken));
   refreshSubscribers = [];
 }
 
-function addRefreshSubscriber(callback) {
-  refreshSubscribers.push(callback);
+function onTokenRefreshFailed(error) {
+  refreshSubscribers.forEach((sub) => sub.reject(error));
+  refreshSubscribers = [];
+}
+
+function addRefreshSubscriber(resolve, reject) {
+  refreshSubscribers.push({ resolve, reject });
 }
 
 // Response interceptor: Handle expired tokens & auto-refresh
@@ -145,11 +153,16 @@ api.interceptors.response.use(
 
       // If a refresh is already in progress, queue this request
       if (isRefreshing) {
-        return new Promise((resolve) => {
-          addRefreshSubscriber((newToken) => {
-            originalRequest.headers.Authorization = `Bearer ${newToken}`;
-            resolve(api(originalRequest));
-          });
+        return new Promise((resolve, reject) => {
+          addRefreshSubscriber(
+            (newToken) => {
+              originalRequest.headers.Authorization = `Bearer ${newToken}`;
+              resolve(api(originalRequest));
+            },
+            (err) => {
+              reject(err);
+            }
+          );
         });
       }
 
@@ -191,7 +204,7 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch (refreshError) {
         isRefreshing = false;
-        refreshSubscribers = [];
+        onTokenRefreshFailed(refreshError);
 
         // If refresh fails, clear credentials and sign out
         await AsyncStorage.removeItem('accessToken');

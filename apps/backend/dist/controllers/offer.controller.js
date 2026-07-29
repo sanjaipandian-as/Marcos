@@ -6,8 +6,16 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.OfferController = exports.offerUpdateSchema = exports.offerCreateSchema = void 0;
 const zod_1 = require("zod");
 const db_js_1 = __importDefault(require("../config/db.js"));
-// Trigger IDE ts re-evaluation
 const audit_js_1 = require("../utils/audit.js");
+const redis_js_1 = __importDefault(require("../config/redis.js"));
+async function invalidateOffersCache() {
+    try {
+        await redis_js_1.default.del('cache:offers:active', 'cache:active_offers');
+    }
+    catch (err) {
+        console.error('Failed to invalidate offers cache:', err);
+    }
+}
 exports.offerCreateSchema = zod_1.z.object({
     body: zod_1.z.object({
         title: zod_1.z.string().min(1),
@@ -173,6 +181,11 @@ class OfferController {
      */
     static async getActiveOffers(req, res, next) {
         try {
+            const cacheKey = 'cache:offers:active';
+            const cached = await redis_js_1.default.get(cacheKey);
+            if (cached) {
+                return res.status(200).json(JSON.parse(cached));
+            }
             const now = new Date();
             const offers = await db_js_1.default.offer.findMany({
                 where: {
@@ -182,10 +195,12 @@ class OfferController {
                 },
                 orderBy: { createdAt: 'desc' },
             });
-            return res.status(200).json({
+            const responsePayload = {
                 success: true,
                 data: offers,
-            });
+            };
+            await redis_js_1.default.set(cacheKey, JSON.stringify(responsePayload), 'EX', 300);
+            return res.status(200).json(responsePayload);
         }
         catch (error) {
             next(error);

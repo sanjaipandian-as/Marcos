@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
+import compression from 'compression';
 import path from 'path';
 import router from './routes/index.js';
 import errorMiddleware from './middlewares/error.middleware.js';
@@ -12,8 +13,14 @@ import logger from './utils/logger.js';
 
 const app = express();
 
+// 0. Response Compression (gzip/deflate for payloads > 1KB)
+app.use(compression({ threshold: 1024 }));
+
 // Custom HTTP request logger middleware
 app.use((req, res, next) => {
+  if (req.originalUrl.startsWith('/uploads') || req.originalUrl === '/') {
+    return next();
+  }
   const start = Date.now();
   res.on('finish', () => {
     const duration = Date.now() - start;
@@ -76,8 +83,11 @@ app.use(cookieParser());
 // 3. Rate limiting (global)
 app.use(globalRateLimiter);
 
-// 4. Local Uploads Static Folder
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+// 4. Local Uploads Static Folder with Cache-Control headers
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads'), {
+  maxAge: '7d',
+  immutable: true,
+}));
 
 // 5. Root health-check route — open, no auth required
 app.get('/', (_req, res) => {

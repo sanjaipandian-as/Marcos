@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, useWindowDimensions } from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
 import { CustomCartAddIcon, CustomCartAddedIcon } from '../CartIcons';
 
-export default function SpecialOffersSection({ offers, products, cartItems, theme, fonts, shadows, navigation, handleAddToCart }) {
+const SpecialOffersSection = memo(function SpecialOffersSection({ offers, products, cartItems, theme, fonts, shadows, navigation, handleAddToCart }) {
   const { width } = useWindowDimensions();
 
   if (!offers || offers.length === 0) return null;
@@ -148,7 +148,9 @@ export default function SpecialOffersSection({ offers, products, cartItems, them
       </ScrollView>
     </View>
   );
-}
+});
+
+export default SpecialOffersSection;
 
 const styles = StyleSheet.create({
   sectionHeader: {

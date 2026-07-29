@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
 import SectionHeader from './SectionHeader';
 
-export default function ProductGridSection({
+const ProductGridSection = memo(function ProductGridSection({
   title,
   products,
   type = 'grid', // 'grid' | 'horizontal'
@@ -77,7 +77,9 @@ export default function ProductGridSection({
       )}
     </View>
   );
-}
+});
+
+export default ProductGridSection;
 
 const styles = StyleSheet.create({
   gridContainer: {

@@ -19,6 +19,9 @@ function getIO() {
 }
 function initSocket(server) {
     io = new socket_io_1.Server(server, {
+        pingTimeout: 60000,
+        pingInterval: 25000,
+        maxHttpBufferSize: 1e6,
         cors: {
             origin: environment_js_1.isProduction
                 ? ['https://marcos-admin-panel.vercel.app', 'https://marcos.app'] // Restrict to known origins in production

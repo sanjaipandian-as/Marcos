@@ -13,6 +13,7 @@ router.post('/cart/coupon', auth_middleware_js_1.authenticate, (0, validate_midd
 // Favorites
 router.get('/favorites', auth_middleware_js_1.authenticate, product_controller_js_1.ProductController.getFavorites);
 router.post('/favorites', auth_middleware_js_1.authenticate, (0, validate_middleware_js_1.validate)(product_controller_js_1.favoriteAddSchema), product_controller_js_1.ProductController.addToFavorites);
+router.post('/favorites/toggle', auth_middleware_js_1.authenticate, (0, validate_middleware_js_1.validate)(product_controller_js_1.favoriteAddSchema), product_controller_js_1.ProductController.addToFavorites);
 router.delete('/favorites/:productId', auth_middleware_js_1.authenticate, product_controller_js_1.ProductController.removeFromFavorites);
 // Product catalog
 router.get('/', (0, validate_middleware_js_1.validate)(product_controller_js_1.productQuerySchema), product_controller_js_1.ProductController.getProducts);

@@ -9,7 +9,10 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
-  Modal
+  Modal,
+  KeyboardAvoidingView,
+  TouchableWithoutFeedback,
+  Keyboard
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LottieView from 'lottie-react-native';
@@ -28,7 +31,9 @@ import {
   Check,
   Edit3,
   X,
-  Lock
+  Lock,
+  Eye,
+  EyeOff
 } from 'lucide-react-native';
 
 const GENDER_OPTIONS = [
@@ -36,8 +41,6 @@ const GENDER_OPTIONS = [
   { label: 'Female', value: 'FEMALE' },
   { label: 'Prefer not to say', value: 'OTHER' },
 ];
-
-// UPDATED_SVG_XML removed. Using Lottie animation asset instead.
 
 export default function AccountDetailsScreen({ navigation }) {
   const { theme, fonts, shadows } = useTheme();
@@ -52,6 +55,7 @@ export default function AccountDetailsScreen({ navigation }) {
   const [gender, setGender] = useState('');
   const [showGenderPicker, setShowGenderPicker] = useState(false);
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isPasswordVerified, setIsPasswordVerified] = useState(false);
 
   // Edit State & Backup values
@@ -149,9 +153,14 @@ export default function AccountDetailsScreen({ navigation }) {
     }
   };
 
+  // Re-fetch profile on initial mount AND whenever screen is focused (after login/navigation)
   useEffect(() => {
     fetchProfile();
-  }, []);
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchProfile();
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   const handleUpdate = async () => {
     if (!fullName.trim()) {
@@ -159,7 +168,6 @@ export default function AccountDetailsScreen({ navigation }) {
       return;
     }
     
-    // Address validation: street address is required if they provide any part of address
     if ((landmark.trim() || pincode.trim() || area.trim() || city.trim() || alternatePhone.trim()) && !streetAddress.trim()) {
       Alert.alert('Address Required', 'Please enter the street address/house number.');
       return;
@@ -221,7 +229,7 @@ export default function AccountDetailsScreen({ navigation }) {
     }
   };
 
-  // --- Password Verification Stage 1 ---
+  // Password Verification
   const handleVerifyPassword = async () => {
     if (!password) {
       Alert.alert('Required', 'Please enter your account password.');
@@ -233,6 +241,7 @@ export default function AccountDetailsScreen({ navigation }) {
       const res = await api.post('/auth/profile/verify-password', { password });
       if (res.success) {
         setIsPasswordVerified(true);
+        Keyboard.dismiss();
       }
     } catch (err) {
       Alert.alert('Verification Failed', err.message || 'Incorrect password.');
@@ -241,7 +250,7 @@ export default function AccountDetailsScreen({ navigation }) {
     }
   };
 
-  // --- Email Change Stage 2 & 3 ---
+  // Email Change
   const handleSendEmailOtp = async () => {
     if (!newEmail.trim() || !newEmail.includes('@')) {
       Alert.alert('Invalid Email', 'Please enter a valid email address.');
@@ -259,7 +268,8 @@ export default function AccountDetailsScreen({ navigation }) {
       });
       if (res.success) {
         setEmailOtpSent(true);
-        Alert.alert('Verification Code Sent', 'A security verification code has been sent to your current email address. Please check your inbox.');
+        Keyboard.dismiss();
+        Alert.alert('Verification Code Sent', 'A 6-digit security code has been sent to your current email address.');
       }
     } catch (err) {
       Alert.alert('Verification Failed', err.message || 'Failed to request update.');
@@ -283,12 +293,7 @@ export default function AccountDetailsScreen({ navigation }) {
           await AsyncStorage.setItem('accessToken', res.accessToken);
         }
         Alert.alert('✓ Email Updated', 'Your registered email address has been updated successfully.');
-        setEditingEmail(false);
-        setEmailOtpSent(false);
-        setNewEmail('');
-        setEmailOtp('');
-        setPassword('');
-        setIsPasswordVerified(false);
+        handleCloseEmailModal();
         fetchProfile();
       }
     } catch (err) {
@@ -298,7 +303,7 @@ export default function AccountDetailsScreen({ navigation }) {
     }
   };
 
-  // --- Phone Change Stage 2 & 3 ---
+  // Phone Change
   const handleSendPhoneOtp = async () => {
     if (!newPhone.trim() || newPhone.length < 8) {
       Alert.alert('Invalid Phone', 'Please enter a valid phone number.');
@@ -312,7 +317,8 @@ export default function AccountDetailsScreen({ navigation }) {
       });
       if (res.success) {
         setPhoneOtpSent(true);
-        Alert.alert('Verification Code Sent', 'A security verification code has been sent to your current email address. Please check your inbox.');
+        Keyboard.dismiss();
+        Alert.alert('Verification Code Sent', 'A 6-digit security code has been sent to your registered email address.');
       }
     } catch (err) {
       Alert.alert('Verification Failed', err.message || 'Failed to request update.');
@@ -336,12 +342,7 @@ export default function AccountDetailsScreen({ navigation }) {
           await AsyncStorage.setItem('accessToken', res.accessToken);
         }
         Alert.alert('✓ Phone Updated', 'Your registered phone number has been updated successfully.');
-        setEditingPhone(false);
-        setPhoneOtpSent(false);
-        setNewPhone('');
-        setPhoneOtp('');
-        setPassword('');
-        setIsPasswordVerified(false);
+        handleClosePhoneModal();
         fetchProfile();
       }
     } catch (err) {
@@ -357,6 +358,7 @@ export default function AccountDetailsScreen({ navigation }) {
     setNewEmail('');
     setEmailOtp('');
     setPassword('');
+    setShowPassword(false);
     setIsPasswordVerified(false);
   };
 
@@ -366,6 +368,7 @@ export default function AccountDetailsScreen({ navigation }) {
     setNewPhone('');
     setPhoneOtp('');
     setPassword('');
+    setShowPassword(false);
     setIsPasswordVerified(false);
   };
 
@@ -536,7 +539,6 @@ export default function AccountDetailsScreen({ navigation }) {
 
           {/* Pincode and Area Row */}
           <View style={{ flexDirection: 'row', gap: 12 }}>
-            {/* Pincode */}
             <View style={[styles.inputContainer, { flex: 1 }]}>
               <Text style={[styles.inputLabel, { fontFamily: fonts.semiBold, color: theme.text.secondary }]}>PINCODE</Text>
               <View style={[styles.inputWrapper, { backgroundColor: theme.bg.input }, !isEditing && { opacity: 0.85 }]}>
@@ -553,7 +555,6 @@ export default function AccountDetailsScreen({ navigation }) {
               </View>
             </View>
 
-            {/* Area */}
             <View style={[styles.inputContainer, { flex: 1.2 }]}>
               <Text style={[styles.inputLabel, { fontFamily: fonts.semiBold, color: theme.text.secondary }]}>AREA</Text>
               <View style={[styles.inputWrapper, { backgroundColor: theme.bg.input }, !isEditing && { opacity: 0.85 }]}>
@@ -649,7 +650,7 @@ export default function AccountDetailsScreen({ navigation }) {
             Contact Information
           </Text>
           <Text style={[styles.sectionSubtitle, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
-            Changing these requires OTP verification to keep your account secure.
+            Changing these requires password verification to keep your account secure.
           </Text>
 
           {/* Email Section */}
@@ -664,7 +665,7 @@ export default function AccountDetailsScreen({ navigation }) {
               </View>
               <TouchableOpacity
                 style={[styles.editContactBtn, { backgroundColor: theme.brand[50] }]}
-                onPress={() => { setEditingEmail(true); setEmailOtpSent(false); setNewEmail(''); setEmailOtp(''); setPassword(''); }}
+                onPress={() => { setEditingEmail(true); setEmailOtpSent(false); setNewEmail(''); setEmailOtp(''); setPassword(''); setShowPassword(false); }}
                 activeOpacity={0.7}
               >
                 <Edit3 size={13} color={theme.brand[500]} />
@@ -685,7 +686,7 @@ export default function AccountDetailsScreen({ navigation }) {
               </View>
               <TouchableOpacity
                 style={[styles.editContactBtn, { backgroundColor: theme.brand[50] }]}
-                onPress={() => { setEditingPhone(true); setPhoneOtpSent(false); setNewPhone(''); setPhoneOtp(''); setPassword(''); }}
+                onPress={() => { setEditingPhone(true); setPhoneOtpSent(false); setNewPhone(''); setPhoneOtp(''); setPassword(''); setShowPassword(false); }}
                 activeOpacity={0.7}
               >
                 <Edit3 size={13} color={theme.brand[500]} />
@@ -694,7 +695,6 @@ export default function AccountDetailsScreen({ navigation }) {
             </View>
           </View>
         </View>
-
 
       </ScrollView>
 
@@ -723,21 +723,38 @@ export default function AccountDetailsScreen({ navigation }) {
         </TouchableOpacity>
       </Modal>
 
-      {/* Email Change Modal */}
-      <Modal visible={editingEmail} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+      {/* Ultra-Minimalist Email Change Bottom Sheet Modal */}
+      <Modal visible={editingEmail} transparent animationType="slide" onRequestClose={handleCloseEmailModal}>
+        <KeyboardAvoidingView 
+          style={styles.modalOverlay} 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <TouchableOpacity 
+            style={StyleSheet.absoluteFill} 
+            activeOpacity={1} 
+            onPress={handleCloseEmailModal} 
+          />
           <View style={[styles.changeSheet, { backgroundColor: theme.bg.card }]}>
+            {/* Drag Handle Indicator */}
+            <View style={styles.sheetHandle} />
+
+            {/* Header */}
             <View style={styles.changeSheetHeader}>
-              <Text style={[styles.changeSheetTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>Change Email</Text>
-              <TouchableOpacity onPress={handleCloseEmailModal}>
-                <X size={22} color={theme.text.secondary} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Mail size={20} color={theme.text.primary} />
+                <Text style={[styles.changeSheetTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                  Change Email
+                </Text>
+              </View>
+              <TouchableOpacity onPress={handleCloseEmailModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <X size={20} color={theme.text.secondary} />
               </TouchableOpacity>
             </View>
 
             {!isPasswordVerified ? (
               <>
                 <Text style={[styles.changeSheetSub, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
-                  For security, please verify your account password first to proceed with changing your email.
+                  Enter your account password to authorize changing your email.
                 </Text>
                 
                 {/* Password Input */}
@@ -747,33 +764,37 @@ export default function AccountDetailsScreen({ navigation }) {
                     style={[styles.input, { fontFamily: fonts.medium, color: theme.text.primary }]}
                     value={password}
                     onChangeText={setPassword}
-                    placeholder="Verify account password"
+                    placeholder="Account password"
                     placeholderTextColor={theme.text.muted}
-                    secureTextEntry={true}
+                    secureTextEntry={!showPassword}
                   />
+                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                    {showPassword ? <EyeOff size={18} color={theme.text.muted} /> : <Eye size={18} color={theme.text.muted} />}
+                  </TouchableOpacity>
                 </View>
 
                 <TouchableOpacity
-                  style={[styles.saveBtn, { backgroundColor: theme.brand[500], marginTop: 20 }]}
+                  style={[styles.luxuryActionBtn, { backgroundColor: '#18181B', marginTop: 20 }]}
                   onPress={handleVerifyPassword}
                   disabled={emailLoading}
+                  activeOpacity={0.85}
                 >
-                  {emailLoading ? <ActivityIndicator color="#ffffff" /> : (
-                    <Text style={[styles.saveBtnText, { fontFamily: fonts.bold }]}>VERIFY PASSWORD</Text>
+                  {emailLoading ? <ActivityIndicator color="#ffffff" size="small" /> : (
+                    <Text style={[styles.luxuryActionBtnText, { fontFamily: fonts.bold }]}>Verify Password</Text>
                   )}
                 </TouchableOpacity>
               </>
             ) : !emailOtpSent ? (
               <>
-                <View style={[styles.verifiedBadge, { backgroundColor: theme.brand[50] }]}>
-                  <Check size={16} color="#10b981" />
-                  <Text style={[styles.verifiedBadgeText, { fontFamily: fonts.semiBold, color: '#10b981' }]}>
+                <View style={styles.verifiedBadge}>
+                  <Check size={14} color="#10B981" />
+                  <Text style={[styles.verifiedBadgeText, { fontFamily: fonts.semiBold, color: '#10B981' }]}>
                     Password Verified
                   </Text>
                 </View>
 
-                <Text style={[styles.changeSheetSub, { fontFamily: fonts.medium, color: theme.text.secondary, marginTop: 8 }]}>
-                  Enter your new email address. A security code will be sent to your current email to confirm ownership.
+                <Text style={[styles.changeSheetSub, { fontFamily: fonts.medium, color: theme.text.secondary, marginTop: 4 }]}>
+                  Enter your new email address. A 6-digit verification code will be sent to confirm.
                 </Text>
 
                 {/* New Email Input */}
@@ -789,20 +810,22 @@ export default function AccountDetailsScreen({ navigation }) {
                     autoCapitalize="none"
                   />
                 </View>
+
                 <TouchableOpacity
-                  style={[styles.saveBtn, { backgroundColor: theme.brand[500], marginTop: 20 }]}
+                  style={[styles.luxuryActionBtn, { backgroundColor: '#18181B', marginTop: 20 }]}
                   onPress={handleSendEmailOtp}
                   disabled={emailLoading}
+                  activeOpacity={0.85}
                 >
-                  {emailLoading ? <ActivityIndicator color="#ffffff" /> : (
-                    <Text style={[styles.saveBtnText, { fontFamily: fonts.bold }]}>SEND CODE</Text>
+                  {emailLoading ? <ActivityIndicator color="#ffffff" size="small" /> : (
+                    <Text style={[styles.luxuryActionBtnText, { fontFamily: fonts.bold }]}>Send Verification Code</Text>
                   )}
                 </TouchableOpacity>
               </>
             ) : (
               <>
                 <Text style={[styles.changeSheetSub, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
-                  Enter the 6-digit code sent to your current registered email address to authorize changing to: {newEmail}
+                  Enter the 6-digit code sent to your registered email to update your address to: <Text style={{ fontFamily: fonts.bold, color: theme.text.primary }}>{newEmail}</Text>
                 </Text>
                 <View style={[styles.inputWrapper, { backgroundColor: theme.bg.input, marginTop: 16 }]}>
                   <TextInput
@@ -816,35 +839,53 @@ export default function AccountDetailsScreen({ navigation }) {
                   />
                 </View>
                 <TouchableOpacity
-                  style={[styles.saveBtn, { backgroundColor: theme.brand[500], marginTop: 20 }]}
+                  style={[styles.luxuryActionBtn, { backgroundColor: '#18181B', marginTop: 20 }]}
                   onPress={handleVerifyEmailOtp}
                   disabled={emailLoading}
+                  activeOpacity={0.85}
                 >
-                  {emailLoading ? <ActivityIndicator color="#ffffff" /> : (
-                    <Text style={[styles.saveBtnText, { fontFamily: fonts.bold }]}>VERIFY & APPLY</Text>
+                  {emailLoading ? <ActivityIndicator color="#ffffff" size="small" /> : (
+                    <Text style={[styles.luxuryActionBtnText, { fontFamily: fonts.bold }]}>Confirm & Update Email</Text>
                   )}
                 </TouchableOpacity>
               </>
             )}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
-      {/* Phone Change Modal */}
-      <Modal visible={editingPhone} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+      {/* Ultra-Minimalist Phone Change Bottom Sheet Modal */}
+      <Modal visible={editingPhone} transparent animationType="slide" onRequestClose={handleClosePhoneModal}>
+        <KeyboardAvoidingView 
+          style={styles.modalOverlay} 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <TouchableOpacity 
+            style={StyleSheet.absoluteFill} 
+            activeOpacity={1} 
+            onPress={handleClosePhoneModal} 
+          />
           <View style={[styles.changeSheet, { backgroundColor: theme.bg.card }]}>
+            {/* Drag Handle Indicator */}
+            <View style={styles.sheetHandle} />
+
+            {/* Header */}
             <View style={styles.changeSheetHeader}>
-              <Text style={[styles.changeSheetTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>Change Phone</Text>
-              <TouchableOpacity onPress={handleClosePhoneModal}>
-                <X size={22} color={theme.text.secondary} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Phone size={20} color={theme.text.primary} />
+                <Text style={[styles.changeSheetTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+                  Change Phone Number
+                </Text>
+              </View>
+              <TouchableOpacity onPress={handleClosePhoneModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <X size={20} color={theme.text.secondary} />
               </TouchableOpacity>
             </View>
 
             {!isPasswordVerified ? (
               <>
                 <Text style={[styles.changeSheetSub, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
-                  For security, please verify your account password first to proceed with changing your phone number.
+                  Enter your account password to authorize changing your phone number.
                 </Text>
                 
                 {/* Password Input */}
@@ -854,33 +895,37 @@ export default function AccountDetailsScreen({ navigation }) {
                     style={[styles.input, { fontFamily: fonts.medium, color: theme.text.primary }]}
                     value={password}
                     onChangeText={setPassword}
-                    placeholder="Verify account password"
+                    placeholder="Account password"
                     placeholderTextColor={theme.text.muted}
-                    secureTextEntry={true}
+                    secureTextEntry={!showPassword}
                   />
+                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                    {showPassword ? <EyeOff size={18} color={theme.text.muted} /> : <Eye size={18} color={theme.text.muted} />}
+                  </TouchableOpacity>
                 </View>
 
                 <TouchableOpacity
-                  style={[styles.saveBtn, { backgroundColor: theme.brand[500], marginTop: 20 }]}
+                  style={[styles.luxuryActionBtn, { backgroundColor: '#18181B', marginTop: 20 }]}
                   onPress={handleVerifyPassword}
                   disabled={phoneLoading}
+                  activeOpacity={0.85}
                 >
-                  {phoneLoading ? <ActivityIndicator color="#ffffff" /> : (
-                    <Text style={[styles.saveBtnText, { fontFamily: fonts.bold }]}>VERIFY PASSWORD</Text>
+                  {phoneLoading ? <ActivityIndicator color="#ffffff" size="small" /> : (
+                    <Text style={[styles.luxuryActionBtnText, { fontFamily: fonts.bold }]}>Verify Password</Text>
                   )}
                 </TouchableOpacity>
               </>
             ) : !phoneOtpSent ? (
               <>
-                <View style={[styles.verifiedBadge, { backgroundColor: theme.brand[50] }]}>
-                  <Check size={16} color="#10b981" />
-                  <Text style={[styles.verifiedBadgeText, { fontFamily: fonts.semiBold, color: '#10b981' }]}>
+                <View style={styles.verifiedBadge}>
+                  <Check size={14} color="#10B981" />
+                  <Text style={[styles.verifiedBadgeText, { fontFamily: fonts.semiBold, color: '#10B981' }]}>
                     Password Verified
                   </Text>
                 </View>
 
-                <Text style={[styles.changeSheetSub, { fontFamily: fonts.medium, color: theme.text.secondary, marginTop: 8 }]}>
-                  Enter your new phone number. A security code will be sent to your current email to confirm ownership.
+                <Text style={[styles.changeSheetSub, { fontFamily: fonts.medium, color: theme.text.secondary, marginTop: 4 }]}>
+                  Enter your new phone number. A 6-digit verification code will be sent to confirm.
                 </Text>
 
                 {/* New Phone Input */}
@@ -895,20 +940,22 @@ export default function AccountDetailsScreen({ navigation }) {
                     keyboardType="phone-pad"
                   />
                 </View>
+
                 <TouchableOpacity
-                  style={[styles.saveBtn, { backgroundColor: theme.brand[500], marginTop: 20 }]}
+                  style={[styles.luxuryActionBtn, { backgroundColor: '#18181B', marginTop: 20 }]}
                   onPress={handleSendPhoneOtp}
                   disabled={phoneLoading}
+                  activeOpacity={0.85}
                 >
-                  {phoneLoading ? <ActivityIndicator color="#ffffff" /> : (
-                    <Text style={[styles.saveBtnText, { fontFamily: fonts.bold }]}>SEND CODE</Text>
+                  {phoneLoading ? <ActivityIndicator color="#ffffff" size="small" /> : (
+                    <Text style={[styles.luxuryActionBtnText, { fontFamily: fonts.bold }]}>Send Verification Code</Text>
                   )}
                 </TouchableOpacity>
               </>
             ) : (
               <>
                 <Text style={[styles.changeSheetSub, { fontFamily: fonts.medium, color: theme.text.secondary }]}>
-                  Enter the 6-digit code sent to your current registered email address to authorize changing to: {newPhone}
+                  Enter the 6-digit code sent to your registered email to update your phone number to: <Text style={{ fontFamily: fonts.bold, color: theme.text.primary }}>{newPhone}</Text>
                 </Text>
                 <View style={[styles.inputWrapper, { backgroundColor: theme.bg.input, marginTop: 16 }]}>
                   <TextInput
@@ -922,18 +969,19 @@ export default function AccountDetailsScreen({ navigation }) {
                   />
                 </View>
                 <TouchableOpacity
-                  style={[styles.saveBtn, { backgroundColor: theme.brand[500], marginTop: 20 }]}
+                  style={[styles.luxuryActionBtn, { backgroundColor: '#18181B', marginTop: 20 }]}
                   onPress={handleVerifyPhoneOtp}
                   disabled={phoneLoading}
+                  activeOpacity={0.85}
                 >
-                  {phoneLoading ? <ActivityIndicator color="#ffffff" /> : (
-                    <Text style={[styles.saveBtnText, { fontFamily: fonts.bold }]}>VERIFY & APPLY</Text>
+                  {phoneLoading ? <ActivityIndicator color="#ffffff" size="small" /> : (
+                    <Text style={[styles.luxuryActionBtnText, { fontFamily: fonts.bold }]}>Confirm & Update Phone</Text>
                   )}
                 </TouchableOpacity>
               </>
             )}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Updated Details Success Modal */}
@@ -1020,8 +1068,16 @@ const styles = StyleSheet.create({
   editContactText: { fontSize: 12 },
   // Modal
   modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'flex-end',
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E4E4E7',
+    alignSelf: 'center',
+    marginBottom: 16,
   },
   pickerSheet: {
     borderTopLeftRadius: 28, borderTopRightRadius: 28,
@@ -1039,11 +1095,29 @@ const styles = StyleSheet.create({
   },
   pickerCancelText: { fontSize: 14 },
   changeSheet: {
-    margin: 16, borderRadius: 28, padding: 24,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 24,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8,
   },
   changeSheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  changeSheetTitle: { fontSize: 18 },
-  changeSheetSub: { fontSize: 13, lineHeight: 20 },
+  changeSheetTitle: { fontSize: 18, letterSpacing: -0.2 },
+  changeSheetSub: { fontSize: 13, lineHeight: 19 },
+  luxuryActionBtn: {
+    height: 50,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  luxuryActionBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+  },
   // Skeleton
   skeletonBtn: { width: 40, height: 40, borderRadius: 12 },
   skeletonTitle: { width: 120, height: 20, borderRadius: 6 },
@@ -1053,9 +1127,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     alignSelf: 'flex-start',
+    backgroundColor: '#ECFDF5',
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 8,
+    borderRadius: 10,
     marginBottom: 8,
   },
   verifiedBadgeText: {
