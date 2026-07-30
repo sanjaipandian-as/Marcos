@@ -11,7 +11,11 @@ exports.broadcastNotificationSchema = zod_1.z.object({
     body: zod_1.z.object({
         title: zod_1.z.string().min(1),
         body: zod_1.z.string().min(1),
-        channels: zod_1.z.array(zod_1.z.enum(['EMAIL', 'SMS', 'PUSH'])).min(1),
+        channels: zod_1.z.array(zod_1.z.enum(['EMAIL', 'SMS', 'PUSH'])).optional().default(['EMAIL', 'SMS', 'PUSH']),
+        type: zod_1.z.string().optional(),
+        isScheduled: zod_1.z.boolean().optional(),
+        scheduledTime: zod_1.z.string().optional(),
+        targetAudience: zod_1.z.string().optional().default('ALL'),
     }),
 });
 exports.targetedNotificationSchema = zod_1.z.object({
@@ -19,7 +23,7 @@ exports.targetedNotificationSchema = zod_1.z.object({
         userIds: zod_1.z.array(zod_1.z.string().uuid()).min(1),
         title: zod_1.z.string().min(1),
         body: zod_1.z.string().min(1),
-        channels: zod_1.z.array(zod_1.z.enum(['EMAIL', 'SMS', 'PUSH'])).min(1),
+        channels: zod_1.z.array(zod_1.z.enum(['EMAIL', 'SMS', 'PUSH'])).optional().default(['EMAIL', 'SMS', 'PUSH']),
     }),
 });
 class NotificationController {
@@ -118,43 +122,76 @@ class NotificationController {
      * Broadcasts a notification blast to all registered customers.
      */
     static async broadcastNotification(req, res, next) {
-        const { title, body, channels } = req.body;
+        const { title, body, channels = ['EMAIL', 'SMS', 'PUSH'], targetAudience = 'ALL', type = 'PROMOTIONAL_BLAST' } = req.body;
         try {
             const notification = await db_js_1.default.notification.create({
                 data: {
                     title,
                     body,
-                    type: 'PROMOTIONAL_BLAST',
+                    type,
                 },
             });
-            // Get all customer IDs
-            const customers = await db_js_1.default.user.findMany({
-                where: { role: 'CUSTOMER' },
-                select: { id: true },
+            // Filter target users based on targetAudience
+            let whereClause = {};
+            if (targetAudience === 'CUSTOMERS') {
+                whereClause = { role: 'CUSTOMER' };
+            }
+            else if (targetAudience === 'STAFF') {
+                whereClause = { role: { in: ['STAFF', 'ADMIN', 'SUPERADMIN'] } };
+            }
+            else {
+                whereClause = {};
+            }
+            const users = await db_js_1.default.user.findMany({
+                where: whereClause,
+                select: { id: true, email: true, phoneNumber: true, fcmToken: true },
             });
-            if (customers.length > 0) {
+            if (users.length > 0) {
                 await db_js_1.default.notificationRecipient.createMany({
-                    data: customers.map((c) => ({
+                    data: users.map((u) => ({
                         notificationId: notification.id,
-                        userId: c.id,
+                        userId: u.id,
                     })),
                 });
-                // Queue workers for sending actual notifications
-                for (const customer of customers) {
-                    await jobs_producer_js_1.default.queueNotification({
-                        userId: customer.id,
+                // 1. Real-time Socket.IO Broadcast to all connected mobile & web clients
+                const { getIO } = await import('../socket/socket.handler.js');
+                const io = getIO();
+                if (io) {
+                    io.emit('broadcast:alert', {
+                        id: notification.id,
+                        title,
+                        body,
+                        createdAt: notification.createdAt,
+                    });
+                    for (const u of users) {
+                        io.to(`user:${u.id}`).emit('notification:received', {
+                            id: notification.id,
+                            title,
+                            body,
+                            createdAt: notification.createdAt,
+                        });
+                    }
+                }
+                // 2. Dispatch FCM Push Notifications directly
+                const { NotificationService } = await import('../services/notification.service.js');
+                for (const u of users) {
+                    if (u.fcmToken) {
+                        NotificationService.sendPushNotification(u.id, title, body).catch(() => { });
+                    }
+                    jobs_producer_js_1.default.queueNotification({
+                        userId: u.id,
                         channels,
                         templates: {
                             email: { id: 'broadcast', data: { title, body } },
                             sms: body,
                             push: { title, body },
                         },
-                    });
+                    }).catch(() => { });
                 }
             }
             return res.status(201).json({
                 success: true,
-                message: `Broadcast queued successfully for ${customers.length} users.`,
+                message: `Broadcast dispatched successfully for ${users.length} users.`,
                 data: notification,
             });
         }

@@ -251,7 +251,12 @@ class OrderController {
     static async adminListOrders(req, res, next) {
         const { page = 1, limit = 10, status } = req.query;
         const skip = (Number(page) - 1) * Number(limit);
+        const cacheKey = `cache:admin:orders:${page}:${limit}:${status || 'ALL'}`;
         try {
+            const cached = await redis_js_1.default.get(cacheKey);
+            if (cached) {
+                return res.status(200).json(JSON.parse(cached));
+            }
             const where = {};
             if (status) {
                 where.status = status;
@@ -323,7 +328,7 @@ class OrderController {
                     booking,
                 };
             });
-            return res.status(200).json({
+            const responsePayload = {
                 success: true,
                 data: ordersWithBookings,
                 pagination: {
@@ -332,7 +337,9 @@ class OrderController {
                     total,
                     pages: Math.ceil(total / Number(limit)),
                 },
-            });
+            };
+            await redis_js_1.default.set(cacheKey, JSON.stringify(responsePayload), 'EX', 30);
+            return res.status(200).json(responsePayload);
         }
         catch (error) {
             next(error);

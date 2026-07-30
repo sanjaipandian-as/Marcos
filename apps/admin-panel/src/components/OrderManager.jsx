@@ -961,10 +961,6 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
   };
 
   useEffect(() => {
-    loadOrders();
-  }, []);
-
-  useEffect(() => {
     if (isActive) {
       loadOrders(true);
       
@@ -1013,12 +1009,11 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
 
   const loadOrders = async (quiet = false) => {
     try {
-      const [list, appList, visitList, staff, measurementsList] = await Promise.all([
+      const [list, appList, visitList, staff] = await Promise.all([
         api.getOrders().catch(() => []),
         api.getAppointments().catch(() => []),
         api.getStoreVisits().catch(() => []),
         api.getStaffList().catch(() => []),
-        api.getAllMeasurements().catch(() => [])
       ]);
 
       const enrichedOrders = list.map(order => {
@@ -1061,7 +1056,6 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
       setAppointments(appList);
       setVisits(visitList);
       setStaffList(staff);
-      setAllMeasurements(measurementsList || []);
       if (staff.length > 0 && !selectedStaffId) {
         setSelectedStaffId(staff[0].id);
       }

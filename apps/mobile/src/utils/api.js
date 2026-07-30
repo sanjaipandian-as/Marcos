@@ -222,4 +222,8 @@ api.interceptors.response.use(
   }
 );
 
+api.getPublicAlerts = async () => {
+  return api.get('/settings/public');
+};
+
 export default api;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   TrendingUp, TrendingDown, Package, ShoppingCart, DollarSign,
   Truck, Calendar, Users, AlertTriangle, BarChart2, Clock,
@@ -88,99 +88,191 @@ function SH({ title, sub, action }) {
 }
 
 // ─── Date Filter Bar ──────────────────────────────────────────────────────────
-function DateFilterBar({ selectedDate, onDateChange, loading }) {
+function DateFilterBar({ selectedDate, onDateChange, loading, allOrders = [] }) {
   const today = todayISO();
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yestISO = yesterday.toISOString().substring(0, 10);
+  const [anchorDateStr, setAnchorDateStr] = useState(selectedDate || today);
 
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomISO = tomorrow.toISOString().substring(0, 10);
+  useEffect(() => {
+    if (selectedDate) setAnchorDateStr(selectedDate);
+  }, [selectedDate]);
 
-  const presets = [
-    { label: 'Yesterday', value: yestISO },
-    { label: 'Today', value: today },
-    { label: 'Tomorrow', value: tomISO },
-  ];
+  const daysList = useMemo(() => {
+    const list = [];
+    const base = new Date(anchorDateStr + 'T00:00:00.000Z');
+    if (isNaN(base.getTime())) return list;
 
-  const handlePrev = () => {
-    if (selectedDate === today) onDateChange(yestISO);
-    else if (selectedDate === tomISO) onDateChange(today);
+    for (let offset = -3; offset <= 3; offset++) {
+      const d = new Date(base);
+      d.setUTCDate(d.getUTCDate() + offset);
+      const iso = d.toISOString().substring(0, 10);
+      const dayName = d.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }).toUpperCase();
+      const dayNum = d.getUTCDate();
+      const monthName = d.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
+
+      const dayStart = new Date(iso + 'T00:00:00.000Z');
+      const dayEnd = new Date(dayStart);
+      dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+
+      let totalCount = 0;
+      let newCount = 0;
+
+      allOrders.forEach(o => {
+        if (o.status === 'CANCELLED') return;
+        const cDate = new Date(o.createdAt);
+        if (cDate >= dayStart && cDate < dayEnd) {
+          totalCount++;
+          if (o.status === 'PENDING' || o.status === 'PAID') {
+            newCount++;
+          }
+        }
+      });
+
+      list.push({
+        iso,
+        dayName,
+        dayNum,
+        monthName,
+        totalCount,
+        newCount,
+      });
+    }
+    return list;
+  }, [anchorDateStr, allOrders]);
+
+  const handlePrevDay = () => {
+    const d = new Date(anchorDateStr + 'T00:00:00.000Z');
+    d.setUTCDate(d.getUTCDate() - 1);
+    const newIso = d.toISOString().substring(0, 10);
+    setAnchorDateStr(newIso);
+    onDateChange(newIso);
   };
 
-  const handleNext = () => {
-    if (selectedDate === yestISO) onDateChange(today);
-    else if (selectedDate === today) onDateChange(tomISO);
+  const handleNextDay = () => {
+    const d = new Date(anchorDateStr + 'T00:00:00.000Z');
+    d.setUTCDate(d.getUTCDate() + 1);
+    const newIso = d.toISOString().substring(0, 10);
+    setAnchorDateStr(newIso);
+    onDateChange(newIso);
   };
 
-  const canPrev = selectedDate === today || selectedDate === tomISO;
-  const canNext = selectedDate === yestISO || selectedDate === today;
-
-  const displayLabel = selectedDate === today
-    ? 'Today'
-    : selectedDate === yestISO
-      ? 'Yesterday'
-      : selectedDate === tomISO
-        ? 'Tomorrow'
-        : new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+  const handleSelectToday = () => {
+    setAnchorDateStr(today);
+    onDateChange(today);
+  };
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-3 flex flex-wrap items-center gap-3">
-      <div className="flex items-center gap-1">
-        <CalendarDays className="w-4 h-4 text-brand-500" />
-        <span className="text-xs font-bold text-[#3D2E3D]">Viewing:</span>
-        <span className="text-xs font-extrabold text-brand-600 ml-1">{displayLabel}</span>
-        {loading && <span className="ml-2 w-3.5 h-3.5 border-2 border-brand-300 border-t-brand-600 rounded-full animate-spin" />}
-      </div>
-
-      <div className="flex items-center gap-1 ml-auto">
-        {/* Quick presets */}
-        {presets.map(p => (
-          <button
-            key={p.value}
-            onClick={() => onDateChange(p.value)}
-            className={`px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all ${selectedDate === p.value ? 'bg-brand-500 text-[#3D2E3D] shadow-sm' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}
-          >
-            {p.label}
-          </button>
-        ))}
-
-        {/* Prev / Next */}
-        <button
-          onClick={handlePrev}
-          disabled={!canPrev}
-          className={`p-1.5 rounded-xl transition-all ${canPrev ? 'bg-slate-50 hover:bg-slate-100 text-slate-500' : 'bg-slate-50/50 text-slate-300 cursor-not-allowed'}`}
+    <div className="bg-[#FAF9FC] rounded-3xl border border-slate-200/80 shadow-sm p-2.5 flex flex-col md:flex-row items-center gap-3 transition-all">
+      {/* Left controls: Datepicker icon, TODAY button, Divider, Prev arrow */}
+      <div className="flex items-center gap-2 shrink-0">
+        {/* Calendar Picker button */}
+        <div
+          title="Pick custom date"
+          className="relative p-2.5 rounded-2xl bg-white border border-slate-200/80 text-slate-600 hover:text-brand-600 hover:border-brand-200 hover:bg-brand-50/50 cursor-pointer shadow-xs transition-all flex items-center justify-center"
         >
-          <ChevronLeft className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={handleNext}
-          disabled={!canNext}
-          className={`p-1.5 rounded-xl transition-all ${canNext ? 'bg-slate-50 hover:bg-slate-100 text-slate-500' : 'bg-slate-50/50 text-slate-300 cursor-not-allowed'}`}
-        >
-          <ChevronRight className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Date picker */}
-        <div className="relative flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-[10px] font-bold text-slate-500 cursor-pointer transition-all overflow-hidden">
-          <Calendar className="w-3.5 h-3.5 pointer-events-none" />
-          <span className="pointer-events-none">Pick Date</span>
+          <Calendar className="w-4 h-4 pointer-events-none" />
           <input
             type="date"
             value={selectedDate}
-            onChange={e => onDateChange(e.target.value)}
-            onClick={e => { try { e.target.showPicker(); } catch (err) { } }}
+            onChange={e => {
+              if (e.target.value) {
+                setAnchorDateStr(e.target.value);
+                onDateChange(e.target.value);
+              }
+            }}
+            onClick={e => { try { e.target.showPicker(); } catch (err) {} }}
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
           />
         </div>
 
-        {/* Reset to today */}
-        {selectedDate !== today && (
-          <button onClick={() => onDateChange(today)} className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-500 text-[10px] font-bold transition-all">
-            <X className="w-3 h-3" /> Reset
-          </button>
-        )}
+        {/* TODAY button */}
+        <button
+          onClick={handleSelectToday}
+          className={`px-3.5 py-2 rounded-2xl text-[11px] font-black tracking-wider uppercase transition-all border ${
+            selectedDate === today
+              ? 'bg-[#D8BFD8] text-[#2B1B2B] border-[#C5A3C5] shadow-xs'
+              : 'bg-white text-slate-500 border-slate-200/80 hover:bg-slate-100'
+          }`}
+        >
+          Today
+        </button>
+
+        {/* Divider */}
+        <div className="w-px h-6 bg-slate-200 mx-1" />
+
+        {/* Prev Arrow */}
+        <button
+          onClick={handlePrevDay}
+          className="p-2 rounded-2xl bg-white border border-slate-200/80 text-slate-500 hover:bg-slate-100 hover:text-[#3D2E3D] shadow-xs transition-all"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Date Pills Horizontal Strip */}
+      <div className="flex-1 flex items-center justify-between gap-2 overflow-x-auto py-1 px-1 scrollbar-none w-full">
+        {daysList.map(item => {
+          const isSelected = selectedDate === item.iso;
+          return (
+            <button
+              key={item.iso}
+              onClick={() => {
+                setAnchorDateStr(item.iso);
+                onDateChange(item.iso);
+              }}
+              className={`flex-1 min-w-[72px] max-w-[105px] flex flex-col items-center justify-between py-2 px-1.5 rounded-2xl border transition-all duration-200 select-none ${
+                isSelected
+                  ? 'bg-[#D8BFD8] border-[#C4A4C4] text-[#2B1B2B] shadow-md ring-2 ring-[#D8BFD8]/50 scale-[1.04]'
+                  : 'bg-white border-slate-200/70 text-slate-600 hover:border-purple-200 hover:bg-purple-50/40 shadow-xs'
+              }`}
+            >
+              {/* Top Stats Badges (Total & New Orders) */}
+              <div className="flex items-center gap-1 mb-1.5">
+                <span
+                  title="Total orders on this date"
+                  className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
+                    isSelected
+                      ? 'bg-white/80 text-[#2B1B2B]'
+                      : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  {item.totalCount} <span className="text-[7.5px] font-bold opacity-75">total</span>
+                </span>
+                {item.newCount > 0 && (
+                  <span
+                    title="New orders"
+                    className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
+                      isSelected
+                        ? 'bg-[#3D2E3D] text-white'
+                        : 'bg-emerald-100 text-emerald-700'
+                    }`}
+                  >
+                    +{item.newCount} <span className="text-[7.5px] font-bold opacity-80">new</span>
+                  </span>
+                )}
+              </div>
+
+              {/* Day Name */}
+              <span className={`text-[10px] font-extrabold uppercase tracking-wider ${isSelected ? 'text-[#3D263D]' : 'text-slate-400'}`}>
+                {item.dayName}
+              </span>
+
+              {/* Date Number */}
+              <span className={`text-base font-black leading-tight mt-0.5 ${isSelected ? 'text-[#1F101F]' : 'text-[#3D2E3D]'}`}>
+                {item.dayNum}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Right controls: Next Arrow */}
+      <div className="flex items-center shrink-0">
+        <button
+          onClick={handleNextDay}
+          className="p-2 rounded-2xl bg-white border border-slate-200/80 text-slate-500 hover:bg-slate-100 hover:text-[#3D2E3D] shadow-xs transition-all"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
       </div>
     </div>
   );
@@ -353,7 +445,7 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
       </div>
 
       {/* ── Date Filter Bar ── */}
-      <DateFilterBar selectedDate={selectedDate} onDateChange={handleDateChange} />
+      <DateFilterBar selectedDate={selectedDate} onDateChange={handleDateChange} allOrders={allOrders} />
 
       {/* ── Date-Specific Stats Strip ── */}
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
@@ -378,15 +470,8 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
         {/* Box 2: Deliveries Promised */}
         <div
           onClick={() => {
-            const el = document.getElementById('deliveries-promised-section');
-            if (el) {
-              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              el.classList.add('ring-2', 'ring-brand-500');
-              setTimeout(() => el.classList.remove('ring-2', 'ring-brand-500'), 2000);
-            } else {
-              sessionStorage.setItem('admin_order_delivery_promised_date', selectedDate);
-              setActiveTab?.('orders-bookings');
-            }
+            sessionStorage.setItem('admin_order_delivery_promised_date', selectedDate);
+            setActiveTab?.('orders-bookings');
           }}
           className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col justify-between cursor-pointer hover:shadow-premium hover:-translate-y-0.5 transition-all group"
         >
@@ -470,157 +555,236 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
         </div>
       </div>
 
-      {/* ── Date Details Grid: Orders Received, Deliveries Promised, Appointments ── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Orders Received List */}
-        <div className="bg-white rounded-3xl p-6 shadow-premium">
-          <SH
-            title={`Orders Received`}
-            sub={`${ds.ordersReceived} orders on ${new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`}
-            action={
-              <button 
-                onClick={() => {
-                  sessionStorage.setItem('admin_order_status_filter', 'ALL');
-                  sessionStorage.setItem('admin_order_date_filter', selectedDate);
-                  setActiveTab?.('orders-bookings');
-                }} 
-                className="text-[10px] font-bold text-brand-600 hover:underline"
-              >
-                View all →
-              </button>
-            }
-          />
-          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-            {ds.ordersList?.length === 0 ? (
-              <div className="text-center py-8 text-slate-400">
-                <ShoppingCart className="w-8 h-8 mx-auto mb-2 text-slate-200" />
-                <p className="text-xs font-semibold">No orders received on this date</p>
-              </div>
-            ) : ds.ordersList?.map(o => (
-              <div 
-                key={o.id} 
-                onClick={() => setSelectedOrderModal(o)}
-                className="flex items-center justify-between p-3 rounded-2xl bg-slate-50/60 border border-slate-100 hover:bg-brand-50/40 transition-colors cursor-pointer group"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-[#3D2E3D] group-hover:text-brand-700 transition-colors truncate">{o.invoiceNumber}</p>
-                  <p className="text-[10px] text-slate-400 truncate">{o.user?.fullName || o.customerName || 'Guest'}</p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0 ml-2">
-                  <span className="text-xs font-extrabold text-[#3D2E3D]">{fmtCur(o.payableAmount)}</span>
-                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${STATUS_COLORS[o.status] || 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-                    {o.status}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Deliveries Promised Standalone Section */}
-        <div id="deliveries-promised-section" className="bg-white rounded-3xl p-6 shadow-premium transition-all duration-300 border border-transparent">
-          <SH
-            title={`Deliveries Promised`}
-            sub={`${ds.deliveriesPromised} promised for ${new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`}
-            action={
-              <button 
-                onClick={() => {
-                  sessionStorage.setItem('admin_order_delivery_promised_date', selectedDate);
-                  setActiveTab?.('orders-bookings');
-                }} 
-                className="text-[10px] font-bold text-slate-600 hover:underline"
-              >
-                Pipeline →
-              </button>
-            }
-          />
-          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-            {ds.deliveriesPromisedList?.length === 0 ? (
-              <div className="text-center py-8 text-slate-400">
-                <Package className="w-8 h-8 mx-auto mb-2 text-slate-200" />
-                <p className="text-xs font-semibold">No deliveries promised for this date</p>
-              </div>
-            ) : ds.deliveriesPromisedList?.map(o => (
-              <div 
-                key={o.id} 
-                onClick={() => setSelectedOrderModal(o)}
-                className="flex items-center justify-between p-3 rounded-2xl bg-amber-50/40 border border-amber-100 hover:bg-amber-50 transition-colors cursor-pointer group"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <Package className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                    <p className="text-xs font-bold text-[#3D2E3D] group-hover:text-amber-800 transition-colors truncate">{o.invoiceNumber}</p>
-                  </div>
-                  <p className="text-[10px] text-slate-500 truncate mt-0.5">{o.user?.fullName || o.customerName || 'Customer'}</p>
-                </div>
-                <div className="flex flex-col items-end shrink-0 ml-2">
-                  <span className="text-xs font-extrabold text-[#3D2E3D]">{fmtCur(o.payableAmount)}</span>
-                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border mt-0.5 ${STATUS_COLORS[o.status] || 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-                    {o.status.replace(/_/g, ' ')}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Appointments List */}
-        <div className="bg-white rounded-3xl p-6 shadow-premium">
-          <SH
-            title={`Appointments Scheduled`}
-            sub={`${ds.appointmentsList?.length || 0} on ${new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`}
-            action={
-              <button 
-                onClick={() => {
-                  sessionStorage.setItem('admin_appt_status_filter', 'ALL');
-                  sessionStorage.setItem('admin_appt_date_filter', selectedDate);
-                  setActiveTab?.('orders-fittings');
-                }} 
-                className="text-[10px] font-bold text-blue-600 hover:underline"
-              >
-                View all →
-              </button>
-            }
-          />
-          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-            {ds.appointmentsList?.length === 0 ? (
-              <div className="text-center py-8 text-slate-400">
-                <Calendar className="w-8 h-8 mx-auto mb-2 text-slate-200" />
-                <p className="text-xs font-semibold">No appointments for this date</p>
-              </div>
-            ) : ds.appointmentsList?.map(a => {
-              const active = isActiveSlot(a.timeSlot, a.date);
-              return (
-                <div 
-                  key={a.id} 
+      {/* ── Date Details Section ── */}
+      <div className="space-y-6">
+        {/* Top 2 Columns: Orders Received & Appointments Scheduled */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Orders Received List */}
+          <div className="bg-white rounded-3xl p-6 shadow-premium">
+            <SH
+              title={`Orders Received`}
+              sub={`${ds.ordersReceived} orders on ${new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`}
+              action={
+                <button 
                   onClick={() => {
-                    sessionStorage.setItem('admin_appt_status_filter', a.status || 'ALL');
-                    setActiveTab?.('orders-fittings');
-                  }}
-                  className={`relative flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer ${active ? 'bg-indigo-50 border-indigo-300 ring-2 ring-indigo-500/20 shadow-sm' : 'bg-slate-50/60 border-slate-100 hover:bg-slate-100/80'}`}
+                    sessionStorage.setItem('admin_order_status_filter', 'ALL');
+                    sessionStorage.setItem('admin_order_date_filter', selectedDate);
+                    setActiveTab?.('orders-bookings');
+                  }} 
+                  className="text-[10px] font-bold text-brand-600 hover:underline"
                 >
-                  {active && (
-                    <div className="absolute -top-1.5 -right-1.5 flex h-3.5 w-3.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-red-500 border-2 border-white"></span>
-                    </div>
-                  )}
+                  View all →
+                </button>
+              }
+            />
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {ds.ordersList?.length === 0 ? (
+                <div className="text-center py-8 text-slate-400">
+                  <ShoppingCart className="w-8 h-8 mx-auto mb-2 text-slate-200" />
+                  <p className="text-xs font-semibold">No orders received on this date</p>
+                </div>
+              ) : ds.ordersList?.map(o => (
+                <div 
+                  key={o.id} 
+                  onClick={() => setSelectedOrderModal(o)}
+                  className="flex items-center justify-between p-3 rounded-2xl bg-slate-50/60 border border-slate-100 hover:bg-brand-50/40 transition-colors cursor-pointer group"
+                >
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <p className={`text-xs font-bold truncate ${active ? 'text-indigo-950' : 'text-[#3D2E3D]'}`}>{a.user?.fullName || a.userName || 'Customer'}</p>
-                      {active && <span className="text-[8px] font-black text-red-600 bg-red-100 px-1.5 rounded uppercase tracking-wider">Live Now</span>}
+                    <p className="text-xs font-bold text-[#3D2E3D] group-hover:text-brand-700 transition-colors truncate">{o.invoiceNumber}</p>
+                    <p className="text-[10px] text-slate-400 truncate">{o.user?.fullName || o.customerName || 'Guest'}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 ml-2">
+                    <span className="text-xs font-extrabold text-[#3D2E3D]">{fmtCur(o.payableAmount)}</span>
+                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${STATUS_COLORS[o.status] || 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                      {o.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Appointments List */}
+          <div className="bg-white rounded-3xl p-6 shadow-premium">
+            <SH
+              title={`Appointments Scheduled`}
+              sub={`${ds.appointmentsList?.length || 0} on ${new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`}
+              action={
+                <button 
+                  onClick={() => {
+                    sessionStorage.setItem('admin_appt_status_filter', 'ALL');
+                    sessionStorage.setItem('admin_appt_date_filter', selectedDate);
+                    setActiveTab?.('orders-fittings');
+                  }} 
+                  className="text-[10px] font-bold text-blue-600 hover:underline"
+                >
+                  View all →
+                </button>
+              }
+            />
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {ds.appointmentsList?.length === 0 ? (
+                <div className="text-center py-8 text-slate-400">
+                  <Calendar className="w-8 h-8 mx-auto mb-2 text-slate-200" />
+                  <p className="text-xs font-semibold">No appointments for this date</p>
+                </div>
+              ) : ds.appointmentsList?.map(a => {
+                const active = isActiveSlot(a.timeSlot, a.date);
+                return (
+                  <div 
+                    key={a.id} 
+                    onClick={() => {
+                      sessionStorage.setItem('admin_appt_status_filter', a.status || 'ALL');
+                      setActiveTab?.('orders-fittings');
+                    }}
+                    className={`relative flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer ${active ? 'bg-indigo-50 border-indigo-300 ring-2 ring-indigo-500/20 shadow-sm' : 'bg-slate-50/60 border-slate-100 hover:bg-slate-100/80'}`}
+                  >
+                    {active && (
+                      <div className="absolute -top-1.5 -right-1.5 flex h-3.5 w-3.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-red-500 border-2 border-white"></span>
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <p className={`text-xs font-bold truncate ${active ? 'text-indigo-950' : 'text-[#3D2E3D]'}`}>{a.user?.fullName || a.userName || 'Customer'}</p>
+                        {active && <span className="text-[8px] font-black text-red-600 bg-red-100 px-1.5 rounded uppercase tracking-wider">Live Now</span>}
+                      </div>
+                      <p className={`text-[10px] ${active ? 'text-indigo-600 font-semibold' : 'text-slate-400'}`}>
+                        {active && <Activity className="w-3 h-3 inline mr-1 text-indigo-500" />}
+                        {a.type} · {a.timeSlot}
+                      </p>
                     </div>
-                    <p className={`text-[10px] ${active ? 'text-indigo-600 font-semibold' : 'text-slate-400'}`}>
-                      {active && <Activity className="w-3 h-3 inline mr-1 text-indigo-500" />}
-                      {a.type} · {a.timeSlot}
+                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${active ? 'bg-indigo-600 text-white border-indigo-600' : (a.status === 'CONFIRMED' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-100')}`}>
+                      {a.status}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* ── BIGGER Deliveries Promised Section (All Promised Deliveries for Specific Date - One by One Row List) ── */}
+        <div id="deliveries-promised-section" className="bg-white rounded-3xl p-6 shadow-premium border-2 border-amber-200/80 transition-all duration-300">
+          
+          {/* Header Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 mb-4 border-b border-amber-100">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-md shadow-amber-500/20 shrink-0">
+                <Truck className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-[#3D2E3D] flex items-center gap-2">
+                  <span>Deliveries Promised Pipeline</span>
+                </h3>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  Showing ALL promised orders for <strong className="text-amber-800">{new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</strong>
+                </p>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => {
+                sessionStorage.setItem('admin_order_delivery_promised_date', selectedDate);
+                setActiveTab?.('orders-bookings');
+              }} 
+              className="px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-extrabold rounded-xl border border-amber-200 transition-colors flex items-center gap-1.5 self-start sm:self-auto shadow-xs"
+            >
+              <span>Open Order Manager</span>
+              <ArrowUpRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Top Total Promised Stat Banner */}
+          <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-amber-500 text-white rounded-2xl p-4 mb-4 shadow-md flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center font-black text-lg">
+                📦
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider font-extrabold text-amber-100">Total Promised Deliveries for {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
+                <p className="text-2xl font-black tracking-tight">{ds.deliveriesPromised} Order{ds.deliveriesPromised === 1 ? '' : 's'}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap text-xs font-extrabold">
+              <span className="bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-xl">
+                Pending: {ds.deliveriesPromisedList?.filter(o => o.status === 'PENDING' || o.status === 'PROCESSING').length || 0}
+              </span>
+              <span className="bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-xl">
+                Dispatched: {ds.deliveriesPromisedList?.filter(o => o.status === 'SHIPPED' || o.status === 'OUT_FOR_DELIVERY').length || 0}
+              </span>
+              <span className="bg-emerald-500 text-white px-3 py-1.5 rounded-xl shadow-xs">
+                Completed: {ds.deliveriesProceeded}
+              </span>
+            </div>
+          </div>
+
+          {/* One-by-One Vertical Row List of ALL Promised Deliveries */}
+          <div className="space-y-2.5 max-h-[550px] overflow-y-auto pr-1">
+            {ds.deliveriesPromisedList?.length === 0 ? (
+              <div className="text-center py-12 bg-amber-50/20 rounded-2xl border border-dashed border-amber-200/60">
+                <Package className="w-10 h-10 mx-auto mb-2 text-amber-300" />
+                <p className="text-sm font-bold text-slate-700">No deliveries promised for this date</p>
+                <p className="text-xs text-slate-400 mt-1">Select another date from the date strip above to view promised deliveries.</p>
+              </div>
+            ) : (
+              ds.deliveriesPromisedList?.map(o => (
+                <div 
+                  key={o.id} 
+                  onClick={() => setSelectedOrderModal(o)}
+                  className="p-3.5 rounded-2xl bg-slate-50/70 border border-slate-200/80 hover:bg-amber-50/80 hover:border-amber-300 transition-all cursor-pointer group shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3"
+                >
+                  {/* Left Column: Invoice & Package */}
+                  <div className="flex items-center gap-3 min-w-[220px]">
+                    <div className="w-9 h-9 rounded-xl bg-amber-100/70 text-amber-800 flex items-center justify-center shrink-0 font-bold">
+                      <Package className="w-5 h-5 text-amber-700" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-[#3D2E3D] group-hover:text-amber-900 transition-colors">
+                        {o.invoiceNumber}
+                      </p>
+                      <p className="text-[11px] font-bold text-slate-600 truncate">
+                        {o.user?.fullName || o.customerName || 'Customer'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Middle Column: Customer Contact & Location */}
+                  <div className="flex-1 text-xs text-slate-600 space-y-0.5 border-t md:border-t-0 md:border-l border-slate-200/60 pt-2 md:pt-0 md:pl-4">
+                    {(o.user?.phoneNumber || o.shippingAddress?.phone) && (
+                      <p className="font-semibold text-slate-700 flex items-center gap-1.5 truncate">
+                        <span className="text-amber-600 font-bold">📞</span> {o.user?.phoneNumber || o.shippingAddress?.phone}
+                      </p>
+                    )}
+                    <p className="text-[11px] text-slate-500 truncate flex items-center gap-1.5">
+                      <span className="text-amber-600 font-bold">📍</span> {o.shippingAddress?.city || o.shippingAddress?.addressLine1 || 'Store Pickup / Standard Delivery'}
                     </p>
                   </div>
-                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${active ? 'bg-indigo-600 text-white border-indigo-600' : (a.status === 'CONFIRMED' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-100')}`}>
-                    {a.status}
-                  </span>
+
+                  {/* Right Column: Amount & Status Badge */}
+                  <div className="flex items-center justify-between md:justify-end gap-3 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-200/60">
+                    <div className="text-right">
+                      <span className="text-xs font-black text-[#3D2E3D] block">
+                        {fmtCur(o.payableAmount)}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block font-semibold">
+                        {o.items?.length || 1} Item(s)
+                      </span>
+                    </div>
+
+                    <span className={`text-[10px] font-black px-3 py-1 rounded-xl border ${STATUS_COLORS[o.status] || 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                      {o.status?.replace(/_/g, ' ')}
+                    </span>
+
+                    <button className="px-3 py-1.5 bg-white group-hover:bg-amber-500 group-hover:text-white text-slate-700 text-xs font-bold rounded-xl border border-slate-200 group-hover:border-amber-500 transition-colors shadow-xs">
+                      View →
+                    </button>
+                  </div>
                 </div>
-              )
-            })}
+              ))
+            )}
           </div>
         </div>
       </div>

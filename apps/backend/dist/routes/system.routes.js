@@ -60,7 +60,23 @@ router.get('/settings/public', async (req, res) => {
                 businessHoursStart: settings.businessHoursStart,
                 businessHoursEnd: settings.businessHoursEnd,
                 bookingSlotDurationMinutes: settings.bookingSlotDurationMinutes,
-                maxBookingsPerSlot: settings.maxBookingsPerSlot
+                maxBookingsPerSlot: settings.maxBookingsPerSlot,
+                saleAlert: {
+                    isActive: settings.saleAlertActive || false,
+                    imageUrl: settings.saleAlertImageUrl || null,
+                    target: settings.saleAlertTarget || 'NEW_ARRIVALS',
+                    productId: settings.saleAlertProductId || null,
+                    durationSec: settings.saleAlertDurationSec || 3,
+                    startTime: settings.saleAlertStartTime ? settings.saleAlertStartTime.toISOString() : null,
+                    endTime: settings.saleAlertEndTime ? settings.saleAlertEndTime.toISOString() : null,
+                },
+                maintenanceAlert: {
+                    isActive: settings.maintenanceAlertActive || false,
+                    title: settings.maintenanceTitle || 'System Maintenance',
+                    message: settings.maintenanceMessage || 'Platform maintenance in progress.',
+                    startTime: settings.maintenanceStartTime ? settings.maintenanceStartTime.toISOString() : null,
+                    endTime: settings.maintenanceEndTime ? settings.maintenanceEndTime.toISOString() : null,
+                }
             }
         });
     }

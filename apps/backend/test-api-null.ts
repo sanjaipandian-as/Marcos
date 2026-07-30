@@ -11,7 +11,7 @@ async function main() {
   const admin = await prisma.user.findFirst({ where: { role: 'SUPERADMIN' } });
   if (!admin) throw new Error("No admin");
 
-  const category = await prisma.category.findFirst({ include: { subCategories: true } });
+  const category = await prisma.category.findFirst({ include: { children: true } });
   if (!category) throw new Error("No category");
   
   const token = jwt.sign({ id: admin.id, role: 'SUPERADMIN', fullName: 'Test' }, secret, { expiresIn: '1h' });

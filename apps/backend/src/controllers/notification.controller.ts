@@ -7,7 +7,11 @@ export const broadcastNotificationSchema = z.object({
   body: z.object({
     title: z.string().min(1),
     body: z.string().min(1),
-    channels: z.array(z.enum(['EMAIL', 'SMS', 'PUSH'])).min(1),
+    channels: z.array(z.enum(['EMAIL', 'SMS', 'PUSH'])).optional().default(['EMAIL', 'SMS', 'PUSH']),
+    type: z.string().optional(),
+    isScheduled: z.boolean().optional(),
+    scheduledTime: z.string().optional(),
+    targetAudience: z.string().optional().default('ALL'),
   }),
 });
 
@@ -16,7 +20,7 @@ export const targetedNotificationSchema = z.object({
     userIds: z.array(z.string().uuid()).min(1),
     title: z.string().min(1),
     body: z.string().min(1),
-    channels: z.array(z.enum(['EMAIL', 'SMS', 'PUSH'])).min(1),
+    channels: z.array(z.enum(['EMAIL', 'SMS', 'PUSH'])).optional().default(['EMAIL', 'SMS', 'PUSH']),
   }),
 });
 
@@ -125,48 +129,83 @@ export class NotificationController {
    * Broadcasts a notification blast to all registered customers.
    */
   static async broadcastNotification(req: Request, res: Response, next: NextFunction) {
-    const { title, body, channels } = req.body;
+    const { title, body, channels = ['EMAIL', 'SMS', 'PUSH'], targetAudience = 'ALL', type = 'PROMOTIONAL_BLAST' } = req.body;
 
     try {
       const notification = await prisma.notification.create({
         data: {
           title,
           body,
-          type: 'PROMOTIONAL_BLAST',
+          type,
         },
       });
 
-      // Get all customer IDs
-      const customers = await prisma.user.findMany({
-        where: { role: 'CUSTOMER' },
-        select: { id: true },
+      // Filter target users based on targetAudience
+      let whereClause: any = {};
+      if (targetAudience === 'CUSTOMERS') {
+        whereClause = { role: 'CUSTOMER' };
+      } else if (targetAudience === 'STAFF') {
+        whereClause = { role: { in: ['STAFF', 'ADMIN', 'SUPERADMIN'] } };
+      } else {
+        whereClause = {};
+      }
+
+      const users = await prisma.user.findMany({
+        where: whereClause,
+        select: { id: true, email: true, phoneNumber: true, fcmToken: true },
       });
 
-      if (customers.length > 0) {
+      if (users.length > 0) {
         await prisma.notificationRecipient.createMany({
-          data: customers.map((c) => ({
+          data: users.map((u) => ({
             notificationId: notification.id,
-            userId: c.id,
+            userId: u.id,
           })),
         });
 
-        // Queue workers for sending actual notifications
-        for (const customer of customers) {
-          await JobsProducer.queueNotification({
-            userId: customer.id,
+        // 1. Real-time Socket.IO Broadcast to all connected mobile & web clients
+        const { getIO } = await import('../socket/socket.handler.js');
+        const io = getIO();
+        if (io) {
+          io.emit('broadcast:alert', {
+            id: notification.id,
+            title,
+            body,
+            createdAt: notification.createdAt,
+          });
+
+          for (const u of users) {
+            io.to(`user:${u.id}`).emit('notification:received', {
+              id: notification.id,
+              title,
+              body,
+              createdAt: notification.createdAt,
+            });
+          }
+        }
+
+        // 2. Dispatch FCM Push Notifications directly
+        const { NotificationService } = await import('../services/notification.service.js');
+        for (const u of users) {
+          if (u.fcmToken) {
+            NotificationService.sendPushNotification(u.id, title, body).catch(() => {});
+          }
+
+          JobsProducer.queueNotification({
+            userId: u.id,
             channels,
             templates: {
               email: { id: 'broadcast', data: { title, body } },
               sms: body,
               push: { title, body },
             },
-          });
+          }).catch(() => {});
         }
       }
 
       return res.status(201).json({
         success: true,
-        message: `Broadcast queued successfully for ${customers.length} users.`,
+        message: `Broadcast dispatched successfully for ${users.length} users.`,
         data: notification,
       });
     } catch (error) {

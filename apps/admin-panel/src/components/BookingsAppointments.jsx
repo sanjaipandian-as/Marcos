@@ -33,14 +33,14 @@ const APPT_COLOR = {
   CONFIRMED: 'bg-emerald-50 text-emerald-700 border-emerald-300',
   COMPLETED: 'bg-blue-50   text-blue-700   border-blue-300',
   CONSULTED: 'bg-teal-50   text-teal-700   border-teal-300',
-  ORDERED: 'bg-blue-50   text-blue-700   border-blue-300',
+  ORDERED:   'bg-indigo-50 text-indigo-700 border-indigo-300',
   CANCELLED: 'bg-red-50    text-red-700    border-red-300',
   RESCHEDULED: 'bg-purple-50 text-purple-700 border-purple-300',
   ASSIGNED: 'bg-indigo-50 text-indigo-700 border-indigo-300',
 };
 const DOT_COLOR = {
   PENDING: 'bg-amber-400', CONFIRMED: 'bg-emerald-400', COMPLETED: 'bg-blue-400',
-  CONSULTED: 'bg-teal-400', ORDERED: 'bg-blue-400',
+  CONSULTED: 'bg-teal-400', ORDERED: 'bg-indigo-500',
   CANCELLED: 'bg-red-400', RESCHEDULED: 'bg-purple-400', ASSIGNED: 'bg-indigo-400',
 };
 const Badge = ({ status, small }) => (
@@ -67,54 +67,154 @@ const MEAS_FIELDS = [
 const EMPTY_MEAS = () => Object.fromEntries(MEAS_FIELDS.map(f => [f.key, '']));
 
 // ─── DayNavigator ─────────────────────────────────────────────────────────────
-function DayNavigator({ value, onChange }) {
+function DayNavigator({ value, onChange, appointments = [], visits = [], orders = [], section = 'fittings' }) {
   const today = new Date();
   const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(value); d.setDate(value.getDate() - 3 + i); return d; });
   
   const localDateStr = `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
 
+  const getDayStats = (dateObj) => {
+    let total = 0;
+    let newCount = 0;
+
+    if (section === 'fittings') {
+      appointments.forEach(a => {
+        if (a.status === 'CANCELLED' || a.productType === 'SLOT_BOOKING') return;
+        if (isSameDay(a.date, dateObj)) {
+          total++;
+          if (a.status === 'PENDING' || a.status === 'CONFIRMED') newCount++;
+        }
+      });
+    } else if (section === 'home') {
+      visits.forEach(v => {
+        if (v.status === 'CANCELLED') return;
+        const vDate = v.preferredDate || v.createdAt;
+        if (isSameDay(vDate, dateObj)) {
+          total++;
+          if (v.status === 'PENDING' || v.status === 'ASSIGNED') newCount++;
+        }
+      });
+    } else if (section === 'slots') {
+      appointments.forEach(a => {
+        if (a.status === 'CANCELLED' || a.productType !== 'SLOT_BOOKING') return;
+        if (isSameDay(a.date, dateObj)) {
+          total++;
+          if (a.status === 'PENDING' || a.status === 'CONFIRMED') newCount++;
+        }
+      });
+    } else if (section === 'orders' || section === 'quick_orders') {
+      orders.forEach(o => {
+        if (o.status === 'CANCELLED') return;
+        if (isSameDay(o.createdAt, dateObj)) {
+          total++;
+          if (o.status === 'PENDING' || o.status === 'PAID') newCount++;
+        }
+      });
+    } else {
+      appointments.forEach(a => {
+        if (a.status === 'CANCELLED') return;
+        if (isSameDay(a.date, dateObj)) {
+          total++;
+          if (a.status === 'PENDING' || a.status === 'CONFIRMED') newCount++;
+        }
+      });
+      visits.forEach(v => {
+        if (v.status === 'CANCELLED') return;
+        const vDate = v.preferredDate || v.createdAt;
+        if (isSameDay(vDate, dateObj)) {
+          total++;
+          if (v.status === 'PENDING' || v.status === 'ASSIGNED') newCount++;
+        }
+      });
+      orders.forEach(o => {
+        if (o.status === 'CANCELLED') return;
+        if (isSameDay(o.createdAt, dateObj)) {
+          total++;
+          if (o.status === 'PENDING' || o.status === 'PAID') newCount++;
+        }
+      });
+    }
+
+    return { total, newCount };
+  };
+
   return (
-    <div className="flex items-center gap-2 overflow-x-auto pb-1">
-      <div className="relative flex items-center justify-center p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 cursor-pointer shrink-0 transition-all" title="Select Specific Date">
-        <Calendar className="w-4 h-4" />
-        <input type="date" value={localDateStr} onChange={(e) => { 
-          if(e.target.value) {
-            const [y, m, d] = e.target.value.split('-');
-            onChange(new Date(y, m - 1, d));
-          }
-        }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+    <div className="bg-[#FAF9FC] rounded-3xl border border-slate-200/80 shadow-sm p-2.5 flex items-center gap-3 transition-all overflow-x-auto w-full">
+      <div className="flex items-center gap-2 shrink-0">
+        <div className="relative p-2.5 rounded-2xl bg-white border border-slate-200/80 text-slate-600 hover:text-brand-600 hover:border-brand-200 hover:bg-brand-50/50 cursor-pointer shadow-xs transition-all flex items-center justify-center" title="Select Specific Date">
+          <Calendar className="w-4 h-4 pointer-events-none" />
+          <input type="date" value={localDateStr} onChange={(e) => { 
+            if(e.target.value) {
+              const [y, m, d] = e.target.value.split('-');
+              onChange(new Date(y, m - 1, d));
+            }
+          }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10" />
+        </div>
+        
+        <button onClick={() => onChange(new Date())}
+          className={`px-3.5 py-2 rounded-2xl text-[11px] font-black tracking-wider uppercase transition-all border ${
+            isSameDay(value, today)
+              ? 'bg-[#D8BFD8] text-[#2B1B2B] border-[#C5A3C5] shadow-xs'
+              : 'bg-white text-slate-500 border-slate-200/80 hover:bg-slate-100'
+          }`}>
+          Today
+        </button>
+
+        <div className="w-px h-6 bg-slate-200 mx-1 shrink-0" />
+
+        <button onClick={() => { const d = new Date(value); d.setDate(d.getDate() - 1); onChange(d); }}
+          className="p-2 rounded-2xl bg-white border border-slate-200/80 text-slate-500 hover:bg-slate-100 hover:text-[#3D2E3D] shadow-xs transition-all shrink-0">
+          <ChevronLeft className="w-4 h-4" />
+        </button>
       </div>
-      
-      <button onClick={() => onChange(new Date())}
-        className="px-3 py-1.5 rounded-xl border border-brand-200 hover:bg-brand-50 text-brand-600 text-[10px] font-extrabold tracking-wider uppercase shrink-0 transition-all">
-        Today
-      </button>
 
-      <div className="w-px h-6 bg-slate-200 mx-1 shrink-0" />
-
-      <button onClick={() => { const d = new Date(value); d.setDate(d.getDate() - 1); onChange(d); }}
-        className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 shrink-0 transition-all">
-        <ChevronLeft className="w-4 h-4" />
-      </button>
-      <div className="flex gap-1.5">
+      <div className="flex items-center gap-2 flex-1 overflow-x-auto scrollbar-none py-1 px-1">
         {days.map((d, i) => {
-          const isToday = isSameDay(d, today), isSel = isSameDay(d, value);
+          const isSel = isSameDay(d, value);
+          const { total, newCount } = getDayStats(d);
+
           return (
             <button key={i} onClick={() => onChange(d)}
-              className={`flex flex-col items-center px-3 py-2 rounded-xl text-center transition-all min-w-[52px] border ${isSel ? 'bg-brand-500 text-[#3D2E3D] border-brand-500 shadow-md font-extrabold'
-                : isToday ? 'border-brand-300 text-brand-700 bg-brand-50 font-bold'
-                  : 'border-slate-100 text-slate-500 hover:border-slate-300 hover:bg-slate-50 font-medium'
-                }`}>
-              <span className="text-[9px] uppercase tracking-widest">{d.toLocaleDateString('en', { weekday: 'short' })}</span>
-              <span className="text-base leading-tight">{d.getDate()}</span>
+              className={`flex-1 min-w-[72px] max-w-[105px] flex flex-col items-center justify-between py-2 px-1.5 rounded-2xl border transition-all duration-200 select-none ${
+                isSel
+                  ? 'bg-[#D8BFD8] border-[#C4A4C4] text-[#2B1B2B] shadow-md ring-2 ring-[#D8BFD8]/50 scale-[1.04]'
+                  : 'bg-white border-slate-200/70 text-slate-600 hover:border-purple-200 hover:bg-purple-50/40 shadow-xs'
+              }`}>
+              {/* Badges */}
+              <div className="flex items-center gap-1 mb-1.5">
+                <span title="Total items on this date"
+                  className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
+                    isSel ? 'bg-white/80 text-[#2B1B2B]' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                  {total} <span className="text-[7.5px] font-bold opacity-75">total</span>
+                </span>
+                {newCount > 0 && (
+                  <span title="New items"
+                    className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
+                      isSel ? 'bg-[#3D2E3D] text-white' : 'bg-emerald-100 text-emerald-700'
+                    }`}>
+                    +{newCount} <span className="text-[7.5px] font-bold opacity-80">new</span>
+                  </span>
+                )}
+              </div>
+
+              <span className={`text-[10px] font-extrabold uppercase tracking-wider ${isSel ? 'text-[#3D263D]' : 'text-slate-400'}`}>
+                {d.toLocaleDateString('en', { weekday: 'short' }).toUpperCase()}
+              </span>
+              <span className={`text-base font-black leading-tight mt-0.5 ${isSel ? 'text-[#1F101F]' : 'text-[#3D2E3D]'}`}>
+                {d.getDate()}
+              </span>
             </button>
           );
         })}
       </div>
-      <button onClick={() => { const d = new Date(value); d.setDate(d.getDate() + 1); onChange(d); }}
-        className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 shrink-0 transition-all">
-        <ChevronRight className="w-4 h-4" />
-      </button>
+
+      <div className="flex items-center shrink-0">
+        <button onClick={() => { const d = new Date(value); d.setDate(d.getDate() + 1); onChange(d); }}
+          className="p-2 rounded-2xl bg-white border border-slate-200/80 text-slate-500 hover:bg-slate-100 hover:text-[#3D2E3D] shadow-xs transition-all shrink-0">
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -524,6 +624,7 @@ function DetailDrawer({ appt, visit, orders, staffList, onClose, onRefresh, setA
                       sessionStorage.setItem('checkout_product_name', item.productType || '');
                       if (setActiveTab) {
                         setActiveTab('checkout');
+                        window.dispatchEvent(new CustomEvent('checkout-prefill'));
                       } else {
                         window.location.href = `/manual-checkout?appointmentId=${item.id}&userId=${item.userId || ''}&productName=${encodeURIComponent(item.productType)}`;
                       }
@@ -936,11 +1037,14 @@ function ApptCard({ appt, onQuickStatus, onOpen, setActiveTab }) {
   };
 
   return (
-    <div className={`rounded-2xl border transition-all duration-200 overflow-hidden bg-white hover:shadow-md group ${appt.status === 'CONFIRMED' ? 'border-emerald-200' :
+    <div className={`rounded-2xl border transition-all duration-200 overflow-hidden bg-white hover:shadow-md group ${
+      appt.status === 'CONFIRMED' ? 'border-emerald-200' :
       appt.status === 'CANCELLED' ? 'border-red-100 opacity-60' :
-        appt.status === 'CONSULTED' ? 'border-teal-200' :
-          appt.status === 'ORDERED' ? 'border-blue-200' : 'border-slate-200 hover:border-brand-300'
-      } shadow-sm`}>
+      appt.status === 'CONSULTED' ? 'border-teal-200' :
+      appt.status === 'ORDERED'   ? 'border-indigo-300 ring-1 ring-indigo-100' :
+      appt.status === 'COMPLETED' ? 'border-blue-200' :
+      'border-slate-200 hover:border-brand-300'
+    } shadow-sm`}>
       <div className="p-4 flex items-start gap-3">
         {/* Time tile */}
         <div className="flex flex-col items-center justify-center bg-gradient-to-b from-brand-50 to-brand-100 border border-brand-200 rounded-xl px-3 py-2.5 min-w-[60px] shrink-0">
@@ -989,6 +1093,7 @@ function ApptCard({ appt, onQuickStatus, onOpen, setActiveTab }) {
               sessionStorage.setItem('checkout_delivery_date', appt.date || '');
               if (setActiveTab) {
                 setActiveTab('checkout');
+                window.dispatchEvent(new CustomEvent('checkout-prefill'));
               } else {
                 window.location.href = `/manual-checkout?appointmentId=${appt.id}&userId=${appt.userId || ''}&productName=${encodeURIComponent(appt.productType || '')}&deliveryDate=${encodeURIComponent(appt.date || '')}`;
               }
@@ -1040,6 +1145,36 @@ function ApptCard({ appt, onQuickStatus, onOpen, setActiveTab }) {
             <Ban className="w-3.5 h-3.5" />
           </button>
         </>}
+        {/* ── Order Confirmed stage — only for ORDERED appointments (product booking placed) ── */}
+        {appt.status === 'ORDERED' && (
+          <div className="flex gap-2 w-full">
+            <div className="flex-1 flex flex-col gap-1.5">
+              {/* Context pill */}
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-xl">
+                <ShoppingBag className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                <span className="text-[10px] font-bold text-indigo-700 leading-tight">
+                  Product order placed — confirm to hand off to production
+                </span>
+              </div>
+              {/* Main action */}
+              <button
+                onClick={() => quick('COMPLETED')}
+                disabled={updating}
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold shadow-md shadow-indigo-500/20 transition-all disabled:opacity-60"
+              >
+                {updating
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <BadgeCheck className="w-4 h-4" />
+                }
+                Order Confirmed
+              </button>
+            </div>
+            <button onClick={() => quick('CANCELLED')} disabled={updating}
+              className="px-3 py-2 rounded-xl border border-red-200 hover:bg-red-50 text-red-400 transition-all disabled:opacity-60 self-end">
+              <Ban className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
         {(appt.status === 'COMPLETED' || appt.status === 'CANCELLED') && (
           <button onClick={() => onOpen(appt)}
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 text-xs font-bold transition-all">
@@ -1204,8 +1339,19 @@ function StatsBar({ items, type }) {
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 export default function BookingsAppointments({ setActiveTab, isActive }) {
-  const [section, setSection] = useState('fittings');
-  const [selDate, setSelDate] = useState(new Date());
+  const [section, setSection] = useState(() => {
+    const savedFilter = sessionStorage.getItem('admin_order_date_filter') || sessionStorage.getItem('admin_order_status_filter');
+    if (savedFilter) return 'orders';
+    return 'fittings';
+  });
+  const [selDate, setSelDate] = useState(() => {
+    const savedDateStr = sessionStorage.getItem('admin_order_date_filter');
+    if (savedDateStr) {
+      const d = new Date(savedDateStr + 'T00:00:00');
+      if (!isNaN(d.getTime())) return d;
+    }
+    return new Date();
+  });
   const [appointments, setAppts] = useState([]);
   const [visits, setVisits] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -1429,6 +1575,11 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
     : orders.filter(o => isSel(o.createdAt) && o.isQuickOrder);
   const filtQuickOrders = filterStatus === 'ALL' ? todayQuickOrders : todayQuickOrders.filter(o => o.status === filterStatus || o.quickOrderStatus === filterStatus);
 
+  const todayOrders = filterOrderId
+    ? orders.filter(o => o.id === filterOrderId)
+    : orders.filter(o => isSel(o.createdAt));
+  const filtOrders = filterStatus === 'ALL' ? todayOrders : todayOrders.filter(o => o.status === filterStatus);
+
   const sortedAppts = [...filtAppts].sort((a, b) => (a.timeSlot || '').localeCompare(b.timeSlot || ''));
   const sortedSlots = [...filtSlots].sort((a, b) => (a.timeSlot || '').localeCompare(b.timeSlot || ''));
 
@@ -1450,7 +1601,7 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
   });
 
   const isToday = isSameDay(selDate, new Date());
-  const totalSlots = section === 'fittings' ? todayAppts.length : section === 'slots' ? todaySlots.length : section === 'quick_orders' ? todayQuickOrders.length : todayVisits.length;
+  const totalSlots = section === 'fittings' ? todayAppts.length : section === 'slots' ? todaySlots.length : section === 'quick_orders' ? todayQuickOrders.length : section === 'orders' ? todayOrders.length : todayVisits.length;
 
   // Auto-switch tabs if the filtered order is a visit instead of an appointment
   useEffect(() => {
@@ -1464,7 +1615,7 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
   }, [filterOrderId, todayAppts.length, todayVisits.length, section]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {/* Toast Notification */}
       {errorToast && (
         <div className="fixed bottom-6 right-6 bg-red-500 text-white px-5 py-3.5 rounded-2xl shadow-xl font-bold text-sm z-50 flex items-center gap-2.5 animate-in slide-in-from-bottom-5">
@@ -1489,7 +1640,7 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
           )}
         </div>
         <p className="text-sm text-slate-400 font-medium mt-1 ml-12.5 sm:hidden">
-          {filterOrderId ? 'Filtered by Order' : (isToday ? '📅 Today' : fmtDate(selDate, { weekday: 'long' }))} · {totalSlots} {section === 'fittings' ? 'fittings' : 'home visits'}
+          {filterOrderId ? 'Filtered by Order' : (isToday ? '📅 Today' : fmtDate(selDate, { weekday: 'long' }))} · {totalSlots} {section === 'fittings' ? 'fittings' : section === 'orders' ? 'orders' : 'home visits'}
         </p>
         <div className="flex items-center gap-2 self-start">
           <button
@@ -1536,7 +1687,18 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
 
       {/* ── Toggle ─────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center bg-white border border-slate-200 rounded-2xl p-1.5 w-fit shadow-sm gap-1">
+        <div className="flex items-center bg-white border border-slate-200 rounded-2xl p-1.5 w-fit shadow-sm gap-1 flex-wrap">
+          <button onClick={() => { setSection('orders'); setFilter('ALL'); }}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${section === 'orders' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'
+              }`}>
+            <ShoppingBag className="w-4 h-4" />Product Orders
+            {todayOrders.length > 0 && (
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${section === 'orders' ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-700'}`}>
+                {todayOrders.length}
+              </span>
+            )}
+          </button>
+
           <button onClick={() => { setSection('fittings'); setFilter('ALL'); }}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${section === 'fittings' ? 'bg-brand-500 text-[#3D2E3D] shadow-md' : 'text-slate-400 hover:text-slate-600'
               }`}>
@@ -1583,6 +1745,19 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
         </div>
       </div>
 
+      {/* Helper Banner when viewing Fittings but Product Orders exist */}
+      {section === 'fittings' && todayAppts.length === 0 && todayOrders.length > 0 && (
+        <div className="bg-[#D8BFD8]/30 border border-[#C5A3C5] rounded-2xl p-4 flex items-center justify-between gap-3 text-xs shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2.5 text-[#2B1B2B] font-bold">
+            <ShoppingBag className="w-5 h-5 text-purple-700 shrink-0" />
+            <span>Notice: {todayOrders.length} Product Order(s) found for {fmtDate(selDate)}! (Studio fitting appointments are 0).</span>
+          </div>
+          <button onClick={() => setSection('orders')} className="px-4 py-2 bg-[#3D2E3D] text-white font-extrabold rounded-xl hover:bg-black transition-colors shadow-xs shrink-0">
+            Switch to Product Orders ({todayOrders.length}) →
+          </button>
+        </div>
+      )}
+
       {/* ── Day Navigator ────────────────────────────────────────── */}
       {(section === 'fittings' && overdueAppts.length > 0) || (section === 'home' && overdueVisits.length > 0) ? (
         <div className="flex items-center gap-2 bg-amber-50 text-amber-700 border border-amber-200 px-4 py-2.5 rounded-xl shadow-sm text-xs font-bold w-fit animate-in fade-in">
@@ -1592,14 +1767,14 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
           </span>
         </div>
       ) : null}
-      <div className="flex flex-col xl:flex-row gap-5 xl:items-center">
-        <div className="shrink-0 max-w-full overflow-x-auto">
-          <DayNavigator value={selDate} onChange={setSelDate} />
+      <div className="flex flex-col xl:flex-row gap-2 xl:items-center">
+        <div className="shrink-0 max-w-full overflow-x-auto w-full">
+          <DayNavigator value={selDate} onChange={setSelDate} appointments={appointments} visits={visits} orders={orders} section={section} />
         </div>
 
         {!loading && (
           <div className="flex-1 w-full xl:w-auto">
-            <StatsBar items={section === 'fittings' ? todayAppts : todayVisits} type={section} />
+            <StatsBar items={section === 'fittings' ? todayAppts : section === 'orders' ? todayOrders : todayVisits} type={section} />
           </div>
         )}
       </div>
@@ -1628,6 +1803,61 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
         </div>
       ) : (
         <>
+          {section === 'orders' && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2.5 mb-2">
+                <div className="w-8 h-8 rounded-xl bg-purple-100 flex items-center justify-center">
+                  <ShoppingBag className="w-4 h-4 text-purple-600" />
+                </div>
+                <div>
+                  <h2 className="text-base font-extrabold text-slate-800">Product Orders</h2>
+                  <p className="text-xs text-slate-400">{isToday ? "Today's product orders" : fmtDate(selDate)} · {filtOrders.length} orders</p>
+                </div>
+              </div>
+              {filtOrders.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-4"><ShoppingBag className="w-7 h-7 text-slate-300" /></div>
+                  <p className="font-bold text-slate-700">No Product Orders</p>
+                  <p className="text-sm text-slate-400 mt-1">{isToday ? 'No orders received today' : `No orders on ${fmtDate(selDate)}`}</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {filtOrders.map(o => (
+                    <div key={o.id} className="rounded-2xl border border-purple-200 bg-white p-4 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-3 group">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-xs font-black text-[#3D2E3D] group-hover:text-purple-700 transition-colors">{o.invoiceNumber}</p>
+                          <p className="text-xs font-bold text-slate-700 mt-0.5">{o.user?.fullName || o.customerName || 'Customer'}</p>
+                        </div>
+                        <Badge status={o.status} small />
+                      </div>
+
+                      <div className="text-xs text-slate-500 bg-purple-50/50 border border-purple-100 p-2.5 rounded-xl space-y-1">
+                        <p className="truncate">📍 {o.shippingAddress?.city || o.shippingAddress?.addressLine1 || 'Standard Delivery'}</p>
+                        {(o.user?.phoneNumber || o.shippingAddress?.phone) && (
+                          <p className="font-semibold text-slate-600">📞 {o.user?.phoneNumber || o.shippingAddress?.phone}</p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                        <span className="text-xs font-black text-[#3D2E3D]">₹{Number(o.payableAmount || 0).toLocaleString('en-IN')}</span>
+                        <button 
+                          onClick={() => {
+                            if (setActiveTab) setActiveTab('orders');
+                            else window.location.href = '/admin/orders';
+                          }}
+                          className="text-xs font-bold text-purple-700 hover:underline flex items-center gap-1"
+                        >
+                          View Details →
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {section === 'quick_orders' && (
             <div className="space-y-3">
               <div className="flex items-center gap-2.5 mb-2">

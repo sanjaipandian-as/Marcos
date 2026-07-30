@@ -54,6 +54,22 @@ export const systemSettingsUpdateSchema = z.object({
     pointsRedeemRate: z.coerce.number().nonnegative().default(0.10),
     otpCooldownMinutes: z.coerce.number().int().nonnegative().default(15),
     maxOtpFailures: z.coerce.number().int().nonnegative().default(3),
+
+    // Sale Alert
+    saleAlertActive: z.boolean().optional(),
+    saleAlertImageUrl: z.string().optional().nullable(),
+    saleAlertTarget: z.enum(['NEW_ARRIVALS', 'TRENDING', 'PRODUCT']).optional(),
+    saleAlertProductId: z.string().optional().nullable(),
+    saleAlertDurationSec: z.coerce.number().int().min(1).default(3),
+    saleAlertStartTime: z.string().optional().nullable(),
+    saleAlertEndTime: z.string().optional().nullable(),
+
+    // Maintenance Alert
+    maintenanceAlertActive: z.boolean().optional(),
+    maintenanceTitle: z.string().optional().nullable(),
+    maintenanceMessage: z.string().optional().nullable(),
+    maintenanceStartTime: z.string().optional().nullable(),
+    maintenanceEndTime: z.string().optional().nullable(),
   }),
 });
 
@@ -990,46 +1006,79 @@ export class AdminController {
    */
   static async saveSystemSettings(req: Request, res: Response, next: NextFunction) {
     const adminUser = req.user!;
-    const {
-      lowStockThreshold,
-      businessHoursStart,
-      businessHoursEnd,
-      businessHours,
-      pointsEarnRate,
-      pointsRedeemRate,
-      otpCooldownMinutes,
-      maxOtpFailures,
-      bookingSlotDurationMinutes,
-      maxBookingsPerSlot,
-    } = req.body;
+    const body = req.body;
+
+    const safeDate = (val: any) => {
+      if (!val || val === '' || val === null) return null;
+      const d = new Date(val);
+      return isNaN(d.getTime()) ? null : d;
+    };
+
+    const safeStr = (val: any) => {
+      if (val === undefined) return undefined;
+      if (val === null || (typeof val === 'string' && val.trim() === '')) return null;
+      return val;
+    };
 
     try {
-      const settings = await prisma.systemSettings.upsert({
+      const settings: any = await prisma.systemSettings.upsert({
         where: { id: 'default' },
         update: {
-          lowStockThreshold,
-          businessHoursStart,
-          businessHoursEnd,
-          businessHours,
-          pointsEarnRate,
-          pointsRedeemRate,
-          otpCooldownMinutes,
-          maxOtpFailures,
-          bookingSlotDurationMinutes,
-          maxBookingsPerSlot,
+          lowStockThreshold: body.lowStockThreshold !== undefined ? Number(body.lowStockThreshold) : undefined,
+          businessHoursStart: safeStr(body.businessHoursStart),
+          businessHoursEnd: safeStr(body.businessHoursEnd),
+          businessHours: body.businessHours,
+          pointsEarnRate: body.pointsEarnRate !== undefined ? Number(body.pointsEarnRate) : undefined,
+          pointsRedeemRate: body.pointsRedeemRate !== undefined ? Number(body.pointsRedeemRate) : undefined,
+          otpCooldownMinutes: body.otpCooldownMinutes !== undefined ? Number(body.otpCooldownMinutes) : undefined,
+          maxOtpFailures: body.maxOtpFailures !== undefined ? Number(body.maxOtpFailures) : undefined,
+          bookingSlotDurationMinutes: body.bookingSlotDurationMinutes !== undefined ? Number(body.bookingSlotDurationMinutes) : undefined,
+          maxBookingsPerSlot: body.maxBookingsPerSlot !== undefined ? Number(body.maxBookingsPerSlot) : undefined,
+
+          // Sale Alert
+          saleAlertActive: body.saleAlertActive !== undefined ? Boolean(body.saleAlertActive) : undefined,
+          saleAlertImageUrl: safeStr(body.saleAlertImageUrl),
+          saleAlertTarget: safeStr(body.saleAlertTarget),
+          saleAlertProductId: safeStr(body.saleAlertProductId),
+          saleAlertDurationSec: body.saleAlertDurationSec !== undefined ? Number(body.saleAlertDurationSec) : undefined,
+          saleAlertStartTime: body.saleAlertStartTime !== undefined ? safeDate(body.saleAlertStartTime) : undefined,
+          saleAlertEndTime: body.saleAlertEndTime !== undefined ? safeDate(body.saleAlertEndTime) : undefined,
+
+          // Maintenance Alert
+          maintenanceAlertActive: body.maintenanceAlertActive !== undefined ? Boolean(body.maintenanceAlertActive) : undefined,
+          maintenanceTitle: safeStr(body.maintenanceTitle),
+          maintenanceMessage: safeStr(body.maintenanceMessage),
+          maintenanceStartTime: body.maintenanceStartTime !== undefined ? safeDate(body.maintenanceStartTime) : undefined,
+          maintenanceEndTime: body.maintenanceEndTime !== undefined ? safeDate(body.maintenanceEndTime) : undefined,
         },
         create: {
           id: 'default',
-          lowStockThreshold,
-          businessHoursStart,
-          businessHoursEnd,
-          businessHours,
-          pointsEarnRate,
-          pointsRedeemRate,
-          otpCooldownMinutes,
-          maxOtpFailures,
-          bookingSlotDurationMinutes,
-          maxBookingsPerSlot,
+          lowStockThreshold: body.lowStockThreshold || 10,
+          businessHoursStart: body.businessHoursStart || '09:00',
+          businessHoursEnd: body.businessHoursEnd || '18:00',
+          businessHours: body.businessHours,
+          pointsEarnRate: body.pointsEarnRate || 10,
+          pointsRedeemRate: body.pointsRedeemRate || 0.10,
+          otpCooldownMinutes: body.otpCooldownMinutes || 15,
+          maxOtpFailures: body.maxOtpFailures || 3,
+          bookingSlotDurationMinutes: body.bookingSlotDurationMinutes || 60,
+          maxBookingsPerSlot: body.maxBookingsPerSlot || 5,
+
+          // Sale Alert
+          saleAlertActive: Boolean(body.saleAlertActive),
+          saleAlertImageUrl: safeStr(body.saleAlertImageUrl),
+          saleAlertTarget: safeStr(body.saleAlertTarget) || 'NEW_ARRIVALS',
+          saleAlertProductId: safeStr(body.saleAlertProductId),
+          saleAlertDurationSec: Number(body.saleAlertDurationSec || 3),
+          saleAlertStartTime: safeDate(body.saleAlertStartTime),
+          saleAlertEndTime: safeDate(body.saleAlertEndTime),
+
+          // Maintenance Alert
+          maintenanceAlertActive: Boolean(body.maintenanceAlertActive),
+          maintenanceTitle: safeStr(body.maintenanceTitle) || 'System Maintenance',
+          maintenanceMessage: safeStr(body.maintenanceMessage) || 'Platform maintenance in progress.',
+          maintenanceStartTime: safeDate(body.maintenanceStartTime),
+          maintenanceEndTime: safeDate(body.maintenanceEndTime),
         },
       });
 
@@ -1038,7 +1087,7 @@ export class AdminController {
         action: 'PLATFORM_SETTINGS_UPDATED',
         ipAddress: req.ip,
         details: {
-          message: `System configurations updated by Admin ${adminUser.fullName}. Low Stock Threshold: ${lowStockThreshold}, Business Hours: ${businessHoursStart}-${businessHoursEnd}`,
+          message: `System configurations updated by Admin ${adminUser.fullName}.`,
           settings,
         },
       });

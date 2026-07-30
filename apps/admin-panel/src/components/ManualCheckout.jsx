@@ -77,47 +77,72 @@ export default function ManualCheckout() {
   const [timeSlots, setTimeSlots] = useState([]);
   const [checkoutApptId, setCheckoutApptId] = useState(null);
 
-  useEffect(() => {
+  const runPrefill = () => {
     const query = new URLSearchParams(window.location.search);
     const apptId = query.get('appointmentId') || sessionStorage.getItem('checkout_appointment_id');
     const userId = query.get('userId') || sessionStorage.getItem('checkout_user_id');
     const productName = query.get('productName') || sessionStorage.getItem('checkout_product_name');
     const deliveryDateVal = query.get('deliveryDate') || sessionStorage.getItem('checkout_delivery_date');
 
-    if (apptId) {
-      setCheckoutApptId(apptId);
-      setOrderStatus('PENDING');
-      sessionStorage.removeItem('checkout_appointment_id');
-      sessionStorage.removeItem('checkout_user_id');
-      sessionStorage.removeItem('checkout_product_name');
-      sessionStorage.removeItem('checkout_delivery_date');
+    if (!apptId) return;
 
-      if (userId) {
-        api.getCustomerDetails(userId).then(res => {
-          if (res && res.user) {
-            setSelectedCustomer(res.user);
-            setCustomerSearchTerm(res.user.fullName);
-          }
-        }).catch(err => console.error('Error fetching checkout customer:', err));
-      }
+    setCheckoutApptId(apptId);
+    setOrderStatus('PENDING');
+    // Reset cart + customer so stale data doesn't persist across re-triggers
+    setCart([]);
+    setSelectedCustomer(null);
+    setCustomerSearchTerm('');
+    sessionStorage.removeItem('checkout_appointment_id');
+    sessionStorage.removeItem('checkout_user_id');
+    sessionStorage.removeItem('checkout_product_name');
+    sessionStorage.removeItem('checkout_delivery_date');
 
-      if (productName) {
+    if (userId) {
+      api.getCustomerDetails(userId).then(res => {
+        if (res && res.user) {
+          setSelectedCustomer(res.user);
+          setCustomerSearchTerm(res.user.fullName);
+        }
+      }).catch(err => console.error('Error fetching checkout customer:', err));
+    }
+
+    if (productName) {
+      // Only set the search term if it looks like an actual product name (not a generic type).
+      // Generic types like "Custom Tailoring" / "SLOT_BOOKING" won't match products,
+      // so we skip the search filter to show all products instead of an empty grid.
+      const genericTypes = ['custom tailoring', 'slot_booking', 'consultation', 'measurement', 'alteration'];
+      const isGeneric = genericTypes.some(g => productName.toLowerCase().includes(g));
+      if (!isGeneric) {
         setSearchTerm(productName);
         setPrefillProductToCart(productName);
+      } else {
+        setSearchTerm('');
+        setPrefillProductToCart('');
+        setCurrentPage(1);
       }
+    } else {
+      setSearchTerm('');
+      setPrefillProductToCart('');
+    }
 
-      if (deliveryDateVal) {
-        try {
-          const d = new Date(deliveryDateVal);
-          const y = d.getFullYear();
-          const m = String(d.getMonth() + 1).padStart(2, '0');
-          const day = String(d.getDate()).padStart(2, '0');
-          setDeliveryDate(`${y}-${m}-${day}`);
-        } catch (e) {
-          console.error('Error parsing delivery date prefill:', e);
-        }
+    if (deliveryDateVal) {
+      try {
+        const d = new Date(deliveryDateVal);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        setDeliveryDate(`${y}-${m}-${day}`);
+      } catch (e) {
+        console.error('Error parsing delivery date prefill:', e);
       }
     }
+  };
+
+  // Run on first mount (URL params) and on every 'checkout-prefill' event (tab switches)
+  useEffect(() => {
+    runPrefill();
+    window.addEventListener('checkout-prefill', runPrefill);
+    return () => window.removeEventListener('checkout-prefill', runPrefill);
   }, []);
 
   // Filter time slots dynamically

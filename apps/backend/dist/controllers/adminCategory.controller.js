@@ -62,7 +62,7 @@ class AdminCategoryController {
                     order,
                 },
             });
-            await redis_js_1.default.del('cache:categories');
+            await redis_js_1.default.del('cache:categories', 'cache:all_categories_tree');
             return res.status(201).json({
                 success: true,
                 message: 'Category created successfully',
@@ -100,7 +100,7 @@ class AdminCategoryController {
                     order,
                 },
             });
-            await redis_js_1.default.del('cache:categories');
+            await redis_js_1.default.del('cache:categories', 'cache:all_categories_tree');
             return res.status(200).json({
                 success: true,
                 message: 'Category updated successfully',
@@ -140,7 +140,7 @@ class AdminCategoryController {
                     name: existing.name,
                 },
             });
-            await redis_js_1.default.del('cache:categories');
+            await redis_js_1.default.del('cache:categories', 'cache:all_categories_tree');
             return res.status(200).json({
                 success: true,
                 message: 'Category deleted successfully',
@@ -160,7 +160,7 @@ class AdminCategoryController {
                 where: { id: c.id },
                 data: { order: c.order },
             })));
-            await redis_js_1.default.del('cache:categories');
+            await redis_js_1.default.del('cache:categories', 'cache:all_categories_tree');
             return res.status(200).json({
                 success: true,
                 message: 'Categories reordered successfully',

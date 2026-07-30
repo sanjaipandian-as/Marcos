@@ -265,8 +265,14 @@ export class OrderController {
   static async adminListOrders(req: Request, res: Response, next: NextFunction) {
     const { page = 1, limit = 10, status } = req.query as any;
     const skip = (Number(page) - 1) * Number(limit);
+    const cacheKey = `cache:admin:orders:${page}:${limit}:${status || 'ALL'}`;
 
     try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return res.status(200).json(JSON.parse(cached));
+      }
+
       const where: any = {};
       if (status) {
         where.status = status as OrderStatus;
@@ -342,7 +348,7 @@ export class OrderController {
         };
       });
 
-      return res.status(200).json({
+      const responsePayload = {
         success: true,
         data: ordersWithBookings,
         pagination: {
@@ -351,7 +357,11 @@ export class OrderController {
           total,
           pages: Math.ceil(total / Number(limit)),
         },
-      });
+      };
+
+      await redis.set(cacheKey, JSON.stringify(responsePayload), 'EX', 30);
+
+      return res.status(200).json(responsePayload);
     } catch (error) {
       next(error);
     }
