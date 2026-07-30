@@ -888,7 +888,19 @@ export default function AppointmentBookingScreen({ navigation, route }) {
             </ScrollView>
           ) : (
             <FlatList
-              data={appointments}
+              data={(() => {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                return [...appointments].sort((a, b) => {
+                  const dateA = new Date(a.date);
+                  const dateB = new Date(b.date);
+                  const isOldA = a.status === 'COMPLETED' || a.status === 'CANCELLED' || dateA < today;
+                  const isOldB = b.status === 'COMPLETED' || b.status === 'CANCELLED' || dateB < today;
+                  if (isOldA && !isOldB) return 1;
+                  if (!isOldA && isOldB) return -1;
+                  return !isOldA ? dateA - dateB : dateB - dateA;
+                });
+              })()}
               renderItem={renderBookingItem}
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.listPadding}
@@ -916,7 +928,7 @@ export default function AppointmentBookingScreen({ navigation, route }) {
             />
           )}
         </View>
-
+ 
         {/* Page 2: Home Visit Bookings */}
         <View style={{ width: width, flex: 1 }}>
           {loading && visits.length === 0 ? (
@@ -950,7 +962,7 @@ export default function AppointmentBookingScreen({ navigation, route }) {
                   ? 'Request a personal home measurement and fitting visit.' 
                   : 'Sign in to view and manage your visit schedule.'}
               </Text>
-
+ 
               {!user ? (
                 <TouchableOpacity
                   style={[styles.primaryActionBtn, { backgroundColor: theme.brand[500] }]}
@@ -978,7 +990,19 @@ export default function AppointmentBookingScreen({ navigation, route }) {
             </ScrollView>
           ) : (
             <FlatList
-              data={visits}
+              data={(() => {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                return [...visits].sort((a, b) => {
+                  const dateA = new Date(a.preferredDate || a.createdAt);
+                  const dateB = new Date(b.preferredDate || b.createdAt);
+                  const isOldA = a.status === 'COMPLETED' || a.status === 'CANCELLED' || dateA < today;
+                  const isOldB = b.status === 'COMPLETED' || b.status === 'CANCELLED' || dateB < today;
+                  if (isOldA && !isOldB) return 1;
+                  if (!isOldA && isOldB) return -1;
+                  return !isOldA ? dateA - dateB : dateB - dateA;
+                });
+              })()}
               renderItem={renderBookingItem}
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.listPadding}
