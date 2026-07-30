@@ -1688,17 +1688,6 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
       {/* ── Toggle ─────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center bg-white border border-slate-200 rounded-2xl p-1.5 w-fit shadow-sm gap-1 flex-wrap">
-          <button onClick={() => { setSection('orders'); setFilter('ALL'); }}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${section === 'orders' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'
-              }`}>
-            <ShoppingBag className="w-4 h-4" />Product Orders
-            {todayOrders.length > 0 && (
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${section === 'orders' ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-700'}`}>
-                {todayOrders.length}
-              </span>
-            )}
-          </button>
-
           <button onClick={() => { setSection('fittings'); setFilter('ALL'); }}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${section === 'fittings' ? 'bg-brand-500 text-[#3D2E3D] shadow-md' : 'text-slate-400 hover:text-slate-600'
               }`}>
@@ -1717,6 +1706,17 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
             {todayVisits.length > 0 && (
               <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${section === 'home' ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-700'}`}>
                 {todayVisits.length}
+              </span>
+            )}
+          </button>
+
+          <button onClick={() => { setSection('quick_orders'); setFilter('ALL'); }}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${section === 'quick_orders' ? 'bg-orange-500 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'
+              }`}>
+            <ShoppingCart className="w-4 h-4" />Quick Delivery
+            {todayQuickOrders.length > 0 && (
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${section === 'quick_orders' ? 'bg-white/20 text-white' : 'bg-orange-100 text-orange-700'}`}>
+                {todayQuickOrders.length}
               </span>
             )}
           </button>
