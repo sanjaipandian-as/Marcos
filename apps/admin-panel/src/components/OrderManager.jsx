@@ -353,6 +353,7 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
 
   // Pagination & Alerts
   const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
   const [dismissedAlerts, setDismissedAlerts] = useState(() => {
     try {
       const saved = localStorage.getItem('marcos_dismissed_cancelled_alerts');
