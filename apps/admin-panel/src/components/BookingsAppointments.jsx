@@ -1337,6 +1337,93 @@ function StatsBar({ items, type }) {
   );
 }
 
+// ─── Pagination Component ──────────────────────────────────────────────────
+function PaginationControls({ currentPage, totalItems, itemsPerPage = 10, onPageChange }) {
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  if (totalPages <= 1) return null;
+
+  const startItem = (currentPage - 1) * itemsPerPage + 1;
+  const endItem = Math.min(currentPage * itemsPerPage, totalItems);
+
+  const maxVisiblePages = 5;
+  let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+  let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+  if (endPage - startPage + 1 < maxVisiblePages) {
+    startPage = Math.max(1, endPage - maxVisiblePages + 1);
+  }
+
+  const pages = [];
+  for (let i = startPage; i <= endPage; i++) {
+    pages.push(i);
+  }
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-100 text-xs font-semibold text-slate-500">
+      <p className="text-[11px] text-slate-400">
+        Showing <span className="font-bold text-slate-700">{startItem}–{endItem}</span> of <span className="font-bold text-slate-700">{totalItems}</span> items
+      </p>
+
+      <div className="flex items-center gap-1.5">
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-bold flex items-center gap-1 shadow-xs"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" /> Previous
+        </button>
+
+        <div className="flex items-center gap-1">
+          {startPage > 1 && (
+            <>
+              <button
+                onClick={() => onPageChange(1)}
+                className="w-8 h-8 rounded-xl font-bold transition-all text-xs bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+              >
+                1
+              </button>
+              {startPage > 2 && <span className="px-1 text-slate-400 font-bold">…</span>}
+            </>
+          )}
+
+          {pages.map(p => (
+            <button
+              key={p}
+              onClick={() => onPageChange(p)}
+              className={`w-8 h-8 rounded-xl font-bold transition-all text-xs ${
+                p === currentPage
+                  ? 'bg-slate-800 text-white shadow-sm scale-105'
+                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+
+          {endPage < totalPages && (
+            <>
+              {endPage < totalPages - 1 && <span className="px-1 text-slate-400 font-bold">…</span>}
+              <button
+                onClick={() => onPageChange(totalPages)}
+                className="w-8 h-8 rounded-xl font-bold transition-all text-xs bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+              >
+                {totalPages}
+              </button>
+            </>
+          )}
+        </div>
+
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-bold flex items-center gap-1 shadow-xs"
+        >
+          Next <ChevronRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 export default function BookingsAppointments({ setActiveTab, isActive }) {
   const [section, setSection] = useState(() => {
@@ -1362,6 +1449,11 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
   const [drawerItem, setDrawer] = useState(null); // { type: 'appt'|'visit', data }
   const [errorToast, setErrorToast] = useState(null);
   const [filterOrderId, setFilterOrderId] = useState(() => sessionStorage.getItem('filterBookingByOrderId'));
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [section, selDate, filterStatus]);
 
   // ── Create Booking Modal State ────────────────────────────────
   const [createModal, setCreateModal] = useState(false);
@@ -1900,39 +1992,48 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
                   <p className="text-sm text-slate-400 mt-1">{isToday ? 'No orders received today' : `No orders on ${fmtDate(selDate)}`}</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {filtOrders.map(o => (
-                    <div key={o.id} className="rounded-2xl border border-purple-200 bg-white p-4 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-3 group">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="text-xs font-black text-[#3D2E3D] group-hover:text-purple-700 transition-colors">{o.invoiceNumber}</p>
-                          <p className="text-xs font-bold text-slate-700 mt-0.5">{o.user?.fullName || o.customerName || 'Customer'}</p>
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {filtOrders.slice((currentPage - 1) * 10, currentPage * 10).map(o => (
+                      <div key={o.id} className="rounded-2xl border border-purple-200 bg-white p-4 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-3 group">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-xs font-black text-[#3D2E3D] group-hover:text-purple-700 transition-colors">{o.invoiceNumber}</p>
+                            <p className="text-xs font-bold text-slate-700 mt-0.5">{o.user?.fullName || o.customerName || 'Customer'}</p>
+                          </div>
+                          <Badge status={o.status} small />
                         </div>
-                        <Badge status={o.status} small />
-                      </div>
 
-                      <div className="text-xs text-slate-500 bg-purple-50/50 border border-purple-100 p-2.5 rounded-xl space-y-1">
-                        <p className="truncate">📍 {o.shippingAddress?.city || o.shippingAddress?.addressLine1 || 'Standard Delivery'}</p>
-                        {(o.user?.phoneNumber || o.shippingAddress?.phone) && (
-                          <p className="font-semibold text-slate-600">📞 {o.user?.phoneNumber || o.shippingAddress?.phone}</p>
-                        )}
-                      </div>
+                        <div className="text-xs text-slate-500 bg-purple-50/50 border border-purple-100 p-2.5 rounded-xl space-y-1">
+                          <p className="truncate">📍 {o.shippingAddress?.city || o.shippingAddress?.addressLine1 || 'Standard Delivery'}</p>
+                          {(o.user?.phoneNumber || o.shippingAddress?.phone) && (
+                            <p className="font-semibold text-slate-600">📞 {o.user?.phoneNumber || o.shippingAddress?.phone}</p>
+                          )}
+                        </div>
 
-                      <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                        <span className="text-xs font-black text-[#3D2E3D]">₹{Number(o.payableAmount || 0).toLocaleString('en-IN')}</span>
-                        <button 
-                          onClick={() => {
-                            if (setActiveTab) setActiveTab('orders');
-                            else window.location.href = '/admin/orders';
-                          }}
-                          className="text-xs font-bold text-purple-700 hover:underline flex items-center gap-1"
-                        >
-                          View Details →
-                        </button>
+                        <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                          <span className="text-xs font-black text-[#3D2E3D]">₹{Number(o.payableAmount || 0).toLocaleString('en-IN')}</span>
+                          <button 
+                            onClick={() => {
+                              if (setActiveTab) setActiveTab('orders');
+                              else window.location.href = '/admin/orders';
+                            }}
+                            className="text-xs font-bold text-purple-700 hover:underline flex items-center gap-1"
+                          >
+                            View Details →
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalItems={filtOrders.length}
+                    itemsPerPage={10}
+                    onPageChange={setCurrentPage}
+                  />
+                </>
               )}
             </div>
           )}
@@ -1955,39 +2056,48 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
                   <p className="text-sm text-slate-400 mt-1">{isToday ? 'No quick deliveries found for today' : `Nothing on ${fmtDate(selDate)}`}</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {filtQuickOrders.map(o => (
-                    <div key={o.id} className="rounded-2xl border bg-white shadow-sm hover:shadow-md transition-all overflow-hidden group border-orange-200">
-                      <div className="p-4 flex items-start gap-3">
-                        <div className="flex flex-col items-center justify-center bg-gradient-to-b from-orange-50 to-orange-100 border border-orange-200 rounded-xl px-3 py-2.5 min-w-[60px] shrink-0">
-                          <ShoppingCart className="w-3.5 h-3.5 text-orange-600 mb-1" />
-                          <span className="text-[11px] font-extrabold text-orange-700 leading-tight text-center">Quick</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-extrabold text-slate-800 truncate">{o.customerName || 'Customer'}</p>
-                            <Badge status={o.status} small />
+                <>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {filtQuickOrders.slice((currentPage - 1) * 10, currentPage * 10).map(o => (
+                      <div key={o.id} className="rounded-2xl border bg-white shadow-sm hover:shadow-md transition-all overflow-hidden group border-orange-200">
+                        <div className="p-4 flex items-start gap-3">
+                          <div className="flex flex-col items-center justify-center bg-gradient-to-b from-orange-50 to-orange-100 border border-orange-200 rounded-xl px-3 py-2.5 min-w-[60px] shrink-0">
+                            <ShoppingCart className="w-3.5 h-3.5 text-orange-600 mb-1" />
+                            <span className="text-[11px] font-extrabold text-orange-700 leading-tight text-center">Quick</span>
                           </div>
-                          <div className="flex items-center gap-1 mt-1 text-xs text-slate-500 font-bold">
-                            Invoice: <span className="text-slate-700">{o.invoiceNumber || 'N/A'}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-extrabold text-slate-800 truncate">{o.customerName || 'Customer'}</p>
+                              <Badge status={o.status} small />
+                            </div>
+                            <div className="flex items-center gap-1 mt-1 text-xs text-slate-500 font-bold">
+                              Invoice: <span className="text-slate-700">{o.invoiceNumber || 'N/A'}</span>
+                            </div>
+                            {o.quickOrderReason && (
+                              <p className="text-xs text-slate-500 mt-1.5 bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 leading-relaxed" style={{ maxHeight: 48, overflow: 'hidden' }}>
+                                <span className="font-bold text-slate-600">Reason:</span> {o.quickOrderReason}
+                              </p>
+                            )}
                           </div>
-                          {o.quickOrderReason && (
-                            <p className="text-xs text-slate-500 mt-1.5 bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 leading-relaxed" style={{ maxHeight: 48, overflow: 'hidden' }}>
-                              <span className="font-bold text-slate-600">Reason:</span> {o.quickOrderReason}
-                            </p>
-                          )}
+                          <button onClick={() => {
+                            if (setActiveTab) setActiveTab('orders');
+                            else window.location.href = '/admin/orders';
+                          }}
+                            className="p-2 rounded-xl border border-slate-200 hover:border-orange-300 hover:bg-orange-50 text-slate-400 hover:text-orange-600 transition-all shrink-0 opacity-0 group-hover:opacity-100">
+                            <ArrowRight className="w-4 h-4" />
+                          </button>
                         </div>
-                        <button onClick={() => {
-                          if (setActiveTab) setActiveTab('orders');
-                          else window.location.href = '/admin/orders';
-                        }}
-                          className="p-2 rounded-xl border border-slate-200 hover:border-orange-300 hover:bg-orange-50 text-slate-400 hover:text-orange-600 transition-all shrink-0 opacity-0 group-hover:opacity-100">
-                          <ArrowRight className="w-4 h-4" />
-                        </button>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalItems={filtQuickOrders.length}
+                    itemsPerPage={10}
+                    onPageChange={setCurrentPage}
+                  />
+                </>
               )}
             </div>
           )}
@@ -2010,82 +2120,91 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
                   <p className="text-sm text-slate-400 mt-1">{isToday ? 'No slots booked for today' : `Nothing on ${fmtDate(selDate)}`}</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {sortedSlots.map(a => (
-                    <div key={a.id} className={`rounded-2xl border bg-white shadow-sm hover:shadow-md transition-all overflow-hidden group ${a.status === 'CONFIRMED' ? 'border-emerald-200' :
-                        a.status === 'CANCELLED' ? 'border-red-100 opacity-60' :
-                          a.status === 'CONSULTED' ? 'border-teal-200' :
-                            a.status === 'ORDERED' ? 'border-blue-200' : 'border-violet-200 hover:border-violet-300'
-                      }`}>
-                      <div className="p-4 flex items-start gap-3">
-                        {/* Time tile */}
-                        <div className="flex flex-col items-center justify-center bg-gradient-to-b from-violet-50 to-violet-100 border border-violet-200 rounded-xl px-3 py-2.5 min-w-[60px] shrink-0">
-                          <Clock className="w-3.5 h-3.5 text-violet-600 mb-1" />
-                          <span className="text-[11px] font-extrabold text-violet-700 leading-tight text-center">{a.timeSlot || '—'}</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-extrabold text-slate-800 truncate">{a.userName || 'Walk-In Customer'}</p>
-                            <Badge status={a.status} small />
+                <>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {sortedSlots.slice((currentPage - 1) * 10, currentPage * 10).map(a => (
+                      <div key={a.id} className={`rounded-2xl border bg-white shadow-sm hover:shadow-md transition-all overflow-hidden group ${a.status === 'CONFIRMED' ? 'border-emerald-200' :
+                          a.status === 'CANCELLED' ? 'border-red-100 opacity-60' :
+                            a.status === 'CONSULTED' ? 'border-teal-200' :
+                              a.status === 'ORDERED' ? 'border-blue-200' : 'border-violet-200 hover:border-violet-300'
+                        }`}>
+                        <div className="p-4 flex items-start gap-3">
+                          {/* Time tile */}
+                          <div className="flex flex-col items-center justify-center bg-gradient-to-b from-violet-50 to-violet-100 border border-violet-200 rounded-xl px-3 py-2.5 min-w-[60px] shrink-0">
+                            <Clock className="w-3.5 h-3.5 text-violet-600 mb-1" />
+                            <span className="text-[11px] font-extrabold text-violet-700 leading-tight text-center">{a.timeSlot || '—'}</span>
                           </div>
-                          {a.user?.phoneNumber && <span className="text-[10px] text-slate-400 flex items-center gap-1 mt-1"><Phone className="w-3 h-3" />{a.user.phoneNumber}</span>}
-                          {a.notes && (
-                            <p className="text-xs text-slate-500 mt-1.5 bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 leading-relaxed" style={{ maxHeight: 48, overflow: 'hidden' }}>
-                              {a.notes}
-                            </p>
-                          )}
-                        </div>
-                        <button onClick={() => setDrawer({ type: 'appt', data: a })}
-                          className="p-2 rounded-xl border border-slate-200 hover:border-violet-300 hover:bg-violet-50 text-slate-400 hover:text-violet-600 transition-all shrink-0 opacity-0 group-hover:opacity-100">
-                          <SlidersHorizontal className="w-4 h-4" />
-                        </button>
-                      </div>
-                      {/* Quick actions */}
-                      {!['CANCELLED', 'CONSULTED', 'ORDERED'].includes(a.status) && (
-                        <div className="px-4 pb-4 flex gap-2">
-                          {a.status === 'PENDING' && (
-                            <button
-                              onClick={async () => { try { await api.updateAppointmentStatus(a.id, 'CONFIRMED'); await load(true); } catch (e) { showError(e.message); } }}
-                              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold shadow-sm transition-all"
-                            >
-                              <CheckCircle className="w-3.5 h-3.5" />Confirm
-                            </button>
-                          )}
-                          {a.status === 'CONFIRMED' && (
-                            <>
-                              <button
-                                onClick={async () => { try { await api.updateAppointmentStatus(a.id, 'CONSULTED'); await load(true); } catch (e) { showError(e.message); } }}
-                                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-teal-500 hover:bg-teal-600 text-white text-xs font-bold shadow-sm transition-all"
-                              >
-                                <Sparkles className="w-3.5 h-3.5" />Consulted
-                              </button>
-                              <button
-                                onClick={async () => { try { await api.updateAppointmentStatus(a.id, 'ORDERED'); await load(true); } catch (e) { showError(e.message); } }}
-                                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold shadow-sm transition-all"
-                              >
-                                <ShoppingBag className="w-3.5 h-3.5" />Ordered
-                              </button>
-                            </>
-                          )}
-                          <button
-                            onClick={async () => { try { await api.updateAppointmentStatus(a.id, 'CANCELLED'); await load(true); } catch (e) { showError(e.message); } }}
-                            className="px-3 py-2 rounded-xl border border-red-200 hover:bg-red-50 text-red-400 text-xs font-bold transition-all"
-                          >
-                            <XCircle className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
-                      {['CONSULTED', 'ORDERED', 'CANCELLED'].includes(a.status) && (
-                        <div className="px-4 pb-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-extrabold text-slate-800 truncate">{a.userName || 'Walk-In Customer'}</p>
+                              <Badge status={a.status} small />
+                            </div>
+                            {a.user?.phoneNumber && <span className="text-[10px] text-slate-400 flex items-center gap-1 mt-1"><Phone className="w-3 h-3" />{a.user.phoneNumber}</span>}
+                            {a.notes && (
+                              <p className="text-xs text-slate-500 mt-1.5 bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 leading-relaxed" style={{ maxHeight: 48, overflow: 'hidden' }}>
+                                {a.notes}
+                              </p>
+                            )}
+                          </div>
                           <button onClick={() => setDrawer({ type: 'appt', data: a })}
-                            className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 text-xs font-bold transition-all">
-                            <Eye className="w-3.5 h-3.5" />View Details
+                            className="p-2 rounded-xl border border-slate-200 hover:border-violet-300 hover:bg-violet-50 text-slate-400 hover:text-violet-600 transition-all shrink-0 opacity-0 group-hover:opacity-100">
+                            <SlidersHorizontal className="w-4 h-4" />
                           </button>
                         </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                        {/* Quick actions */}
+                        {!['CANCELLED', 'CONSULTED', 'ORDERED'].includes(a.status) && (
+                          <div className="px-4 pb-4 flex gap-2">
+                            {a.status === 'PENDING' && (
+                              <button
+                                onClick={async () => { try { await api.updateAppointmentStatus(a.id, 'CONFIRMED'); await load(true); } catch (e) { showError(e.message); } }}
+                                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold shadow-sm transition-all"
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" />Confirm
+                              </button>
+                            )}
+                            {a.status === 'CONFIRMED' && (
+                              <>
+                                <button
+                                  onClick={async () => { try { await api.updateAppointmentStatus(a.id, 'CONSULTED'); await load(true); } catch (e) { showError(e.message); } }}
+                                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-teal-500 hover:bg-teal-600 text-white text-xs font-bold shadow-sm transition-all"
+                                >
+                                  <Sparkles className="w-3.5 h-3.5" />Consulted
+                                </button>
+                                <button
+                                  onClick={async () => { try { await api.updateAppointmentStatus(a.id, 'ORDERED'); await load(true); } catch (e) { showError(e.message); } }}
+                                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold shadow-sm transition-all"
+                                >
+                                  <ShoppingBag className="w-3.5 h-3.5" />Ordered
+                                </button>
+                              </>
+                            )}
+                            <button
+                              onClick={async () => { try { await api.updateAppointmentStatus(a.id, 'CANCELLED'); await load(true); } catch (e) { showError(e.message); } }}
+                              className="px-3 py-2 rounded-xl border border-red-200 hover:bg-red-50 text-red-400 text-xs font-bold transition-all"
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                        {['CONSULTED', 'ORDERED', 'CANCELLED'].includes(a.status) && (
+                          <div className="px-4 pb-4">
+                            <button onClick={() => setDrawer({ type: 'appt', data: a })}
+                              className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 text-xs font-bold transition-all">
+                              <Eye className="w-3.5 h-3.5" />View Details
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalItems={sortedSlots.length}
+                    itemsPerPage={10}
+                    onPageChange={setCurrentPage}
+                  />
+                </>
               )}
 
               {/* All slot bookings table */}
@@ -2149,22 +2268,31 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
                   <p className="text-sm text-slate-400 mt-1">{isToday ? 'Nothing scheduled for today' : `Nothing on ${fmtDate(selDate)}`}</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {sortedAppts.map(a => (
-                    <ApptCard key={a.id} appt={a}
-                      onQuickStatus={async (id, st) => {
-                        try {
-                          await api.updateAppointmentStatus(id, st);
-                          await load(true);
-                        } catch (e) {
-                          showError(e.message || "Failed to update");
-                        }
-                      }}
-                      onOpen={a => setDrawer({ type: 'appt', data: a })}
-                      setActiveTab={setActiveTab}
-                    />
-                  ))}
-                </div>
+                <>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {sortedAppts.slice((currentPage - 1) * 10, currentPage * 10).map(a => (
+                      <ApptCard key={a.id} appt={a}
+                        onQuickStatus={async (id, st) => {
+                          try {
+                            await api.updateAppointmentStatus(id, st);
+                            await load(true);
+                          } catch (e) {
+                            showError(e.message || "Failed to update");
+                          }
+                        }}
+                        onOpen={a => setDrawer({ type: 'appt', data: a })}
+                        setActiveTab={setActiveTab}
+                      />
+                    ))}
+                  </div>
+
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalItems={sortedAppts.length}
+                    itemsPerPage={10}
+                    onPageChange={setCurrentPage}
+                  />
+                </>
               )}
             </div>
           )}
@@ -2187,15 +2315,24 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
                   <p className="text-sm text-slate-400 mt-1">{isToday ? 'Nothing scheduled for today' : `Nothing on ${fmtDate(selDate)}`}</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {filtVisits.map(v => (
-                    <VisitCard key={v.id} visit={v} staffList={staffList}
-                      onRefresh={() => load(true)}
-                      onOpen={v => setDrawer({ type: 'visit', data: v })}
-                      setActiveTab={setActiveTab}
-                    />
-                  ))}
-                </div>
+                <>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {filtVisits.slice((currentPage - 1) * 10, currentPage * 10).map(v => (
+                      <VisitCard key={v.id} visit={v} staffList={staffList}
+                        onRefresh={() => load(true)}
+                        onOpen={v => setDrawer({ type: 'visit', data: v })}
+                        setActiveTab={setActiveTab}
+                      />
+                    ))}
+                  </div>
+
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalItems={filtVisits.length}
+                    itemsPerPage={10}
+                    onPageChange={setCurrentPage}
+                  />
+                </>
               )}
             </div>
           )}
