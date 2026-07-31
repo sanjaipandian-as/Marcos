@@ -2491,20 +2491,15 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
                       <tr key={order.id} className={`transition-colors ${order.status === 'CANCELLED' ? 'bg-red-50/70 hover:bg-red-50/90 border-l-2 border-l-red-500' : 'hover:bg-slate-50/20'}`}>
                         <td className={`py-4 px-6 font-extrabold ${order.status === 'CANCELLED' ? 'text-slate-400 line-through decoration-red-300' : 'text-slate-800'}`}>
                           {order.invoiceNumber}
-                          {order.status === 'CANCELLED' && (
+                          {order.status === 'CANCELLED' && order.paymentStatus !== 'REFUNDED' && (
                             <span className="ml-2 flex items-center gap-1.5 inline-flex">
-                              <span className="px-1.5 py-0.5 rounded text-[8px] bg-red-100 text-red-700 not-italic no-underline border border-red-200 font-bold">CANCELLED</span>
-                              {order.paymentStatus === 'REFUNDED' ? (
-                                <span className="px-1.5 py-0.5 rounded text-[8px] bg-emerald-100 text-emerald-700 font-bold border border-emerald-200">REFUNDED</span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={(e) => handleProcessRefund(order, e)}
-                                  className="px-2 py-0.5 rounded text-[9px] bg-red-600 hover:bg-red-700 text-white font-extrabold shadow-sm transition-all active:scale-95 cursor-pointer uppercase tracking-tight"
-                                >
-                                  Refund ₹{Number(order.payableAmount || 0).toLocaleString('en-IN')}
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => handleProcessRefund(order, e)}
+                                className="px-2 py-0.5 rounded text-[9px] bg-red-600 hover:bg-red-700 text-white font-extrabold shadow-sm transition-all active:scale-95 cursor-pointer uppercase tracking-tight"
+                              >
+                                Refund ₹{Number(order.payableAmount || 0).toLocaleString('en-IN')}
+                              </button>
                             </span>
                           )}
                         </td>
@@ -2554,21 +2549,15 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
                             >
                               <Eye className="w-4 h-4" />
                             </button>
-                            {order.status === 'CANCELLED' && (
-                              order.paymentStatus === 'REFUNDED' ? (
-                                <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold rounded-lg flex items-center gap-1">
-                                  ✓ Refunded
-                                </span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={(e) => handleProcessRefund(order, e)}
-                                  className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-black rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
-                                  title="Process refund and save to database"
-                                >
-                                  💳 Refund ₹{Number(order.payableAmount || 0).toLocaleString('en-IN')}
-                                </button>
-                              )
+                            {order.status === 'CANCELLED' && order.paymentStatus !== 'REFUNDED' && (
+                              <button
+                                type="button"
+                                onClick={(e) => handleProcessRefund(order, e)}
+                                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-black rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
+                                title="Process refund and save to database"
+                              >
+                                💳 Refund ₹{Number(order.payableAmount || 0).toLocaleString('en-IN')}
+                              </button>
                             )}
                             {(() => {
                               const currentIdx = HAPPY_PATH.indexOf(order.status);
@@ -2613,20 +2602,15 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
                   <div className="flex justify-between items-center relative z-10">
                     <div className="flex items-center gap-2">
                       <span className={`font-extrabold text-sm ${order.status === 'CANCELLED' ? 'text-slate-400 line-through decoration-red-300' : 'text-slate-800'}`}>{order.invoiceNumber}</span>
-                      {order.status === 'CANCELLED' && (
+                      {order.status === 'CANCELLED' && order.paymentStatus !== 'REFUNDED' && (
                         <div className="flex gap-1.5 items-center">
-                          <span className="px-1.5 py-0.5 rounded text-[8px] bg-red-100 text-red-700 not-italic no-underline border border-red-200 font-bold">VOID</span>
-                          {order.paymentStatus === 'REFUNDED' ? (
-                            <span className="px-1.5 py-0.5 rounded text-[8px] bg-emerald-100 text-emerald-700 font-bold border border-emerald-200">REFUNDED</span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={(e) => handleProcessRefund(order, e)}
-                              className="px-2 py-0.5 rounded text-[9px] bg-red-600 hover:bg-red-700 text-white font-extrabold shadow-sm transition-all active:scale-95 cursor-pointer uppercase tracking-tight"
-                            >
-                              Refund ₹{Number(order.payableAmount || 0).toLocaleString('en-IN')}
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => handleProcessRefund(order, e)}
+                            className="px-2 py-0.5 rounded text-[9px] bg-red-600 hover:bg-red-700 text-white font-extrabold shadow-sm transition-all active:scale-95 cursor-pointer uppercase tracking-tight"
+                          >
+                            Refund ₹{Number(order.payableAmount || 0).toLocaleString('en-IN')}
+                          </button>
                         </div>
                       )}
                     </div>
