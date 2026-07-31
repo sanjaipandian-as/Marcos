@@ -353,8 +353,25 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
 
   // Pagination & Alerts
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 20;
-  const [dismissedAlerts, setDismissedAlerts] = useState([]);
+  const [dismissedAlerts, setDismissedAlerts] = useState(() => {
+    try {
+      const saved = localStorage.getItem('marcos_dismissed_cancelled_alerts');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const dismissAlert = (id) => {
+    setDismissedAlerts(prev => {
+      if (prev.includes(id)) return prev;
+      const next = [...prev, id];
+      try {
+        localStorage.setItem('marcos_dismissed_cancelled_alerts', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  };
 
   // Selected Order Edit States
   const [editCustomerName, setEditCustomerName] = useState('');
@@ -1762,6 +1779,7 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
         setEditPaymentStatus('REFUNDED');
         setSelectedOrder(prev => ({ ...prev, paymentStatus: 'REFUNDED' }));
       }
+      dismissAlert(orderToRefund.id);
       loadOrders(true);
     } catch (err) {
       console.error(err);
@@ -2235,7 +2253,7 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
                 <button 
                   onClick={(e) => {
                     e.stopPropagation();
-                    setDismissedAlerts(prev => [...prev, alert.id]);
+                    dismissAlert(alert.id);
                   }} 
                   className="p-1.5 hover:bg-red-100 rounded-lg text-red-400 hover:text-red-600 transition-colors ml-1"
                   title="Dismiss"
