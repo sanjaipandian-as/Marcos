@@ -3691,16 +3691,60 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
                         <label className="text-[10px] font-bold text-slate-400 uppercase">Payment Status</label>
                         <select
                           value={editPaymentStatus}
-                          onChange={e => setEditPaymentStatus(e.target.value)}
+                          onChange={e => {
+                            const newStatus = e.target.value;
+                            setEditPaymentStatus(newStatus);
+                            const total = Number(selectedOrder.payableAmount || selectedOrder.totalAmount || 0);
+                            if (newStatus === 'COMPLETED' && total > 0) {
+                              setEditAdvancePayment(total);
+                            } else if (newStatus === 'PENDING') {
+                              setEditAdvancePayment(0);
+                            }
+                          }}
                           className="w-full text-xs font-bold border border-slate-200 rounded-xl py-1.5 px-2.5 bg-white text-slate-700 focus:outline-none focus:border-brand-500"
                         >
-                          <option value="PENDING">Pending</option>
-                          <option value="COMPLETED">Completed</option>
+                          <option value="PENDING">Pending (Non-Paid)</option>
+                          <option value="PARTIAL">Advance Paid / Partial</option>
+                          <option value="COMPLETED">Completed (Fully Paid)</option>
                           <option value="FAILED">Failed</option>
                           <option value="REFUNDED">Refunded</option>
                         </select>
                       </div>
-                      {/* Payment Summary Moved to Right Column */}
+
+                      <div className="space-y-1 col-span-2 md:col-span-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Advance Paid (₹)</label>
+                        <div className="relative">
+                          <span className="absolute left-2.5 top-1.5 text-slate-400 text-xs font-bold">₹</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max={Number(selectedOrder.payableAmount || selectedOrder.totalAmount || 0)}
+                            value={editAdvancePayment}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setEditAdvancePayment(val);
+                              const num = Number(val) || 0;
+                              const total = Number(selectedOrder.payableAmount || selectedOrder.totalAmount || 0);
+                              if (num >= total && total > 0) {
+                                setEditPaymentStatus('COMPLETED');
+                              } else if (num > 0) {
+                                setEditPaymentStatus('PARTIAL');
+                              } else {
+                                setEditPaymentStatus('PENDING');
+                              }
+                            }}
+                            className="w-full pl-6 pr-2 py-1.5 text-xs font-bold border border-slate-200 rounded-xl bg-white text-slate-800 focus:outline-none focus:border-brand-500"
+                            placeholder="0.00"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1 col-span-2 md:col-span-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Balance Due</span>
+                        <span className="text-xs font-black text-brand-600 block mt-1">
+                          ₹{Math.max(0, (Number(selectedOrder.payableAmount || selectedOrder.totalAmount || 0) - (Number(editAdvancePayment) || 0))).toLocaleString('en-IN')}
+                        </span>
+                      </div>
                     </div>
                   </div>
 

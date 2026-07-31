@@ -419,9 +419,11 @@ export class OrderController {
       const sumSubsequent = currentPaymentHistory.reduce((sum, p) => sum + Number(p.amount), 0);
       updateData.balanceAmount = Math.max(0, Number(existing.payableAmount) - advance - sumSubsequent);
 
-      // Auto update payment status if balance is 0
+      // Auto update payment status if balance is 0 or if advance payment exists
       if (updateData.balanceAmount === 0 && Number(existing.payableAmount) > 0) {
-         updateData.paymentStatus = 'COMPLETED';
+        updateData.paymentStatus = 'COMPLETED';
+      } else if (advance > 0 && updateData.balanceAmount > 0 && paymentStatus !== 'REFUNDED' && paymentStatus !== 'FAILED') {
+        updateData.paymentStatus = 'PARTIAL';
       }
 
 
