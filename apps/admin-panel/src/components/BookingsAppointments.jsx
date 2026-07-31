@@ -1745,53 +1745,62 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
         </div>
       </div>
 
-      {/* ── Today's Bookings Overview ── */}
+      {/* ── All Bookings Overview (Across All Dates) ── */}
       {(() => {
-        const todayDate = new Date();
-        const fittingsToday = appointments.filter(a => isSameDay(a.date, todayDate) && a.productType !== 'SLOT_BOOKING');
-        const homeToday = visits.filter(v => isSameDay(v.preferredDate || v.createdAt, todayDate));
-        const quickToday = orders.filter(o => isSameDay(o.createdAt, todayDate) && o.isQuickOrder);
-        const slotsToday = appointments.filter(a => isSameDay(a.date, todayDate) && a.productType === 'SLOT_BOOKING');
+        const fittingsAll = appointments.filter(a => a.status !== 'CANCELLED' && a.productType !== 'SLOT_BOOKING');
+        const homeAll = visits.filter(v => v.status !== 'CANCELLED');
+        const quickAll = orders.filter(o => o.status !== 'CANCELLED' && o.isQuickOrder);
+        const slotsAll = appointments.filter(a => a.status !== 'CANCELLED' && a.productType === 'SLOT_BOOKING');
 
-        const allTodayBookings = [
-          ...fittingsToday.map(b => ({ ...b, sectionType: 'fittings', label: 'Studio Fitting', name: b.userName || 'Customer', time: b.timeSlot, date: b.date })),
-          ...homeToday.map(b => ({ ...b, sectionType: 'home', label: 'Home Booking', name: b.customerName || 'Customer', time: 'Home Visit', date: b.preferredDate || b.createdAt })),
-          ...quickToday.map(b => ({ ...b, sectionType: 'quick_orders', label: 'Quick Delivery', name: b.customerName || 'Customer', time: 'Quick Delivery', date: b.createdAt })),
-          ...slotsToday.map(b => ({ ...b, sectionType: 'slots', label: 'Slot Booking', name: b.userName || 'Customer', time: b.timeSlot, date: b.date }))
-        ];
+        const allBookings = [
+          ...fittingsAll.map(b => ({ ...b, sectionType: 'fittings', label: 'Studio Fitting', name: b.userName || 'Customer', time: b.timeSlot, date: b.date })),
+          ...homeAll.map(b => ({ ...b, sectionType: 'home', label: 'Home Booking', name: b.customerName || 'Customer', time: 'Home Visit', date: b.preferredDate || b.createdAt })),
+          ...quickAll.map(b => ({ ...b, sectionType: 'quick_orders', label: 'Quick Delivery', name: b.customerName || 'Customer', time: 'Quick Delivery', date: b.createdAt })),
+          ...slotsAll.map(b => ({ ...b, sectionType: 'slots', label: 'Slot Booking', name: b.userName || 'Customer', time: b.timeSlot, date: b.date }))
+        ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
         return (
           <div className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-sm space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-4 pb-3 border-b border-slate-100">
               <div>
-                <h3 className="text-sm font-extrabold text-slate-800">Today's Bookings Overview</h3>
-                <p className="text-[10px] text-slate-400 font-medium">Received or scheduled for today across all categories</p>
+                <h3 className="text-sm font-extrabold text-slate-800">All Bookings Overview</h3>
+                <p className="text-[10px] text-slate-400 font-medium">All active & scheduled bookings across all dates & categories</p>
               </div>
               <div className="flex flex-wrap gap-2 text-[10px] font-black">
-                <span className="bg-brand-50 border border-brand-200 text-brand-700 px-2.5 py-1 rounded-xl">Fittings: {fittingsToday.length}</span>
-                <span className="bg-indigo-50 border border-indigo-200 text-indigo-700 px-2.5 py-1 rounded-xl">Home: {homeToday.length}</span>
-                <span className="bg-orange-50 border border-orange-200 text-orange-700 px-2.5 py-1 rounded-xl">Quick: {quickToday.length}</span>
-                <span className="bg-violet-50 border border-violet-200 text-violet-700 px-2.5 py-1 rounded-xl">Slots: {slotsToday.length}</span>
+                <span className="bg-brand-50 border border-brand-200 text-brand-700 px-2.5 py-1 rounded-xl">Fittings: {fittingsAll.length}</span>
+                <span className="bg-indigo-50 border border-indigo-200 text-indigo-700 px-2.5 py-1 rounded-xl">Home: {homeAll.length}</span>
+                <span className="bg-orange-50 border border-orange-200 text-orange-700 px-2.5 py-1 rounded-xl">Quick: {quickAll.length}</span>
+                <span className="bg-violet-50 border border-violet-200 text-violet-700 px-2.5 py-1 rounded-xl">Slots: {slotsAll.length}</span>
               </div>
             </div>
 
-            {allTodayBookings.length === 0 ? (
-              <p className="text-xs text-slate-400 font-semibold py-2">No bookings or orders scheduled/received for today.</p>
+            {allBookings.length === 0 ? (
+              <p className="text-xs text-slate-400 font-semibold py-2">No active bookings found across any date.</p>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                {allTodayBookings.map((b, idx) => (
-                  <div key={idx} className="p-3.5 rounded-2xl bg-slate-50/70 border border-slate-200/60 flex items-center justify-between gap-3 hover:bg-slate-50 transition-all">
-                    <div className="min-w-0">
-                      <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-lg inline-block mb-1 ${
-                        b.sectionType === 'fittings' ? 'bg-brand-100 text-brand-700 border border-brand-200' :
-                        b.sectionType === 'home' ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' :
-                        b.sectionType === 'quick_orders' ? 'bg-orange-100 text-orange-700 border border-orange-200' :
-                        'bg-violet-100 text-violet-700 border border-violet-200'
-                      }`}>
-                        {b.label}
-                      </span>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 max-h-[360px] overflow-y-auto pr-1">
+                {allBookings.map((b, idx) => (
+                  <div key={idx} className="p-3.5 rounded-2xl bg-slate-50/70 border border-slate-200/60 flex items-center justify-between gap-3 hover:bg-slate-50 hover:border-slate-300 transition-all">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-lg inline-block ${
+                          b.sectionType === 'fittings' ? 'bg-brand-100 text-brand-700 border border-brand-200' :
+                          b.sectionType === 'home' ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' :
+                          b.sectionType === 'quick_orders' ? 'bg-orange-100 text-orange-700 border border-orange-200' :
+                          'bg-violet-100 text-violet-700 border border-violet-200'
+                        }`}>
+                          {b.label}
+                        </span>
+                        {b.status && (
+                          <span className="text-[9px] font-extrabold text-slate-500 bg-slate-200/60 px-1.5 py-0.5 rounded-md uppercase">
+                            {b.status}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs font-bold text-slate-800 truncate">{b.name}</p>
-                      <p className="text-[10px] text-slate-400 font-medium mt-0.5">{b.time}</p>
+                      <p className="text-[10px] text-slate-500 font-bold mt-1 flex items-center gap-1">
+                        <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span>{fmtDate(b.date)} {b.time && b.time !== 'Home Visit' && b.time !== 'Quick Delivery' ? `• ${b.time}` : ''}</span>
+                      </p>
                     </div>
                     <button
                       onClick={() => {
@@ -1800,7 +1809,7 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
                         setFilter('ALL');
                       }}
                       className="p-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300 hover:shadow-xs transition-all shrink-0"
-                      title="Navigate to date & category"
+                      title="Navigate to booked date & category"
                     >
                       <ArrowRight className="w-4 h-4" />
                     </button>
