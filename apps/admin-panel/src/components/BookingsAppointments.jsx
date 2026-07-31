@@ -1600,6 +1600,28 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
     return d < todayStart;
   });
 
+  const upcomingPendingAppts = appointments.filter(a => a.status === 'PENDING');
+  const upcomingPendingVisits = visits.filter(v => v.status === 'PENDING');
+
+  const upcomingPendingList = [
+    ...upcomingPendingAppts.map(a => ({
+      ...a,
+      sectionType: a.productType === 'SLOT_BOOKING' ? 'slots' : 'fittings',
+      bookingTypeLabel: a.productType === 'SLOT_BOOKING' ? 'Slot Booking' : 'Studio Fitting',
+      bookingDate: new Date(a.date),
+      time: a.timeSlot,
+      customer: a.userName || 'Customer',
+    })),
+    ...upcomingPendingVisits.map(v => ({
+      ...v,
+      sectionType: 'home',
+      bookingTypeLabel: 'Home Visit',
+      bookingDate: new Date(v.preferredDate || v.createdAt),
+      time: 'Home Visit',
+      customer: v.customerName || 'Customer',
+    }))
+  ].sort((a, b) => a.bookingDate - b.bookingDate);
+
   const isToday = isSameDay(selDate, new Date());
   const totalSlots = section === 'fittings' ? todayAppts.length : section === 'slots' ? todaySlots.length : section === 'quick_orders' ? todayQuickOrders.length : section === 'orders' ? todayOrders.length : todayVisits.length;
 
@@ -1757,6 +1779,61 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
           <button onClick={() => setSection('orders')} className="px-4 py-2 bg-[#3D2E3D] text-white font-extrabold rounded-xl hover:bg-black transition-colors shadow-xs shrink-0">
             Switch to Product Orders ({todayOrders.length}) →
           </button>
+        </div>
+      )}
+
+      {/* ── Action Required Notification Banner for Pending Upcoming Bookings ── */}
+      {upcomingPendingList.length > 0 && (
+        <div className="bg-gradient-to-r from-emerald-50 via-teal-50/60 to-emerald-50 border border-emerald-200/80 rounded-2xl p-3.5 shadow-sm space-y-2.5 animate-in fade-in">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                <Calendar className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-emerald-900">New Booking Action Required</span>
+                  <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500 text-white uppercase tracking-wider">
+                    {upcomingPendingList.length} Pending
+                  </span>
+                </div>
+                <p className="text-[11px] text-emerald-800 font-medium leading-tight">
+                  New customer bookings received for upcoming dates. Click a date to jump to it & confirm:
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pt-0.5">
+            {upcomingPendingList.map((item, idx) => {
+              const isCurrentSel = isSameDay(item.bookingDate, selDate) && section === item.sectionType;
+              const dateStr = fmtDate(item.bookingDate, { weekday: 'short', day: 'numeric', month: 'short' });
+
+              return (
+                <button
+                  key={item.id || idx}
+                  onClick={() => {
+                    setSection(item.sectionType);
+                    setSelDate(new Date(item.bookingDate));
+                    setFilter('PENDING');
+                  }}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0 ${
+                    isCurrentSel
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm scale-[1.02]'
+                      : 'bg-white text-emerald-950 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-100/50'
+                  }`}
+                >
+                  <span className="text-[10px] font-extrabold uppercase opacity-80">{item.bookingTypeLabel}</span>
+                  <span className="w-1 h-1 rounded-full bg-emerald-400 shrink-0" />
+                  <span>{dateStr}</span>
+                  {item.time && item.time !== 'Home Visit' && (
+                    <span className="text-[10px] opacity-75 font-semibold">({item.time.split(' - ')[0]})</span>
+                  )}
+                  <ArrowRight className="w-3.5 h-3.5 opacity-60" />
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
