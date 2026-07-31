@@ -1705,14 +1705,14 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
     const total = Number(order.payableAmount) || Number(order.totalAmount) || 0;
     
     let paymentLabel = 'Non-Paid';
-    if (totalPaid >= total && total > 0) {
+    if (order.paymentStatus === 'PENDING' && totalPaid === 0) {
+      paymentLabel = 'Non-Paid';
+    } else if (totalPaid >= total && total > 0) {
       paymentLabel = 'Fully Paid';
     } else if (order.paymentStatus === 'COMPLETED') {
       paymentLabel = 'Fully Paid'; 
-    } else if (totalPaid > 0) {
+    } else if (totalPaid > 0 || order.paymentStatus === 'PARTIAL') {
       paymentLabel = sumSubsequent > 0 ? 'Partially Paid' : 'Advance Paid';
-    } else if (order.paymentStatus === 'COMPLETED' && !order.isOfflineSales) {
-      paymentLabel = 'Fully Paid'; // fallback for online orders
     }
 
     let orderLabel = getStageConfig(order.status).label;

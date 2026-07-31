@@ -13,7 +13,7 @@ import PdfService from '../services/pdf.service.js';
 export const orderStatusUpdateSchema = z.object({
   body: z.object({
     status: z.enum(['PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED']).optional(),
-    paymentStatus: z.enum(['PENDING', 'COMPLETED', 'FAILED', 'REFUNDED']).optional(),
+    paymentStatus: z.enum(['PENDING', 'PARTIAL', 'COMPLETED', 'FAILED', 'REFUNDED']).optional(),
     fabricType: z.string().optional().nullable(),
     customizations: z.string().optional().nullable(),
     tailorNotes: z.string().optional().nullable(),

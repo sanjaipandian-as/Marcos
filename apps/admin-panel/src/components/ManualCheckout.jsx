@@ -52,8 +52,8 @@ export default function ManualCheckout() {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('Cash');
-  const [orderStatus, setOrderStatus] = useState('DELIVERED');
-  const [paymentStatus, setPaymentStatus] = useState('COMPLETED');
+  const [orderStatus, setOrderStatus] = useState('PENDING');
+  const [paymentStatus, setPaymentStatus] = useState('PENDING');
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponError, setCouponError] = useState('');
@@ -88,6 +88,7 @@ export default function ManualCheckout() {
 
     setCheckoutApptId(apptId);
     setOrderStatus('PENDING');
+    setPaymentStatus('PENDING');
     // Reset cart + customer so stale data doesn't persist across re-triggers
     setCart([]);
     setSelectedCustomer(null);
@@ -539,6 +540,8 @@ export default function ManualCheckout() {
       setQuickOrderExpectedDate('');
       setAdvancePayment('');
       setDeliveryDate('');
+      setOrderStatus('PENDING');
+      setPaymentStatus('PENDING');
       loadData();
       setIsSubmitting(false);
     } catch (err) {
@@ -915,7 +918,15 @@ export default function ManualCheckout() {
               <span className="text-[10px] font-bold text-slate-400 uppercase block">Payment Status</span>
               <select
                 value={paymentStatus}
-                onChange={(e) => setPaymentStatus(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setPaymentStatus(val);
+                  if (val === 'COMPLETED' && total > 0) {
+                    setAdvancePayment(String(total));
+                  } else if (val === 'PENDING') {
+                    setAdvancePayment('');
+                  }
+                }}
                 className="w-full px-2.5 py-1.5 text-xs font-bold bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500"
               >
                 <option value="PENDING">Pending / Non-Paid</option>
@@ -1048,7 +1059,18 @@ export default function ManualCheckout() {
                   min="0"
                   max={total}
                   value={advancePayment}
-                  onChange={e => setAdvancePayment(e.target.value)}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setAdvancePayment(val);
+                    const num = Number(val) || 0;
+                    if (num >= total && total > 0) {
+                      setPaymentStatus('COMPLETED');
+                    } else if (num > 0) {
+                      setPaymentStatus('PARTIAL');
+                    } else {
+                      setPaymentStatus('PENDING');
+                    }
+                  }}
                   placeholder="0.00"
                   className="w-full pl-6 pr-2 py-1.5 text-right text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-brand-500"
                 />
