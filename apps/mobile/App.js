@@ -8,6 +8,8 @@ import { ThemeProvider } from './src/styles/ThemeContext';
 import { RootNavigator } from './src/navigation/AppNavigator';
 import { ToastProvider } from './src/components/ToastContext';
 import { AuthProvider } from './src/contexts/AuthContext';
+import BroadcastAlertListener from './src/components/BroadcastAlertListener';
+import AppAlertsOverlay from './src/components/AppAlertsOverlay';
 
 const linking = {
   prefixes: ['marcos://', 'https://marcos.app', 'https://marcos-xxza.onrender.com'],
@@ -30,6 +32,8 @@ export default function App() {
           <AuthProvider>
             <NavigationContainer ref={navigationRef} linking={linking}>
               <RootNavigator />
+              <BroadcastAlertListener />
+              <AppAlertsOverlay />
               <StatusBar style="auto" />
             </NavigationContainer>
           </AuthProvider>

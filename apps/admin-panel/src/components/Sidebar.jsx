@@ -178,8 +178,6 @@ export default function Sidebar({
       title: 'ENGAGEMENT',
       items: [
         { id: 'loyalty', label: 'Loyalty & Points', icon: Award },
-        { id: 'notifications', label: 'Broadcast Alerts', icon: Megaphone },
-        { id: 'promos', label: 'Promo Reels', icon: PlayCircle },
       ]
     },
     {

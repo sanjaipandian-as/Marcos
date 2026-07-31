@@ -442,6 +442,22 @@ model SystemSettings {
   businessHours              Json?
   bookingSlotDurationMinutes Int      @default(60)
   maxBookingsPerSlot         Int      @default(5)
+
+  // 1. Flash Sale Promo Alert (App Open Flash Promo)
+  saleAlertActive            Boolean   @default(false)
+  saleAlertImageUrl          String?
+  saleAlertTarget            String    @default("NEW_ARRIVALS")
+  saleAlertProductId         String?
+  saleAlertDurationSec       Int       @default(3)
+  saleAlertStartTime         DateTime?
+  saleAlertEndTime           DateTime?
+
+  // 2. System Maintenance Alert
+  maintenanceAlertActive     Boolean   @default(false)
+  maintenanceTitle           String?
+  maintenanceMessage         String?
+  maintenanceStartTime       DateTime?
+  maintenanceEndTime         DateTime?
 }
 
 model AnalyticsEvent {

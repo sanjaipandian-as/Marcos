@@ -151,15 +151,7 @@ export default function OrderHistoryScreen({ navigation }) {
   }, [orders, activeTab, searchQuery]);
 
   const handleInvoice = (url, order) => {
-    if (url) {
-      Linking.openURL(url).catch(() => {
-        if (order?.id) {
-          navigation.navigate('OrderTracking', { orderId: order.id, autoOpenInvoice: true });
-        } else {
-          Alert.alert('Error', 'Could not open invoice.');
-        }
-      });
-    } else if (order?.id) {
+    if (order?.id) {
       navigation.navigate('OrderTracking', { orderId: order.id, autoOpenInvoice: true });
     } else {
       Alert.alert('Invoice Pending', 'Your invoice is being prepared and will be available shortly.');

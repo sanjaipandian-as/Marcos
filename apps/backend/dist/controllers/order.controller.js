@@ -17,7 +17,7 @@ const pdf_service_js_1 = __importDefault(require("../services/pdf.service.js"));
 exports.orderStatusUpdateSchema = zod_1.z.object({
     body: zod_1.z.object({
         status: zod_1.z.enum(['PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED']).optional(),
-        paymentStatus: zod_1.z.enum(['PENDING', 'COMPLETED', 'FAILED', 'REFUNDED']).optional(),
+        paymentStatus: zod_1.z.enum(['PENDING', 'PARTIAL', 'COMPLETED', 'FAILED', 'REFUNDED']).optional(),
         fabricType: zod_1.z.string().optional().nullable(),
         customizations: zod_1.z.string().optional().nullable(),
         tailorNotes: zod_1.z.string().optional().nullable(),
@@ -251,7 +251,12 @@ class OrderController {
     static async adminListOrders(req, res, next) {
         const { page = 1, limit = 10, status } = req.query;
         const skip = (Number(page) - 1) * Number(limit);
+        const cacheKey = `cache:admin:orders:${page}:${limit}:${status || 'ALL'}`;
         try {
+            const cached = await redis_js_1.default.get(cacheKey);
+            if (cached) {
+                return res.status(200).json(JSON.parse(cached));
+            }
             const where = {};
             if (status) {
                 where.status = status;
@@ -323,7 +328,7 @@ class OrderController {
                     booking,
                 };
             });
-            return res.status(200).json({
+            const responsePayload = {
                 success: true,
                 data: ordersWithBookings,
                 pagination: {
@@ -332,7 +337,9 @@ class OrderController {
                     total,
                     pages: Math.ceil(total / Number(limit)),
                 },
-            });
+            };
+            await redis_js_1.default.set(cacheKey, JSON.stringify(responsePayload), 'EX', 30);
+            return res.status(200).json(responsePayload);
         }
         catch (error) {
             next(error);
@@ -384,9 +391,12 @@ class OrderController {
             const advance = updateData.advancePayment !== undefined ? Number(updateData.advancePayment) : Number(existing.advancePayment || 0);
             const sumSubsequent = currentPaymentHistory.reduce((sum, p) => sum + Number(p.amount), 0);
             updateData.balanceAmount = Math.max(0, Number(existing.payableAmount) - advance - sumSubsequent);
-            // Auto update payment status if balance is 0
+            // Auto update payment status if balance is 0 or if advance payment exists
             if (updateData.balanceAmount === 0 && Number(existing.payableAmount) > 0) {
                 updateData.paymentStatus = 'COMPLETED';
+            }
+            else if (advance > 0 && updateData.balanceAmount > 0 && paymentStatus !== 'REFUNDED' && paymentStatus !== 'FAILED') {
+                updateData.paymentStatus = 'PARTIAL';
             }
             let deliveryDateChanged = false;
             let newDeliveryDateFormatted = '';

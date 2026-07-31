@@ -354,7 +354,25 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
   // Pagination & Alerts
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
-  const [dismissedAlerts, setDismissedAlerts] = useState([]);
+  const [dismissedAlerts, setDismissedAlerts] = useState(() => {
+    try {
+      const saved = localStorage.getItem('marcos_dismissed_cancelled_alerts');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const dismissAlert = (id) => {
+    setDismissedAlerts(prev => {
+      if (prev.includes(id)) return prev;
+      const next = [...prev, id];
+      try {
+        localStorage.setItem('marcos_dismissed_cancelled_alerts', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  };
 
   // Selected Order Edit States
   const [editCustomerName, setEditCustomerName] = useState('');
@@ -961,10 +979,6 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
   };
 
   useEffect(() => {
-    loadOrders();
-  }, []);
-
-  useEffect(() => {
     if (isActive) {
       loadOrders(true);
       
@@ -1013,12 +1027,11 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
 
   const loadOrders = async (quiet = false) => {
     try {
-      const [list, appList, visitList, staff, measurementsList] = await Promise.all([
+      const [list, appList, visitList, staff] = await Promise.all([
         api.getOrders().catch(() => []),
         api.getAppointments().catch(() => []),
         api.getStoreVisits().catch(() => []),
         api.getStaffList().catch(() => []),
-        api.getAllMeasurements().catch(() => [])
       ]);
 
       const enrichedOrders = list.map(order => {
@@ -1061,7 +1074,6 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
       setAppointments(appList);
       setVisits(visitList);
       setStaffList(staff);
-      setAllMeasurements(measurementsList || []);
       if (staff.length > 0 && !selectedStaffId) {
         setSelectedStaffId(staff[0].id);
       }
@@ -1711,14 +1723,14 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
     const total = Number(order.payableAmount) || Number(order.totalAmount) || 0;
     
     let paymentLabel = 'Non-Paid';
-    if (totalPaid >= total && total > 0) {
+    if (order.paymentStatus === 'PENDING' && totalPaid === 0) {
+      paymentLabel = 'Non-Paid';
+    } else if (totalPaid >= total && total > 0) {
       paymentLabel = 'Fully Paid';
     } else if (order.paymentStatus === 'COMPLETED') {
       paymentLabel = 'Fully Paid'; 
-    } else if (totalPaid > 0) {
+    } else if (totalPaid > 0 || order.paymentStatus === 'PARTIAL') {
       paymentLabel = sumSubsequent > 0 ? 'Partially Paid' : 'Advance Paid';
-    } else if (order.paymentStatus === 'COMPLETED' && !order.isOfflineSales) {
-      paymentLabel = 'Fully Paid'; // fallback for online orders
     }
 
     let orderLabel = getStageConfig(order.status).label;
@@ -1768,6 +1780,7 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
         setEditPaymentStatus('REFUNDED');
         setSelectedOrder(prev => ({ ...prev, paymentStatus: 'REFUNDED' }));
       }
+      dismissAlert(orderToRefund.id);
       loadOrders(true);
     } catch (err) {
       console.error(err);
@@ -2241,7 +2254,7 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
                 <button 
                   onClick={(e) => {
                     e.stopPropagation();
-                    setDismissedAlerts(prev => [...prev, alert.id]);
+                    dismissAlert(alert.id);
                   }} 
                   className="p-1.5 hover:bg-red-100 rounded-lg text-red-400 hover:text-red-600 transition-colors ml-1"
                   title="Dismiss"
@@ -2478,20 +2491,15 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
                       <tr key={order.id} className={`transition-colors ${order.status === 'CANCELLED' ? 'bg-red-50/70 hover:bg-red-50/90 border-l-2 border-l-red-500' : 'hover:bg-slate-50/20'}`}>
                         <td className={`py-4 px-6 font-extrabold ${order.status === 'CANCELLED' ? 'text-slate-400 line-through decoration-red-300' : 'text-slate-800'}`}>
                           {order.invoiceNumber}
-                          {order.status === 'CANCELLED' && (
+                          {order.status === 'CANCELLED' && order.paymentStatus !== 'REFUNDED' && (
                             <span className="ml-2 flex items-center gap-1.5 inline-flex">
-                              <span className="px-1.5 py-0.5 rounded text-[8px] bg-red-100 text-red-700 not-italic no-underline border border-red-200 font-bold">CANCELLED</span>
-                              {order.paymentStatus === 'REFUNDED' ? (
-                                <span className="px-1.5 py-0.5 rounded text-[8px] bg-emerald-100 text-emerald-700 font-bold border border-emerald-200">REFUNDED</span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={(e) => handleProcessRefund(order, e)}
-                                  className="px-2 py-0.5 rounded text-[9px] bg-red-600 hover:bg-red-700 text-white font-extrabold shadow-sm transition-all active:scale-95 cursor-pointer uppercase tracking-tight"
-                                >
-                                  Refund ₹{Number(order.payableAmount || 0).toLocaleString('en-IN')}
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => handleProcessRefund(order, e)}
+                                className="px-2 py-0.5 rounded text-[9px] bg-red-600 hover:bg-red-700 text-white font-extrabold shadow-sm transition-all active:scale-95 cursor-pointer uppercase tracking-tight"
+                              >
+                                Refund ₹{Number(order.payableAmount || 0).toLocaleString('en-IN')}
+                              </button>
                             </span>
                           )}
                         </td>
@@ -2541,21 +2549,15 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
                             >
                               <Eye className="w-4 h-4" />
                             </button>
-                            {order.status === 'CANCELLED' && (
-                              order.paymentStatus === 'REFUNDED' ? (
-                                <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold rounded-lg flex items-center gap-1">
-                                  ✓ Refunded
-                                </span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={(e) => handleProcessRefund(order, e)}
-                                  className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-black rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
-                                  title="Process refund and save to database"
-                                >
-                                  💳 Refund ₹{Number(order.payableAmount || 0).toLocaleString('en-IN')}
-                                </button>
-                              )
+                            {order.status === 'CANCELLED' && order.paymentStatus !== 'REFUNDED' && (
+                              <button
+                                type="button"
+                                onClick={(e) => handleProcessRefund(order, e)}
+                                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-black rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
+                                title="Process refund and save to database"
+                              >
+                                💳 Refund ₹{Number(order.payableAmount || 0).toLocaleString('en-IN')}
+                              </button>
                             )}
                             {(() => {
                               const currentIdx = HAPPY_PATH.indexOf(order.status);
@@ -2600,20 +2602,15 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
                   <div className="flex justify-between items-center relative z-10">
                     <div className="flex items-center gap-2">
                       <span className={`font-extrabold text-sm ${order.status === 'CANCELLED' ? 'text-slate-400 line-through decoration-red-300' : 'text-slate-800'}`}>{order.invoiceNumber}</span>
-                      {order.status === 'CANCELLED' && (
+                      {order.status === 'CANCELLED' && order.paymentStatus !== 'REFUNDED' && (
                         <div className="flex gap-1.5 items-center">
-                          <span className="px-1.5 py-0.5 rounded text-[8px] bg-red-100 text-red-700 not-italic no-underline border border-red-200 font-bold">VOID</span>
-                          {order.paymentStatus === 'REFUNDED' ? (
-                            <span className="px-1.5 py-0.5 rounded text-[8px] bg-emerald-100 text-emerald-700 font-bold border border-emerald-200">REFUNDED</span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={(e) => handleProcessRefund(order, e)}
-                              className="px-2 py-0.5 rounded text-[9px] bg-red-600 hover:bg-red-700 text-white font-extrabold shadow-sm transition-all active:scale-95 cursor-pointer uppercase tracking-tight"
-                            >
-                              Refund ₹{Number(order.payableAmount || 0).toLocaleString('en-IN')}
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => handleProcessRefund(order, e)}
+                            className="px-2 py-0.5 rounded text-[9px] bg-red-600 hover:bg-red-700 text-white font-extrabold shadow-sm transition-all active:scale-95 cursor-pointer uppercase tracking-tight"
+                          >
+                            Refund ₹{Number(order.payableAmount || 0).toLocaleString('en-IN')}
+                          </button>
                         </div>
                       )}
                     </div>
@@ -3697,16 +3694,60 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
                         <label className="text-[10px] font-bold text-slate-400 uppercase">Payment Status</label>
                         <select
                           value={editPaymentStatus}
-                          onChange={e => setEditPaymentStatus(e.target.value)}
+                          onChange={e => {
+                            const newStatus = e.target.value;
+                            setEditPaymentStatus(newStatus);
+                            const total = Number(selectedOrder.payableAmount || selectedOrder.totalAmount || 0);
+                            if (newStatus === 'COMPLETED' && total > 0) {
+                              setEditAdvancePayment(total);
+                            } else if (newStatus === 'PENDING') {
+                              setEditAdvancePayment(0);
+                            }
+                          }}
                           className="w-full text-xs font-bold border border-slate-200 rounded-xl py-1.5 px-2.5 bg-white text-slate-700 focus:outline-none focus:border-brand-500"
                         >
-                          <option value="PENDING">Pending</option>
-                          <option value="COMPLETED">Completed</option>
+                          <option value="PENDING">Pending (Non-Paid)</option>
+                          <option value="PARTIAL">Advance Paid / Partial</option>
+                          <option value="COMPLETED">Completed (Fully Paid)</option>
                           <option value="FAILED">Failed</option>
                           <option value="REFUNDED">Refunded</option>
                         </select>
                       </div>
-                      {/* Payment Summary Moved to Right Column */}
+
+                      <div className="space-y-1 col-span-2 md:col-span-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Advance Paid (₹)</label>
+                        <div className="relative">
+                          <span className="absolute left-2.5 top-1.5 text-slate-400 text-xs font-bold">₹</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max={Number(selectedOrder.payableAmount || selectedOrder.totalAmount || 0)}
+                            value={editAdvancePayment}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setEditAdvancePayment(val);
+                              const num = Number(val) || 0;
+                              const total = Number(selectedOrder.payableAmount || selectedOrder.totalAmount || 0);
+                              if (num >= total && total > 0) {
+                                setEditPaymentStatus('COMPLETED');
+                              } else if (num > 0) {
+                                setEditPaymentStatus('PARTIAL');
+                              } else {
+                                setEditPaymentStatus('PENDING');
+                              }
+                            }}
+                            className="w-full pl-6 pr-2 py-1.5 text-xs font-bold border border-slate-200 rounded-xl bg-white text-slate-800 focus:outline-none focus:border-brand-500"
+                            placeholder="0.00"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1 col-span-2 md:col-span-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Balance Due</span>
+                        <span className="text-xs font-black text-brand-600 block mt-1">
+                          ₹{Math.max(0, (Number(selectedOrder.payableAmount || selectedOrder.totalAmount || 0) - (Number(editAdvancePayment) || 0))).toLocaleString('en-IN')}
+                        </span>
+                      </div>
                     </div>
                   </div>
 

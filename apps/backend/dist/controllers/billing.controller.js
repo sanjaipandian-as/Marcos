@@ -27,7 +27,7 @@ exports.invoiceCreateSchema = zod_1.z.object({
         paymentMethod: zod_1.z.enum(['CASH', 'CARD', 'ONLINE']),
         isOfflineSales: zod_1.z.boolean().default(true),
         status: zod_1.z.enum(['PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED']).optional(),
-        paymentStatus: zod_1.z.enum(['PENDING', 'COMPLETED', 'FAILED', 'REFUNDED']).optional(),
+        paymentStatus: zod_1.z.enum(['PENDING', 'PARTIAL', 'COMPLETED', 'FAILED', 'REFUNDED']).optional(),
         advancePayment: zod_1.z.coerce.number().nonnegative().optional(),
         gstPercentage: zod_1.z.coerce.number().nonnegative().optional(),
         isQuickOrder: zod_1.z.boolean().optional(),
@@ -92,14 +92,33 @@ class BillingController {
                 const totalAmount = subtotal;
                 const payableAmount = (subtotal - discountAmount) + taxAmount;
                 const advancePaymentValue = advancePayment ? Number(advancePayment) : 0;
-                const balanceAmount = payableAmount - advancePaymentValue;
+                const balanceAmount = Math.max(0, payableAmount - advancePaymentValue);
                 const invoiceNumber = `INV-${Date.now()}-${crypto_1.default.randomUUID().substring(0, 8).toUpperCase()}`;
+                // Compute appropriate paymentStatus if not explicitly supplied or based on advance amount
+                let finalPaymentStatus = paymentStatus;
+                if (!finalPaymentStatus) {
+                    if (advancePaymentValue >= payableAmount && payableAmount > 0) {
+                        finalPaymentStatus = 'COMPLETED';
+                    }
+                    else if (advancePaymentValue > 0) {
+                        finalPaymentStatus = 'PARTIAL';
+                    }
+                    else {
+                        finalPaymentStatus = 'PENDING';
+                    }
+                }
+                else if (finalPaymentStatus === 'PENDING' && advancePaymentValue >= payableAmount && payableAmount > 0) {
+                    finalPaymentStatus = 'COMPLETED';
+                }
+                else if (finalPaymentStatus === 'PENDING' && advancePaymentValue > 0) {
+                    finalPaymentStatus = 'PARTIAL';
+                }
                 // Create Order
                 const newOrder = await tx.order.create({
                     data: {
                         userId,
-                        status: status || 'PAID', // use provided status or default to PAID
-                        paymentStatus: paymentStatus || 'COMPLETED',
+                        status: status || 'PENDING',
+                        paymentStatus: finalPaymentStatus,
                         totalAmount,
                         taxAmount,
                         gstPercentage: finalGstPercentage,
@@ -109,7 +128,7 @@ class BillingController {
                         isOfflineSales,
                         invoiceNumber,
                         advancePayment: advancePaymentValue,
-                        balanceAmount: Math.max(0, balanceAmount),
+                        balanceAmount,
                         gatewayResponse: customerName ? { guestCustomerName: customerName } : undefined,
                         isQuickOrder: isQuickOrder || false,
                         quickOrderReason: isQuickOrder ? quickOrderReason : null,

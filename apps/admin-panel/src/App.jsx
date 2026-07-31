@@ -37,7 +37,7 @@ export default function App() {
 
   const getInitialTab = () => {
     const saved = localStorage.getItem('admin_active_tab');
-    if (saved) return saved;
+    if (saved && saved !== 'notifications' && saved !== 'promos') return saved;
     return initialUser && initialUser.role === 'STAFF' ? 'orders' : 'dashboard';
   };
 

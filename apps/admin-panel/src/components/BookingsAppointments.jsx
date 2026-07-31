@@ -33,14 +33,14 @@ const APPT_COLOR = {
   CONFIRMED: 'bg-emerald-50 text-emerald-700 border-emerald-300',
   COMPLETED: 'bg-blue-50   text-blue-700   border-blue-300',
   CONSULTED: 'bg-teal-50   text-teal-700   border-teal-300',
-  ORDERED: 'bg-blue-50   text-blue-700   border-blue-300',
+  ORDERED:   'bg-indigo-50 text-indigo-700 border-indigo-300',
   CANCELLED: 'bg-red-50    text-red-700    border-red-300',
   RESCHEDULED: 'bg-purple-50 text-purple-700 border-purple-300',
   ASSIGNED: 'bg-indigo-50 text-indigo-700 border-indigo-300',
 };
 const DOT_COLOR = {
   PENDING: 'bg-amber-400', CONFIRMED: 'bg-emerald-400', COMPLETED: 'bg-blue-400',
-  CONSULTED: 'bg-teal-400', ORDERED: 'bg-blue-400',
+  CONSULTED: 'bg-teal-400', ORDERED: 'bg-indigo-500',
   CANCELLED: 'bg-red-400', RESCHEDULED: 'bg-purple-400', ASSIGNED: 'bg-indigo-400',
 };
 const Badge = ({ status, small }) => (
@@ -67,54 +67,154 @@ const MEAS_FIELDS = [
 const EMPTY_MEAS = () => Object.fromEntries(MEAS_FIELDS.map(f => [f.key, '']));
 
 // ─── DayNavigator ─────────────────────────────────────────────────────────────
-function DayNavigator({ value, onChange }) {
+function DayNavigator({ value, onChange, appointments = [], visits = [], orders = [], section = 'fittings' }) {
   const today = new Date();
   const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(value); d.setDate(value.getDate() - 3 + i); return d; });
   
   const localDateStr = `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
 
+  const getDayStats = (dateObj) => {
+    let total = 0;
+    let newCount = 0;
+
+    if (section === 'fittings') {
+      appointments.forEach(a => {
+        if (a.status === 'CANCELLED' || a.productType === 'SLOT_BOOKING') return;
+        if (isSameDay(a.date, dateObj)) {
+          total++;
+          if (a.status === 'PENDING' || a.status === 'CONFIRMED') newCount++;
+        }
+      });
+    } else if (section === 'home') {
+      visits.forEach(v => {
+        if (v.status === 'CANCELLED') return;
+        const vDate = v.preferredDate || v.createdAt;
+        if (isSameDay(vDate, dateObj)) {
+          total++;
+          if (v.status === 'PENDING' || v.status === 'ASSIGNED') newCount++;
+        }
+      });
+    } else if (section === 'slots') {
+      appointments.forEach(a => {
+        if (a.status === 'CANCELLED' || a.productType !== 'SLOT_BOOKING') return;
+        if (isSameDay(a.date, dateObj)) {
+          total++;
+          if (a.status === 'PENDING' || a.status === 'CONFIRMED') newCount++;
+        }
+      });
+    } else if (section === 'orders' || section === 'quick_orders') {
+      orders.forEach(o => {
+        if (o.status === 'CANCELLED') return;
+        if (isSameDay(o.createdAt, dateObj)) {
+          total++;
+          if (o.status === 'PENDING' || o.status === 'PAID') newCount++;
+        }
+      });
+    } else {
+      appointments.forEach(a => {
+        if (a.status === 'CANCELLED') return;
+        if (isSameDay(a.date, dateObj)) {
+          total++;
+          if (a.status === 'PENDING' || a.status === 'CONFIRMED') newCount++;
+        }
+      });
+      visits.forEach(v => {
+        if (v.status === 'CANCELLED') return;
+        const vDate = v.preferredDate || v.createdAt;
+        if (isSameDay(vDate, dateObj)) {
+          total++;
+          if (v.status === 'PENDING' || v.status === 'ASSIGNED') newCount++;
+        }
+      });
+      orders.forEach(o => {
+        if (o.status === 'CANCELLED') return;
+        if (isSameDay(o.createdAt, dateObj)) {
+          total++;
+          if (o.status === 'PENDING' || o.status === 'PAID') newCount++;
+        }
+      });
+    }
+
+    return { total, newCount };
+  };
+
   return (
-    <div className="flex items-center gap-2 overflow-x-auto pb-1">
-      <div className="relative flex items-center justify-center p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 cursor-pointer shrink-0 transition-all" title="Select Specific Date">
-        <Calendar className="w-4 h-4" />
-        <input type="date" value={localDateStr} onChange={(e) => { 
-          if(e.target.value) {
-            const [y, m, d] = e.target.value.split('-');
-            onChange(new Date(y, m - 1, d));
-          }
-        }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+    <div className="bg-[#FAF9FC] rounded-3xl border border-slate-200/80 shadow-sm p-2.5 flex items-center gap-3 transition-all overflow-x-auto w-full">
+      <div className="flex items-center gap-2 shrink-0">
+        <div className="relative p-2.5 rounded-2xl bg-white border border-slate-200/80 text-slate-600 hover:text-brand-600 hover:border-brand-200 hover:bg-brand-50/50 cursor-pointer shadow-xs transition-all flex items-center justify-center" title="Select Specific Date">
+          <Calendar className="w-4 h-4 pointer-events-none" />
+          <input type="date" value={localDateStr} onChange={(e) => { 
+            if(e.target.value) {
+              const [y, m, d] = e.target.value.split('-');
+              onChange(new Date(y, m - 1, d));
+            }
+          }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10" />
+        </div>
+        
+        <button onClick={() => onChange(new Date())}
+          className={`px-3.5 py-2 rounded-2xl text-[11px] font-black tracking-wider uppercase transition-all border ${
+            isSameDay(value, today)
+              ? 'bg-[#D8BFD8] text-[#2B1B2B] border-[#C5A3C5] shadow-xs'
+              : 'bg-white text-slate-500 border-slate-200/80 hover:bg-slate-100'
+          }`}>
+          Today
+        </button>
+
+        <div className="w-px h-6 bg-slate-200 mx-1 shrink-0" />
+
+        <button onClick={() => { const d = new Date(value); d.setDate(d.getDate() - 1); onChange(d); }}
+          className="p-2 rounded-2xl bg-white border border-slate-200/80 text-slate-500 hover:bg-slate-100 hover:text-[#3D2E3D] shadow-xs transition-all shrink-0">
+          <ChevronLeft className="w-4 h-4" />
+        </button>
       </div>
-      
-      <button onClick={() => onChange(new Date())}
-        className="px-3 py-1.5 rounded-xl border border-brand-200 hover:bg-brand-50 text-brand-600 text-[10px] font-extrabold tracking-wider uppercase shrink-0 transition-all">
-        Today
-      </button>
 
-      <div className="w-px h-6 bg-slate-200 mx-1 shrink-0" />
-
-      <button onClick={() => { const d = new Date(value); d.setDate(d.getDate() - 1); onChange(d); }}
-        className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 shrink-0 transition-all">
-        <ChevronLeft className="w-4 h-4" />
-      </button>
-      <div className="flex gap-1.5">
+      <div className="flex items-center gap-2 flex-1 overflow-x-auto scrollbar-none py-1 px-1">
         {days.map((d, i) => {
-          const isToday = isSameDay(d, today), isSel = isSameDay(d, value);
+          const isSel = isSameDay(d, value);
+          const { total, newCount } = getDayStats(d);
+
           return (
             <button key={i} onClick={() => onChange(d)}
-              className={`flex flex-col items-center px-3 py-2 rounded-xl text-center transition-all min-w-[52px] border ${isSel ? 'bg-brand-500 text-[#3D2E3D] border-brand-500 shadow-md font-extrabold'
-                : isToday ? 'border-brand-300 text-brand-700 bg-brand-50 font-bold'
-                  : 'border-slate-100 text-slate-500 hover:border-slate-300 hover:bg-slate-50 font-medium'
-                }`}>
-              <span className="text-[9px] uppercase tracking-widest">{d.toLocaleDateString('en', { weekday: 'short' })}</span>
-              <span className="text-base leading-tight">{d.getDate()}</span>
+              className={`flex-1 min-w-[72px] max-w-[105px] flex flex-col items-center justify-between py-2 px-1.5 rounded-2xl border transition-all duration-200 select-none ${
+                isSel
+                  ? 'bg-[#D8BFD8] border-[#C4A4C4] text-[#2B1B2B] shadow-md ring-2 ring-[#D8BFD8]/50 scale-[1.04]'
+                  : 'bg-white border-slate-200/70 text-slate-600 hover:border-purple-200 hover:bg-purple-50/40 shadow-xs'
+              }`}>
+              {/* Badges */}
+              <div className="flex items-center gap-1 mb-1.5">
+                <span title="Total items on this date"
+                  className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
+                    isSel ? 'bg-white/80 text-[#2B1B2B]' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                  {total} <span className="text-[7.5px] font-bold opacity-75">total</span>
+                </span>
+                {newCount > 0 && (
+                  <span title="New items"
+                    className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
+                      isSel ? 'bg-[#3D2E3D] text-white' : 'bg-emerald-100 text-emerald-700'
+                    }`}>
+                    +{newCount} <span className="text-[7.5px] font-bold opacity-80">new</span>
+                  </span>
+                )}
+              </div>
+
+              <span className={`text-[10px] font-extrabold uppercase tracking-wider ${isSel ? 'text-[#3D263D]' : 'text-slate-400'}`}>
+                {d.toLocaleDateString('en', { weekday: 'short' }).toUpperCase()}
+              </span>
+              <span className={`text-base font-black leading-tight mt-0.5 ${isSel ? 'text-[#1F101F]' : 'text-[#3D2E3D]'}`}>
+                {d.getDate()}
+              </span>
             </button>
           );
         })}
       </div>
-      <button onClick={() => { const d = new Date(value); d.setDate(d.getDate() + 1); onChange(d); }}
-        className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 shrink-0 transition-all">
-        <ChevronRight className="w-4 h-4" />
-      </button>
+
+      <div className="flex items-center shrink-0">
+        <button onClick={() => { const d = new Date(value); d.setDate(d.getDate() + 1); onChange(d); }}
+          className="p-2 rounded-2xl bg-white border border-slate-200/80 text-slate-500 hover:bg-slate-100 hover:text-[#3D2E3D] shadow-xs transition-all shrink-0">
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -524,6 +624,7 @@ function DetailDrawer({ appt, visit, orders, staffList, onClose, onRefresh, setA
                       sessionStorage.setItem('checkout_product_name', item.productType || '');
                       if (setActiveTab) {
                         setActiveTab('checkout');
+                        window.dispatchEvent(new CustomEvent('checkout-prefill'));
                       } else {
                         window.location.href = `/manual-checkout?appointmentId=${item.id}&userId=${item.userId || ''}&productName=${encodeURIComponent(item.productType)}`;
                       }
@@ -936,11 +1037,14 @@ function ApptCard({ appt, onQuickStatus, onOpen, setActiveTab }) {
   };
 
   return (
-    <div className={`rounded-2xl border transition-all duration-200 overflow-hidden bg-white hover:shadow-md group ${appt.status === 'CONFIRMED' ? 'border-emerald-200' :
+    <div className={`rounded-2xl border transition-all duration-200 overflow-hidden bg-white hover:shadow-md group ${
+      appt.status === 'CONFIRMED' ? 'border-emerald-200' :
       appt.status === 'CANCELLED' ? 'border-red-100 opacity-60' :
-        appt.status === 'CONSULTED' ? 'border-teal-200' :
-          appt.status === 'ORDERED' ? 'border-blue-200' : 'border-slate-200 hover:border-brand-300'
-      } shadow-sm`}>
+      appt.status === 'CONSULTED' ? 'border-teal-200' :
+      appt.status === 'ORDERED'   ? 'border-indigo-300 ring-1 ring-indigo-100' :
+      appt.status === 'COMPLETED' ? 'border-blue-200' :
+      'border-slate-200 hover:border-brand-300'
+    } shadow-sm`}>
       <div className="p-4 flex items-start gap-3">
         {/* Time tile */}
         <div className="flex flex-col items-center justify-center bg-gradient-to-b from-brand-50 to-brand-100 border border-brand-200 rounded-xl px-3 py-2.5 min-w-[60px] shrink-0">
@@ -989,6 +1093,7 @@ function ApptCard({ appt, onQuickStatus, onOpen, setActiveTab }) {
               sessionStorage.setItem('checkout_delivery_date', appt.date || '');
               if (setActiveTab) {
                 setActiveTab('checkout');
+                window.dispatchEvent(new CustomEvent('checkout-prefill'));
               } else {
                 window.location.href = `/manual-checkout?appointmentId=${appt.id}&userId=${appt.userId || ''}&productName=${encodeURIComponent(appt.productType || '')}&deliveryDate=${encodeURIComponent(appt.date || '')}`;
               }
@@ -1040,6 +1145,36 @@ function ApptCard({ appt, onQuickStatus, onOpen, setActiveTab }) {
             <Ban className="w-3.5 h-3.5" />
           </button>
         </>}
+        {/* ── Order Confirmed stage — only for ORDERED appointments (product booking placed) ── */}
+        {appt.status === 'ORDERED' && (
+          <div className="flex gap-2 w-full">
+            <div className="flex-1 flex flex-col gap-1.5">
+              {/* Context pill */}
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-xl">
+                <ShoppingBag className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                <span className="text-[10px] font-bold text-indigo-700 leading-tight">
+                  Product order placed — confirm to hand off to production
+                </span>
+              </div>
+              {/* Main action */}
+              <button
+                onClick={() => quick('COMPLETED')}
+                disabled={updating}
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold shadow-md shadow-indigo-500/20 transition-all disabled:opacity-60"
+              >
+                {updating
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <BadgeCheck className="w-4 h-4" />
+                }
+                Order Confirmed
+              </button>
+            </div>
+            <button onClick={() => quick('CANCELLED')} disabled={updating}
+              className="px-3 py-2 rounded-xl border border-red-200 hover:bg-red-50 text-red-400 transition-all disabled:opacity-60 self-end">
+              <Ban className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
         {(appt.status === 'COMPLETED' || appt.status === 'CANCELLED') && (
           <button onClick={() => onOpen(appt)}
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 text-xs font-bold transition-all">
@@ -1202,10 +1337,108 @@ function StatsBar({ items, type }) {
   );
 }
 
+// ─── Pagination Component ──────────────────────────────────────────────────
+function PaginationControls({ currentPage, totalItems, itemsPerPage = 10, onPageChange }) {
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  if (totalPages <= 1) return null;
+
+  const startItem = (currentPage - 1) * itemsPerPage + 1;
+  const endItem = Math.min(currentPage * itemsPerPage, totalItems);
+
+  const maxVisiblePages = 5;
+  let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+  let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+  if (endPage - startPage + 1 < maxVisiblePages) {
+    startPage = Math.max(1, endPage - maxVisiblePages + 1);
+  }
+
+  const pages = [];
+  for (let i = startPage; i <= endPage; i++) {
+    pages.push(i);
+  }
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-100 text-xs font-semibold text-slate-500">
+      <p className="text-[11px] text-slate-400">
+        Showing <span className="font-bold text-slate-700">{startItem}–{endItem}</span> of <span className="font-bold text-slate-700">{totalItems}</span> items
+      </p>
+
+      <div className="flex items-center gap-1.5">
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-bold flex items-center gap-1 shadow-xs"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" /> Previous
+        </button>
+
+        <div className="flex items-center gap-1">
+          {startPage > 1 && (
+            <>
+              <button
+                onClick={() => onPageChange(1)}
+                className="w-8 h-8 rounded-xl font-bold transition-all text-xs bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+              >
+                1
+              </button>
+              {startPage > 2 && <span className="px-1 text-slate-400 font-bold">…</span>}
+            </>
+          )}
+
+          {pages.map(p => (
+            <button
+              key={p}
+              onClick={() => onPageChange(p)}
+              className={`w-8 h-8 rounded-xl font-bold transition-all text-xs ${
+                p === currentPage
+                  ? 'bg-slate-800 text-white shadow-sm scale-105'
+                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+
+          {endPage < totalPages && (
+            <>
+              {endPage < totalPages - 1 && <span className="px-1 text-slate-400 font-bold">…</span>}
+              <button
+                onClick={() => onPageChange(totalPages)}
+                className="w-8 h-8 rounded-xl font-bold transition-all text-xs bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+              >
+                {totalPages}
+              </button>
+            </>
+          )}
+        </div>
+
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-bold flex items-center gap-1 shadow-xs"
+        >
+          Next <ChevronRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 export default function BookingsAppointments({ setActiveTab, isActive }) {
-  const [section, setSection] = useState('fittings');
-  const [selDate, setSelDate] = useState(new Date());
+  const [section, setSection] = useState(() => {
+    const savedFilter = sessionStorage.getItem('admin_order_date_filter') || sessionStorage.getItem('admin_order_status_filter');
+    if (savedFilter) return 'orders';
+    return 'fittings';
+  });
+  const [selDate, setSelDate] = useState(() => {
+    const savedDateStr = sessionStorage.getItem('admin_order_date_filter');
+    if (savedDateStr) {
+      const d = new Date(savedDateStr + 'T00:00:00');
+      if (!isNaN(d.getTime())) return d;
+    }
+    return new Date();
+  });
   const [appointments, setAppts] = useState([]);
   const [visits, setVisits] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -1216,6 +1449,11 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
   const [drawerItem, setDrawer] = useState(null); // { type: 'appt'|'visit', data }
   const [errorToast, setErrorToast] = useState(null);
   const [filterOrderId, setFilterOrderId] = useState(() => sessionStorage.getItem('filterBookingByOrderId'));
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [section, selDate, filterStatus]);
 
   // ── Create Booking Modal State ────────────────────────────────
   const [createModal, setCreateModal] = useState(false);
@@ -1429,6 +1667,11 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
     : orders.filter(o => isSel(o.createdAt) && o.isQuickOrder);
   const filtQuickOrders = filterStatus === 'ALL' ? todayQuickOrders : todayQuickOrders.filter(o => o.status === filterStatus || o.quickOrderStatus === filterStatus);
 
+  const todayOrders = filterOrderId
+    ? orders.filter(o => o.id === filterOrderId)
+    : orders.filter(o => isSel(o.createdAt));
+  const filtOrders = filterStatus === 'ALL' ? todayOrders : todayOrders.filter(o => o.status === filterStatus);
+
   const sortedAppts = [...filtAppts].sort((a, b) => (a.timeSlot || '').localeCompare(b.timeSlot || ''));
   const sortedSlots = [...filtSlots].sort((a, b) => (a.timeSlot || '').localeCompare(b.timeSlot || ''));
 
@@ -1449,8 +1692,30 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
     return d < todayStart;
   });
 
+  const upcomingPendingAppts = appointments.filter(a => a.status === 'PENDING');
+  const upcomingPendingVisits = visits.filter(v => v.status === 'PENDING');
+
+  const upcomingPendingList = [
+    ...upcomingPendingAppts.map(a => ({
+      ...a,
+      sectionType: a.productType === 'SLOT_BOOKING' ? 'slots' : 'fittings',
+      bookingTypeLabel: a.productType === 'SLOT_BOOKING' ? 'Slot Booking' : 'Studio Fitting',
+      bookingDate: new Date(a.date),
+      time: a.timeSlot,
+      customer: a.userName || 'Customer',
+    })),
+    ...upcomingPendingVisits.map(v => ({
+      ...v,
+      sectionType: 'home',
+      bookingTypeLabel: 'Home Visit',
+      bookingDate: new Date(v.preferredDate || v.createdAt),
+      time: 'Home Visit',
+      customer: v.customerName || 'Customer',
+    }))
+  ].sort((a, b) => a.bookingDate - b.bookingDate);
+
   const isToday = isSameDay(selDate, new Date());
-  const totalSlots = section === 'fittings' ? todayAppts.length : section === 'slots' ? todaySlots.length : section === 'quick_orders' ? todayQuickOrders.length : todayVisits.length;
+  const totalSlots = section === 'fittings' ? todayAppts.length : section === 'slots' ? todaySlots.length : section === 'quick_orders' ? todayQuickOrders.length : section === 'orders' ? todayOrders.length : todayVisits.length;
 
   // Auto-switch tabs if the filtered order is a visit instead of an appointment
   useEffect(() => {
@@ -1464,7 +1729,7 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
   }, [filterOrderId, todayAppts.length, todayVisits.length, section]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {/* Toast Notification */}
       {errorToast && (
         <div className="fixed bottom-6 right-6 bg-red-500 text-white px-5 py-3.5 rounded-2xl shadow-xl font-bold text-sm z-50 flex items-center gap-2.5 animate-in slide-in-from-bottom-5">
@@ -1489,7 +1754,7 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
           )}
         </div>
         <p className="text-sm text-slate-400 font-medium mt-1 ml-12.5 sm:hidden">
-          {filterOrderId ? 'Filtered by Order' : (isToday ? '📅 Today' : fmtDate(selDate, { weekday: 'long' }))} · {totalSlots} {section === 'fittings' ? 'fittings' : 'home visits'}
+          {filterOrderId ? 'Filtered by Order' : (isToday ? '📅 Today' : fmtDate(selDate, { weekday: 'long' }))} · {totalSlots} {section === 'fittings' ? 'fittings' : section === 'orders' ? 'orders' : 'home visits'}
         </p>
         <div className="flex items-center gap-2 self-start">
           <button
@@ -1536,7 +1801,7 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
 
       {/* ── Toggle ─────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center bg-white border border-slate-200 rounded-2xl p-1.5 w-fit shadow-sm gap-1">
+        <div className="flex items-center bg-white border border-slate-200 rounded-2xl p-1.5 w-fit shadow-sm gap-1 flex-wrap">
           <button onClick={() => { setSection('fittings'); setFilter('ALL'); }}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${section === 'fittings' ? 'bg-brand-500 text-[#3D2E3D] shadow-md' : 'text-slate-400 hover:text-slate-600'
               }`}>
@@ -1570,6 +1835,17 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
             )}
           </button>
 
+          <button onClick={() => { setSection('quick_orders'); setFilter('ALL'); }}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${section === 'quick_orders' ? 'bg-orange-500 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'
+              }`}>
+            <ShoppingCart className="w-4 h-4" />Quick Delivery
+            {todayQuickOrders.length > 0 && (
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${section === 'quick_orders' ? 'bg-white/20 text-white' : 'bg-orange-100 text-orange-700'}`}>
+                {todayQuickOrders.length}
+              </span>
+            )}
+          </button>
+
           <button onClick={() => { setSection('slots'); setFilter('ALL'); }}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${section === 'slots' ? 'bg-violet-500 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'
               }`}>
@@ -1583,6 +1859,76 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
         </div>
       </div>
 
+
+
+      {/* Helper Banner when viewing Fittings but Product Orders exist */}
+      {section === 'fittings' && todayAppts.length === 0 && todayOrders.length > 0 && (
+        <div className="bg-[#D8BFD8]/30 border border-[#C5A3C5] rounded-2xl p-4 flex items-center justify-between gap-3 text-xs shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2.5 text-[#2B1B2B] font-bold">
+            <ShoppingBag className="w-5 h-5 text-purple-700 shrink-0" />
+            <span>Notice: {todayOrders.length} Product Order(s) found for {fmtDate(selDate)}! (Studio fitting appointments are 0).</span>
+          </div>
+          <button onClick={() => setSection('orders')} className="px-4 py-2 bg-[#3D2E3D] text-white font-extrabold rounded-xl hover:bg-black transition-colors shadow-xs shrink-0">
+            Switch to Product Orders ({todayOrders.length}) →
+          </button>
+        </div>
+      )}
+
+      {/* ── Action Required Notification Banner for Pending Upcoming Bookings ── */}
+      {upcomingPendingList.length > 0 && (
+        <div className="bg-gradient-to-r from-emerald-50 via-teal-50/60 to-emerald-50 border border-emerald-200/80 rounded-2xl p-3.5 shadow-sm space-y-2.5 animate-in fade-in">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                <Calendar className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-emerald-900">New Booking Action Required</span>
+                  <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500 text-white uppercase tracking-wider">
+                    {upcomingPendingList.length} Pending
+                  </span>
+                </div>
+                <p className="text-[11px] text-emerald-800 font-medium leading-tight">
+                  New customer bookings received for upcoming dates. Click a date to jump to it & confirm:
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pt-0.5">
+            {upcomingPendingList.map((item, idx) => {
+              const isCurrentSel = isSameDay(item.bookingDate, selDate) && section === item.sectionType;
+              const dateStr = fmtDate(item.bookingDate, { weekday: 'short', day: 'numeric', month: 'short' });
+
+              return (
+                <button
+                  key={item.id || idx}
+                  onClick={() => {
+                    setSection(item.sectionType);
+                    setSelDate(new Date(item.bookingDate));
+                    setFilter('PENDING');
+                  }}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0 ${
+                    isCurrentSel
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm scale-[1.02]'
+                      : 'bg-white text-emerald-950 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-100/50'
+                  }`}
+                >
+                  <span className="text-[10px] font-extrabold uppercase opacity-80">{item.bookingTypeLabel}</span>
+                  <span className="w-1 h-1 rounded-full bg-emerald-400 shrink-0" />
+                  <span>{dateStr}</span>
+                  {item.time && item.time !== 'Home Visit' && (
+                    <span className="text-[10px] opacity-75 font-semibold">({item.time.split(' - ')[0]})</span>
+                  )}
+                  <ArrowRight className="w-3.5 h-3.5 opacity-60" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* ── Day Navigator ────────────────────────────────────────── */}
       {(section === 'fittings' && overdueAppts.length > 0) || (section === 'home' && overdueVisits.length > 0) ? (
         <div className="flex items-center gap-2 bg-amber-50 text-amber-700 border border-amber-200 px-4 py-2.5 rounded-xl shadow-sm text-xs font-bold w-fit animate-in fade-in">
@@ -1592,14 +1938,14 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
           </span>
         </div>
       ) : null}
-      <div className="flex flex-col xl:flex-row gap-5 xl:items-center">
-        <div className="shrink-0 max-w-full overflow-x-auto">
-          <DayNavigator value={selDate} onChange={setSelDate} />
+      <div className="flex flex-col xl:flex-row gap-2 xl:items-center">
+        <div className="shrink-0 max-w-full overflow-x-auto w-full">
+          <DayNavigator value={selDate} onChange={setSelDate} appointments={appointments} visits={visits} orders={orders} section={section} />
         </div>
 
         {!loading && (
           <div className="flex-1 w-full xl:w-auto">
-            <StatsBar items={section === 'fittings' ? todayAppts : todayVisits} type={section} />
+            <StatsBar items={section === 'fittings' ? todayAppts : section === 'orders' ? todayOrders : todayVisits} type={section} />
           </div>
         )}
       </div>
@@ -1628,6 +1974,70 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
         </div>
       ) : (
         <>
+          {section === 'orders' && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2.5 mb-2">
+                <div className="w-8 h-8 rounded-xl bg-purple-100 flex items-center justify-center">
+                  <ShoppingBag className="w-4 h-4 text-purple-600" />
+                </div>
+                <div>
+                  <h2 className="text-base font-extrabold text-slate-800">Product Orders</h2>
+                  <p className="text-xs text-slate-400">{isToday ? "Today's product orders" : fmtDate(selDate)} · {filtOrders.length} orders</p>
+                </div>
+              </div>
+              {filtOrders.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-4"><ShoppingBag className="w-7 h-7 text-slate-300" /></div>
+                  <p className="font-bold text-slate-700">No Product Orders</p>
+                  <p className="text-sm text-slate-400 mt-1">{isToday ? 'No orders received today' : `No orders on ${fmtDate(selDate)}`}</p>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {filtOrders.slice((currentPage - 1) * 10, currentPage * 10).map(o => (
+                      <div key={o.id} className="rounded-2xl border border-purple-200 bg-white p-4 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-3 group">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-xs font-black text-[#3D2E3D] group-hover:text-purple-700 transition-colors">{o.invoiceNumber}</p>
+                            <p className="text-xs font-bold text-slate-700 mt-0.5">{o.user?.fullName || o.customerName || 'Customer'}</p>
+                          </div>
+                          <Badge status={o.status} small />
+                        </div>
+
+                        <div className="text-xs text-slate-500 bg-purple-50/50 border border-purple-100 p-2.5 rounded-xl space-y-1">
+                          <p className="truncate">📍 {o.shippingAddress?.city || o.shippingAddress?.addressLine1 || 'Standard Delivery'}</p>
+                          {(o.user?.phoneNumber || o.shippingAddress?.phone) && (
+                            <p className="font-semibold text-slate-600">📞 {o.user?.phoneNumber || o.shippingAddress?.phone}</p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                          <span className="text-xs font-black text-[#3D2E3D]">₹{Number(o.payableAmount || 0).toLocaleString('en-IN')}</span>
+                          <button 
+                            onClick={() => {
+                              if (setActiveTab) setActiveTab('orders');
+                              else window.location.href = '/admin/orders';
+                            }}
+                            className="text-xs font-bold text-purple-700 hover:underline flex items-center gap-1"
+                          >
+                            View Details →
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalItems={filtOrders.length}
+                    itemsPerPage={10}
+                    onPageChange={setCurrentPage}
+                  />
+                </>
+              )}
+            </div>
+          )}
+
           {section === 'quick_orders' && (
             <div className="space-y-3">
               <div className="flex items-center gap-2.5 mb-2">
@@ -1646,39 +2056,48 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
                   <p className="text-sm text-slate-400 mt-1">{isToday ? 'No quick deliveries found for today' : `Nothing on ${fmtDate(selDate)}`}</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {filtQuickOrders.map(o => (
-                    <div key={o.id} className="rounded-2xl border bg-white shadow-sm hover:shadow-md transition-all overflow-hidden group border-orange-200">
-                      <div className="p-4 flex items-start gap-3">
-                        <div className="flex flex-col items-center justify-center bg-gradient-to-b from-orange-50 to-orange-100 border border-orange-200 rounded-xl px-3 py-2.5 min-w-[60px] shrink-0">
-                          <ShoppingCart className="w-3.5 h-3.5 text-orange-600 mb-1" />
-                          <span className="text-[11px] font-extrabold text-orange-700 leading-tight text-center">Quick</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-extrabold text-slate-800 truncate">{o.customerName || 'Customer'}</p>
-                            <Badge status={o.status} small />
+                <>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {filtQuickOrders.slice((currentPage - 1) * 10, currentPage * 10).map(o => (
+                      <div key={o.id} className="rounded-2xl border bg-white shadow-sm hover:shadow-md transition-all overflow-hidden group border-orange-200">
+                        <div className="p-4 flex items-start gap-3">
+                          <div className="flex flex-col items-center justify-center bg-gradient-to-b from-orange-50 to-orange-100 border border-orange-200 rounded-xl px-3 py-2.5 min-w-[60px] shrink-0">
+                            <ShoppingCart className="w-3.5 h-3.5 text-orange-600 mb-1" />
+                            <span className="text-[11px] font-extrabold text-orange-700 leading-tight text-center">Quick</span>
                           </div>
-                          <div className="flex items-center gap-1 mt-1 text-xs text-slate-500 font-bold">
-                            Invoice: <span className="text-slate-700">{o.invoiceNumber || 'N/A'}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-extrabold text-slate-800 truncate">{o.customerName || 'Customer'}</p>
+                              <Badge status={o.status} small />
+                            </div>
+                            <div className="flex items-center gap-1 mt-1 text-xs text-slate-500 font-bold">
+                              Invoice: <span className="text-slate-700">{o.invoiceNumber || 'N/A'}</span>
+                            </div>
+                            {o.quickOrderReason && (
+                              <p className="text-xs text-slate-500 mt-1.5 bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 leading-relaxed" style={{ maxHeight: 48, overflow: 'hidden' }}>
+                                <span className="font-bold text-slate-600">Reason:</span> {o.quickOrderReason}
+                              </p>
+                            )}
                           </div>
-                          {o.quickOrderReason && (
-                            <p className="text-xs text-slate-500 mt-1.5 bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 leading-relaxed" style={{ maxHeight: 48, overflow: 'hidden' }}>
-                              <span className="font-bold text-slate-600">Reason:</span> {o.quickOrderReason}
-                            </p>
-                          )}
+                          <button onClick={() => {
+                            if (setActiveTab) setActiveTab('orders');
+                            else window.location.href = '/admin/orders';
+                          }}
+                            className="p-2 rounded-xl border border-slate-200 hover:border-orange-300 hover:bg-orange-50 text-slate-400 hover:text-orange-600 transition-all shrink-0 opacity-0 group-hover:opacity-100">
+                            <ArrowRight className="w-4 h-4" />
+                          </button>
                         </div>
-                        <button onClick={() => {
-                          if (setActiveTab) setActiveTab('orders');
-                          else window.location.href = '/admin/orders';
-                        }}
-                          className="p-2 rounded-xl border border-slate-200 hover:border-orange-300 hover:bg-orange-50 text-slate-400 hover:text-orange-600 transition-all shrink-0 opacity-0 group-hover:opacity-100">
-                          <ArrowRight className="w-4 h-4" />
-                        </button>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalItems={filtQuickOrders.length}
+                    itemsPerPage={10}
+                    onPageChange={setCurrentPage}
+                  />
+                </>
               )}
             </div>
           )}
@@ -1701,82 +2120,91 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
                   <p className="text-sm text-slate-400 mt-1">{isToday ? 'No slots booked for today' : `Nothing on ${fmtDate(selDate)}`}</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {sortedSlots.map(a => (
-                    <div key={a.id} className={`rounded-2xl border bg-white shadow-sm hover:shadow-md transition-all overflow-hidden group ${a.status === 'CONFIRMED' ? 'border-emerald-200' :
-                        a.status === 'CANCELLED' ? 'border-red-100 opacity-60' :
-                          a.status === 'CONSULTED' ? 'border-teal-200' :
-                            a.status === 'ORDERED' ? 'border-blue-200' : 'border-violet-200 hover:border-violet-300'
-                      }`}>
-                      <div className="p-4 flex items-start gap-3">
-                        {/* Time tile */}
-                        <div className="flex flex-col items-center justify-center bg-gradient-to-b from-violet-50 to-violet-100 border border-violet-200 rounded-xl px-3 py-2.5 min-w-[60px] shrink-0">
-                          <Clock className="w-3.5 h-3.5 text-violet-600 mb-1" />
-                          <span className="text-[11px] font-extrabold text-violet-700 leading-tight text-center">{a.timeSlot || '—'}</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-extrabold text-slate-800 truncate">{a.userName || 'Walk-In Customer'}</p>
-                            <Badge status={a.status} small />
+                <>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {sortedSlots.slice((currentPage - 1) * 10, currentPage * 10).map(a => (
+                      <div key={a.id} className={`rounded-2xl border bg-white shadow-sm hover:shadow-md transition-all overflow-hidden group ${a.status === 'CONFIRMED' ? 'border-emerald-200' :
+                          a.status === 'CANCELLED' ? 'border-red-100 opacity-60' :
+                            a.status === 'CONSULTED' ? 'border-teal-200' :
+                              a.status === 'ORDERED' ? 'border-blue-200' : 'border-violet-200 hover:border-violet-300'
+                        }`}>
+                        <div className="p-4 flex items-start gap-3">
+                          {/* Time tile */}
+                          <div className="flex flex-col items-center justify-center bg-gradient-to-b from-violet-50 to-violet-100 border border-violet-200 rounded-xl px-3 py-2.5 min-w-[60px] shrink-0">
+                            <Clock className="w-3.5 h-3.5 text-violet-600 mb-1" />
+                            <span className="text-[11px] font-extrabold text-violet-700 leading-tight text-center">{a.timeSlot || '—'}</span>
                           </div>
-                          {a.user?.phoneNumber && <span className="text-[10px] text-slate-400 flex items-center gap-1 mt-1"><Phone className="w-3 h-3" />{a.user.phoneNumber}</span>}
-                          {a.notes && (
-                            <p className="text-xs text-slate-500 mt-1.5 bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 leading-relaxed" style={{ maxHeight: 48, overflow: 'hidden' }}>
-                              {a.notes}
-                            </p>
-                          )}
-                        </div>
-                        <button onClick={() => setDrawer({ type: 'appt', data: a })}
-                          className="p-2 rounded-xl border border-slate-200 hover:border-violet-300 hover:bg-violet-50 text-slate-400 hover:text-violet-600 transition-all shrink-0 opacity-0 group-hover:opacity-100">
-                          <SlidersHorizontal className="w-4 h-4" />
-                        </button>
-                      </div>
-                      {/* Quick actions */}
-                      {!['CANCELLED', 'CONSULTED', 'ORDERED'].includes(a.status) && (
-                        <div className="px-4 pb-4 flex gap-2">
-                          {a.status === 'PENDING' && (
-                            <button
-                              onClick={async () => { try { await api.updateAppointmentStatus(a.id, 'CONFIRMED'); await load(true); } catch (e) { showError(e.message); } }}
-                              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold shadow-sm transition-all"
-                            >
-                              <CheckCircle className="w-3.5 h-3.5" />Confirm
-                            </button>
-                          )}
-                          {a.status === 'CONFIRMED' && (
-                            <>
-                              <button
-                                onClick={async () => { try { await api.updateAppointmentStatus(a.id, 'CONSULTED'); await load(true); } catch (e) { showError(e.message); } }}
-                                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-teal-500 hover:bg-teal-600 text-white text-xs font-bold shadow-sm transition-all"
-                              >
-                                <Sparkles className="w-3.5 h-3.5" />Consulted
-                              </button>
-                              <button
-                                onClick={async () => { try { await api.updateAppointmentStatus(a.id, 'ORDERED'); await load(true); } catch (e) { showError(e.message); } }}
-                                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold shadow-sm transition-all"
-                              >
-                                <ShoppingBag className="w-3.5 h-3.5" />Ordered
-                              </button>
-                            </>
-                          )}
-                          <button
-                            onClick={async () => { try { await api.updateAppointmentStatus(a.id, 'CANCELLED'); await load(true); } catch (e) { showError(e.message); } }}
-                            className="px-3 py-2 rounded-xl border border-red-200 hover:bg-red-50 text-red-400 text-xs font-bold transition-all"
-                          >
-                            <XCircle className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
-                      {['CONSULTED', 'ORDERED', 'CANCELLED'].includes(a.status) && (
-                        <div className="px-4 pb-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-extrabold text-slate-800 truncate">{a.userName || 'Walk-In Customer'}</p>
+                              <Badge status={a.status} small />
+                            </div>
+                            {a.user?.phoneNumber && <span className="text-[10px] text-slate-400 flex items-center gap-1 mt-1"><Phone className="w-3 h-3" />{a.user.phoneNumber}</span>}
+                            {a.notes && (
+                              <p className="text-xs text-slate-500 mt-1.5 bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 leading-relaxed" style={{ maxHeight: 48, overflow: 'hidden' }}>
+                                {a.notes}
+                              </p>
+                            )}
+                          </div>
                           <button onClick={() => setDrawer({ type: 'appt', data: a })}
-                            className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 text-xs font-bold transition-all">
-                            <Eye className="w-3.5 h-3.5" />View Details
+                            className="p-2 rounded-xl border border-slate-200 hover:border-violet-300 hover:bg-violet-50 text-slate-400 hover:text-violet-600 transition-all shrink-0 opacity-0 group-hover:opacity-100">
+                            <SlidersHorizontal className="w-4 h-4" />
                           </button>
                         </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                        {/* Quick actions */}
+                        {!['CANCELLED', 'CONSULTED', 'ORDERED'].includes(a.status) && (
+                          <div className="px-4 pb-4 flex gap-2">
+                            {a.status === 'PENDING' && (
+                              <button
+                                onClick={async () => { try { await api.updateAppointmentStatus(a.id, 'CONFIRMED'); await load(true); } catch (e) { showError(e.message); } }}
+                                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold shadow-sm transition-all"
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" />Confirm
+                              </button>
+                            )}
+                            {a.status === 'CONFIRMED' && (
+                              <>
+                                <button
+                                  onClick={async () => { try { await api.updateAppointmentStatus(a.id, 'CONSULTED'); await load(true); } catch (e) { showError(e.message); } }}
+                                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-teal-500 hover:bg-teal-600 text-white text-xs font-bold shadow-sm transition-all"
+                                >
+                                  <Sparkles className="w-3.5 h-3.5" />Consulted
+                                </button>
+                                <button
+                                  onClick={async () => { try { await api.updateAppointmentStatus(a.id, 'ORDERED'); await load(true); } catch (e) { showError(e.message); } }}
+                                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold shadow-sm transition-all"
+                                >
+                                  <ShoppingBag className="w-3.5 h-3.5" />Ordered
+                                </button>
+                              </>
+                            )}
+                            <button
+                              onClick={async () => { try { await api.updateAppointmentStatus(a.id, 'CANCELLED'); await load(true); } catch (e) { showError(e.message); } }}
+                              className="px-3 py-2 rounded-xl border border-red-200 hover:bg-red-50 text-red-400 text-xs font-bold transition-all"
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                        {['CONSULTED', 'ORDERED', 'CANCELLED'].includes(a.status) && (
+                          <div className="px-4 pb-4">
+                            <button onClick={() => setDrawer({ type: 'appt', data: a })}
+                              className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 text-xs font-bold transition-all">
+                              <Eye className="w-3.5 h-3.5" />View Details
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalItems={sortedSlots.length}
+                    itemsPerPage={10}
+                    onPageChange={setCurrentPage}
+                  />
+                </>
               )}
 
               {/* All slot bookings table */}
@@ -1840,22 +2268,31 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
                   <p className="text-sm text-slate-400 mt-1">{isToday ? 'Nothing scheduled for today' : `Nothing on ${fmtDate(selDate)}`}</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {sortedAppts.map(a => (
-                    <ApptCard key={a.id} appt={a}
-                      onQuickStatus={async (id, st) => {
-                        try {
-                          await api.updateAppointmentStatus(id, st);
-                          await load(true);
-                        } catch (e) {
-                          showError(e.message || "Failed to update");
-                        }
-                      }}
-                      onOpen={a => setDrawer({ type: 'appt', data: a })}
-                      setActiveTab={setActiveTab}
-                    />
-                  ))}
-                </div>
+                <>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {sortedAppts.slice((currentPage - 1) * 10, currentPage * 10).map(a => (
+                      <ApptCard key={a.id} appt={a}
+                        onQuickStatus={async (id, st) => {
+                          try {
+                            await api.updateAppointmentStatus(id, st);
+                            await load(true);
+                          } catch (e) {
+                            showError(e.message || "Failed to update");
+                          }
+                        }}
+                        onOpen={a => setDrawer({ type: 'appt', data: a })}
+                        setActiveTab={setActiveTab}
+                      />
+                    ))}
+                  </div>
+
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalItems={sortedAppts.length}
+                    itemsPerPage={10}
+                    onPageChange={setCurrentPage}
+                  />
+                </>
               )}
             </div>
           )}
@@ -1878,15 +2315,24 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
                   <p className="text-sm text-slate-400 mt-1">{isToday ? 'Nothing scheduled for today' : `Nothing on ${fmtDate(selDate)}`}</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {filtVisits.map(v => (
-                    <VisitCard key={v.id} visit={v} staffList={staffList}
-                      onRefresh={() => load(true)}
-                      onOpen={v => setDrawer({ type: 'visit', data: v })}
-                      setActiveTab={setActiveTab}
-                    />
-                  ))}
-                </div>
+                <>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {filtVisits.slice((currentPage - 1) * 10, currentPage * 10).map(v => (
+                      <VisitCard key={v.id} visit={v} staffList={staffList}
+                        onRefresh={() => load(true)}
+                        onOpen={v => setDrawer({ type: 'visit', data: v })}
+                        setActiveTab={setActiveTab}
+                      />
+                    ))}
+                  </div>
+
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalItems={filtVisits.length}
+                    itemsPerPage={10}
+                    onPageChange={setCurrentPage}
+                  />
+                </>
               )}
             </div>
           )}

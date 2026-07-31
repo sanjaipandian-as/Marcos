@@ -52,8 +52,8 @@ export default function ManualCheckout() {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('Cash');
-  const [orderStatus, setOrderStatus] = useState('DELIVERED');
-  const [paymentStatus, setPaymentStatus] = useState('COMPLETED');
+  const [orderStatus, setOrderStatus] = useState('PENDING');
+  const [paymentStatus, setPaymentStatus] = useState('PENDING');
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponError, setCouponError] = useState('');
@@ -77,47 +77,73 @@ export default function ManualCheckout() {
   const [timeSlots, setTimeSlots] = useState([]);
   const [checkoutApptId, setCheckoutApptId] = useState(null);
 
-  useEffect(() => {
+  const runPrefill = () => {
     const query = new URLSearchParams(window.location.search);
     const apptId = query.get('appointmentId') || sessionStorage.getItem('checkout_appointment_id');
     const userId = query.get('userId') || sessionStorage.getItem('checkout_user_id');
     const productName = query.get('productName') || sessionStorage.getItem('checkout_product_name');
     const deliveryDateVal = query.get('deliveryDate') || sessionStorage.getItem('checkout_delivery_date');
 
-    if (apptId) {
-      setCheckoutApptId(apptId);
-      setOrderStatus('PENDING');
-      sessionStorage.removeItem('checkout_appointment_id');
-      sessionStorage.removeItem('checkout_user_id');
-      sessionStorage.removeItem('checkout_product_name');
-      sessionStorage.removeItem('checkout_delivery_date');
+    if (!apptId) return;
 
-      if (userId) {
-        api.getCustomerDetails(userId).then(res => {
-          if (res && res.user) {
-            setSelectedCustomer(res.user);
-            setCustomerSearchTerm(res.user.fullName);
-          }
-        }).catch(err => console.error('Error fetching checkout customer:', err));
-      }
+    setCheckoutApptId(apptId);
+    setOrderStatus('PENDING');
+    setPaymentStatus('PENDING');
+    // Reset cart + customer so stale data doesn't persist across re-triggers
+    setCart([]);
+    setSelectedCustomer(null);
+    setCustomerSearchTerm('');
+    sessionStorage.removeItem('checkout_appointment_id');
+    sessionStorage.removeItem('checkout_user_id');
+    sessionStorage.removeItem('checkout_product_name');
+    sessionStorage.removeItem('checkout_delivery_date');
 
-      if (productName) {
+    if (userId) {
+      api.getCustomerDetails(userId).then(res => {
+        if (res && res.user) {
+          setSelectedCustomer(res.user);
+          setCustomerSearchTerm(res.user.fullName);
+        }
+      }).catch(err => console.error('Error fetching checkout customer:', err));
+    }
+
+    if (productName) {
+      // Only set the search term if it looks like an actual product name (not a generic type).
+      // Generic types like "Custom Tailoring" / "SLOT_BOOKING" won't match products,
+      // so we skip the search filter to show all products instead of an empty grid.
+      const genericTypes = ['custom tailoring', 'slot_booking', 'consultation', 'measurement', 'alteration'];
+      const isGeneric = genericTypes.some(g => productName.toLowerCase().includes(g));
+      if (!isGeneric) {
         setSearchTerm(productName);
         setPrefillProductToCart(productName);
+      } else {
+        setSearchTerm('');
+        setPrefillProductToCart('');
+        setCurrentPage(1);
       }
+    } else {
+      setSearchTerm('');
+      setPrefillProductToCart('');
+    }
 
-      if (deliveryDateVal) {
-        try {
-          const d = new Date(deliveryDateVal);
-          const y = d.getFullYear();
-          const m = String(d.getMonth() + 1).padStart(2, '0');
-          const day = String(d.getDate()).padStart(2, '0');
-          setDeliveryDate(`${y}-${m}-${day}`);
-        } catch (e) {
-          console.error('Error parsing delivery date prefill:', e);
-        }
+    if (deliveryDateVal) {
+      try {
+        const d = new Date(deliveryDateVal);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        setDeliveryDate(`${y}-${m}-${day}`);
+      } catch (e) {
+        console.error('Error parsing delivery date prefill:', e);
       }
     }
+  };
+
+  // Run on first mount (URL params) and on every 'checkout-prefill' event (tab switches)
+  useEffect(() => {
+    runPrefill();
+    window.addEventListener('checkout-prefill', runPrefill);
+    return () => window.removeEventListener('checkout-prefill', runPrefill);
   }, []);
 
   // Filter time slots dynamically
@@ -514,6 +540,8 @@ export default function ManualCheckout() {
       setQuickOrderExpectedDate('');
       setAdvancePayment('');
       setDeliveryDate('');
+      setOrderStatus('PENDING');
+      setPaymentStatus('PENDING');
       loadData();
       setIsSubmitting(false);
     } catch (err) {
@@ -890,7 +918,15 @@ export default function ManualCheckout() {
               <span className="text-[10px] font-bold text-slate-400 uppercase block">Payment Status</span>
               <select
                 value={paymentStatus}
-                onChange={(e) => setPaymentStatus(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setPaymentStatus(val);
+                  if (val === 'COMPLETED' && total > 0) {
+                    setAdvancePayment(String(total));
+                  } else if (val === 'PENDING') {
+                    setAdvancePayment('');
+                  }
+                }}
                 className="w-full px-2.5 py-1.5 text-xs font-bold bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500"
               >
                 <option value="PENDING">Pending / Non-Paid</option>
@@ -1023,7 +1059,18 @@ export default function ManualCheckout() {
                   min="0"
                   max={total}
                   value={advancePayment}
-                  onChange={e => setAdvancePayment(e.target.value)}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setAdvancePayment(val);
+                    const num = Number(val) || 0;
+                    if (num >= total && total > 0) {
+                      setPaymentStatus('COMPLETED');
+                    } else if (num > 0) {
+                      setPaymentStatus('PARTIAL');
+                    } else {
+                      setPaymentStatus('PENDING');
+                    }
+                  }}
                   placeholder="0.00"
                   className="w-full pl-6 pr-2 py-1.5 text-right text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-brand-500"
                 />

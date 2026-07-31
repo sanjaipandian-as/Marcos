@@ -13,7 +13,7 @@ import PdfService from '../services/pdf.service.js';
 export const orderStatusUpdateSchema = z.object({
   body: z.object({
     status: z.enum(['PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED']).optional(),
-    paymentStatus: z.enum(['PENDING', 'COMPLETED', 'FAILED', 'REFUNDED']).optional(),
+    paymentStatus: z.enum(['PENDING', 'PARTIAL', 'COMPLETED', 'FAILED', 'REFUNDED']).optional(),
     fabricType: z.string().optional().nullable(),
     customizations: z.string().optional().nullable(),
     tailorNotes: z.string().optional().nullable(),
@@ -265,8 +265,14 @@ export class OrderController {
   static async adminListOrders(req: Request, res: Response, next: NextFunction) {
     const { page = 1, limit = 10, status } = req.query as any;
     const skip = (Number(page) - 1) * Number(limit);
+    const cacheKey = `cache:admin:orders:${page}:${limit}:${status || 'ALL'}`;
 
     try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return res.status(200).json(JSON.parse(cached));
+      }
+
       const where: any = {};
       if (status) {
         where.status = status as OrderStatus;
@@ -342,7 +348,7 @@ export class OrderController {
         };
       });
 
-      return res.status(200).json({
+      const responsePayload = {
         success: true,
         data: ordersWithBookings,
         pagination: {
@@ -351,7 +357,11 @@ export class OrderController {
           total,
           pages: Math.ceil(total / Number(limit)),
         },
-      });
+      };
+
+      await redis.set(cacheKey, JSON.stringify(responsePayload), 'EX', 30);
+
+      return res.status(200).json(responsePayload);
     } catch (error) {
       next(error);
     }
@@ -409,9 +419,11 @@ export class OrderController {
       const sumSubsequent = currentPaymentHistory.reduce((sum, p) => sum + Number(p.amount), 0);
       updateData.balanceAmount = Math.max(0, Number(existing.payableAmount) - advance - sumSubsequent);
 
-      // Auto update payment status if balance is 0
+      // Auto update payment status if balance is 0 or if advance payment exists
       if (updateData.balanceAmount === 0 && Number(existing.payableAmount) > 0) {
-         updateData.paymentStatus = 'COMPLETED';
+        updateData.paymentStatus = 'COMPLETED';
+      } else if (advance > 0 && updateData.balanceAmount > 0 && paymentStatus !== 'REFUNDED' && paymentStatus !== 'FAILED') {
+        updateData.paymentStatus = 'PARTIAL';
       }
 
 

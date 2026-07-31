@@ -66,8 +66,8 @@ export class PdfService {
           doc.fillColor('#4B5563')
             .text(item.product.name, 60, currentY + 5)
             .text(item.quantity.toString(), 300, currentY + 5, { width: 30, align: 'right' })
-            .text(`Rs. ${Number(item.price).toFixed(2)}`, 380, currentY + 5, { width: 60, align: 'right' })
-            .text(`Rs. ${(Number(item.price) * item.quantity).toFixed(2)}`, 480, currentY + 5, { width: 60, align: 'right' });
+            .text(`INR ${Number(item.price).toFixed(2)}`, 380, currentY + 5, { width: 60, align: 'right' })
+            .text(`INR ${(Number(item.price) * item.quantity).toFixed(2)}`, 480, currentY + 5, { width: 60, align: 'right' });
 
           currentY += 25;
           doc.strokeColor('#F3F4F6').lineWidth(0.5).moveTo(50, currentY).lineTo(550, currentY).stroke();
@@ -77,13 +77,13 @@ export class PdfService {
         const calcTop = currentY + 20;
         doc.fontSize(10).fillColor('#1F2937')
           .text('Subtotal:', 350, calcTop, { width: 100, align: 'left' })
-          .text(`Rs. ${Number(order.totalAmount).toFixed(2)}`, 470, calcTop, { width: 70, align: 'right' });
+          .text(`INR ${Number(order.totalAmount).toFixed(2)}`, 470, calcTop, { width: 70, align: 'right' });
 
         doc.text('Tax Amount:', 350, calcTop + 15, { width: 100, align: 'left' })
-          .text(`Rs. ${Number(order.taxAmount).toFixed(2)}`, 470, calcTop + 15, { width: 70, align: 'right' });
+          .text(`INR ${Number(order.taxAmount).toFixed(2)}`, 470, calcTop + 15, { width: 70, align: 'right' });
 
         doc.text('Discount Amount:', 350, calcTop + 30, { width: 100, align: 'left' })
-          .text(`-Rs. ${Number(order.discountAmount).toFixed(2)}`, 470, calcTop + 30, { width: 70, align: 'right' });
+          .text(`-INR ${Number(order.discountAmount).toFixed(2)}`, 470, calcTop + 30, { width: 70, align: 'right' });
 
         // Final Payable
         doc.strokeColor('#E5E7EB').lineWidth(1).moveTo(350, calcTop + 50).lineTo(540, calcTop + 50).stroke();
@@ -91,7 +91,7 @@ export class PdfService {
         let currentCalcY = calcTop + 55;
         doc.fontSize(12).fillColor('#111827').font('Helvetica-Bold')
           .text('Grand Total:', 350, currentCalcY, { width: 100, align: 'left' })
-          .text(`Rs. ${Number(order.payableAmount).toFixed(2)}`, 470, currentCalcY, { width: 70, align: 'right' });
+          .text(`INR ${Number(order.payableAmount).toFixed(2)}`, 470, currentCalcY, { width: 70, align: 'right' });
         doc.font('Helvetica');
 
         currentCalcY += 20;
@@ -101,7 +101,7 @@ export class PdfService {
 
         doc.fontSize(10).fillColor('#4B5563')
           .text('Advance Paid:', 350, currentCalcY, { width: 100, align: 'left' })
-          .text(`Rs. ${advance.toFixed(2)}`, 470, currentCalcY, { width: 70, align: 'right' });
+          .text(`INR ${advance.toFixed(2)}`, 470, currentCalcY, { width: 70, align: 'right' });
         
         currentCalcY += 15;
         doc.strokeColor('#E5E7EB').lineWidth(1).moveTo(350, currentCalcY).lineTo(540, currentCalcY).stroke();
@@ -109,7 +109,7 @@ export class PdfService {
         currentCalcY += 5;
         doc.fontSize(11).fillColor(balance > 0 ? '#DC2626' : '#059669').font('Helvetica-Bold')
           .text('Balance Due:', 350, currentCalcY, { width: 100, align: 'left' })
-          .text(`Rs. ${balance.toFixed(2)}`, 470, currentCalcY, { width: 70, align: 'right' });
+          .text(`INR ${balance.toFixed(2)}`, 470, currentCalcY, { width: 70, align: 'right' });
         doc.font('Helvetica');
 
         // 6. Footer

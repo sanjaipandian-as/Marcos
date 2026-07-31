@@ -17,7 +17,8 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { useTheme } from '../../styles/ThemeContext';
 import api from '../../utils/api';
 import { getSocket } from '../../utils/socket';
@@ -304,15 +305,9 @@ export default function OrderTrackingScreen({ route, navigation }) {
   }, [route?.params]);
 
   // ── Invoice handler ───────────────────────────────────────────────────────
+  // Always open the in-app Tax Invoice modal — never redirect to Drive/external URL
   const handleInvoice = () => {
-    const url = order?.invoice?.pdfUrl;
-    if (url) {
-      Linking.openURL(url).catch(() => {
-        setShowInvoiceModal(true);
-      });
-    } else {
-      setShowInvoiceModal(true);
-    }
+    setShowInvoiceModal(true);
   };
 
   // ─── Header (always rendered) ─────────────────────────────────────────────
@@ -1317,63 +1312,77 @@ export default function OrderTrackingScreen({ route, navigation }) {
       price: order.payableAmount
     }];
 
+
     const handleDownloadPdf = async () => {
       setDownloadingPdf(true);
       try {
         const token = await AsyncStorage.getItem('accessToken');
-        const downloadUrl = order?.invoice?.pdfUrl || `${api.defaults.baseURL}/orders/${order.id}/invoice-pdf`;
+        // Always use backend API — never Drive/external URLs
+        const downloadUrl = `${api.defaults.baseURL}/orders/${order.id}/invoice-pdf`;
         const filename = `MARCOS_Invoice_${(order.invoiceNumber || order.id).replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
-        const fileUri = `${FileSystem.documentDirectory}${filename}`;
 
+        // Step 1: Download to temp cache
+        const tempUri = `${FileSystem.cacheDirectory}${filename}`;
         const downloadResult = await FileSystem.downloadAsync(
           downloadUrl,
-          fileUri,
-          {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-          }
+          tempUri,
+          { headers: token ? { Authorization: `Bearer ${token}` } : {} }
         );
 
-        if (downloadResult.status === 200) {
-          Alert.alert(
-            'Invoice Saved Successfully!',
-            `Official Tax Invoice stored on your device:\n${filename}`,
-            [
-              {
-                text: 'View / Open PDF',
-                onPress: async () => {
-                  try {
-                    if (Platform.OS === 'android') {
-                      const contentUri = await FileSystem.getContentUriAsync(downloadResult.uri);
-                      await Linking.openURL(contentUri);
-                    } else if (Platform.OS === 'ios') {
-                      const supported = await Linking.canOpenURL(downloadResult.uri);
-                      if (supported) {
-                        await Linking.openURL(downloadResult.uri);
-                      } else {
-                        await Linking.openURL(downloadUrl);
-                      }
-                    } else {
-                      await Linking.openURL(downloadUrl);
-                    }
-                  } catch (openErr) {
-                    await Linking.openURL(downloadUrl).catch(() => {
-                      Alert.alert('Invoice Saved', 'PDF file is saved safely in your app documents directory.');
-                    });
-                  }
-                }
-              },
-              { text: 'Done', style: 'cancel' }
-            ]
-          );
-        } else {
-          await Linking.openURL(downloadUrl);
+        if (downloadResult.status !== 200) {
+          Alert.alert('Download Failed', 'Could not fetch the invoice. Please try again.');
+          return;
         }
+
+        if (Platform.OS === 'android') {
+          // Step 2 (Android): Use StorageAccessFramework to save directly to Downloads folder
+          // Ask user to confirm the Downloads directory (only needed once per session)
+          const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(
+            'content://com.android.externalstorage.documents/tree/primary%3ADownload'
+          );
+
+          if (!permissions.granted) {
+            // User cancelled — fall back to share sheet
+            await Sharing.shareAsync(downloadResult.uri, {
+              mimeType: 'application/pdf',
+              dialogTitle: `Save MARCOS Invoice`,
+            });
+            return;
+          }
+
+          // Step 3 (Android): Create the file inside the chosen directory
+          const savedUri = await FileSystem.StorageAccessFramework.createFileAsync(
+            permissions.directoryUri,
+            filename,
+            'application/pdf'
+          );
+
+          // Step 4 (Android): Read temp file as base64 and write to Downloads
+          const base64Content = await FileSystem.readAsStringAsync(downloadResult.uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          await FileSystem.writeAsStringAsync(savedUri, base64Content, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+
+          Alert.alert(
+            '✅ Saved to Downloads!',
+            `Invoice saved to your Downloads folder:\n${filename}\n\nOpen the Files app → Downloads to find it.`,
+            [{ text: 'OK' }]
+          );
+
+        } else {
+          // iOS: No "Downloads" folder concept — use share sheet (AirDrop, Files app, etc.)
+          await Sharing.shareAsync(downloadResult.uri, {
+            mimeType: 'application/pdf',
+            dialogTitle: `MARCOS Invoice — ${order.invoiceNumber || order.id}`,
+            UTI: 'com.adobe.pdf',
+          });
+        }
+
       } catch (err) {
         console.warn('PDF Download Error:', err);
-        const downloadUrl = order?.invoice?.pdfUrl || `${api.defaults.baseURL}/orders/${order.id}/invoice-pdf`;
-        Linking.openURL(downloadUrl).catch(() => {
-          Alert.alert('Notice', 'Invoice document saved locally.');
-        });
+        Alert.alert('Download Error', 'Unable to save the invoice. Please try again.');
       } finally {
         setDownloadingPdf(false);
       }

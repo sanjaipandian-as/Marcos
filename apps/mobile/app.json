@@ -29,7 +29,8 @@
     "plugins": [
       "expo-font",
       "expo-status-bar",
-      "expo-video"
+      "expo-video",
+      "expo-sharing"
     ]
   }
 }
