@@ -300,6 +300,93 @@ const isActiveSlot = (timeSlot, dateStr) => {
   return now >= startMins && now <= endMins;
 };
 
+// ─── Pagination Component ──────────────────────────────────────────────────
+function PaginationControls({ currentPage, totalItems, itemsPerPage = 10, onPageChange }) {
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  if (totalPages <= 1) return null;
+
+  const startItem = (currentPage - 1) * itemsPerPage + 1;
+  const endItem = Math.min(currentPage * itemsPerPage, totalItems);
+
+  const maxVisiblePages = 5;
+  let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+  let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+  if (endPage - startPage + 1 < maxVisiblePages) {
+    startPage = Math.max(1, endPage - maxVisiblePages + 1);
+  }
+
+  const pages = [];
+  for (let i = startPage; i <= endPage; i++) {
+    pages.push(i);
+  }
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-100 text-xs font-semibold text-slate-500">
+      <p className="text-[11px] text-slate-400">
+        Showing <span className="font-bold text-slate-700">{startItem}–{endItem}</span> of <span className="font-bold text-slate-700">{totalItems}</span> items
+      </p>
+
+      <div className="flex items-center gap-1.5">
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-bold flex items-center gap-1 shadow-xs"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" /> Previous
+        </button>
+
+        <div className="flex items-center gap-1">
+          {startPage > 1 && (
+            <>
+              <button
+                onClick={() => onPageChange(1)}
+                className="w-8 h-8 rounded-xl font-bold transition-all text-xs bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+              >
+                1
+              </button>
+              {startPage > 2 && <span className="px-1 text-slate-400 font-bold">…</span>}
+            </>
+          )}
+
+          {pages.map(p => (
+            <button
+              key={p}
+              onClick={() => onPageChange(p)}
+              className={`w-8 h-8 rounded-xl font-bold transition-all text-xs ${
+                p === currentPage
+                  ? 'bg-amber-600 text-white shadow-sm scale-105'
+                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+
+          {endPage < totalPages && (
+            <>
+              {endPage < totalPages - 1 && <span className="px-1 text-slate-400 font-bold">…</span>}
+              <button
+                onClick={() => onPageChange(totalPages)}
+                className="w-8 h-8 rounded-xl font-bold transition-all text-xs bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+              >
+                {totalPages}
+              </button>
+            </>
+          )}
+        </div>
+
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-bold flex items-center gap-1 shadow-xs"
+        >
+          Next <ChevronRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function MasterDashboard({ setActiveTab, isActive }) {
   const [dash, setDash] = useState(null);
@@ -310,6 +397,11 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
   const [lastRefresh, setLastRefresh] = useState(new Date());
 
   const [selectedOrderModal, setSelectedOrderModal] = useState(null);
+  const [deliveriesPage, setDeliveriesPage] = useState(1);
+
+  useEffect(() => {
+    setDeliveriesPage(1);
+  }, [selectedDate]);
 
   // ── Load main dashboard + all orders (on mount / refresh only)
   const loadMain = useCallback(async (quiet = false) => {
@@ -730,7 +822,7 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
                 <p className="text-xs text-slate-400 mt-1">Select another date from the date strip above to view promised deliveries.</p>
               </div>
             ) : (
-              ds.deliveriesPromisedList?.map(o => (
+              ds.deliveriesPromisedList?.slice((deliveriesPage - 1) * 10, deliveriesPage * 10).map(o => (
                 <div 
                   key={o.id} 
                   onClick={() => setSelectedOrderModal(o)}
@@ -786,6 +878,13 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
               ))
             )}
           </div>
+
+          <PaginationControls
+            currentPage={deliveriesPage}
+            totalItems={ds.deliveriesPromisedList?.length || 0}
+            itemsPerPage={10}
+            onPageChange={setDeliveriesPage}
+          />
         </div>
       </div>
 
