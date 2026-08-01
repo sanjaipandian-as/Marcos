@@ -5,6 +5,13 @@ node_modules/
 
 # Environment files
 .env
-*.env
-**/.env
-**/*.env
+.env.local
+.env.production
+.env.development
+!.env.example
+
+# Uploads & Temp files
+uploads/
+**/uploads/*
+
+
