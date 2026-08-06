@@ -289,9 +289,14 @@ export default function AppointmentBookingScreen({ navigation, route }) {
         const nextPage = apptsPage + 1;
         const res = await api.get(`/appointments?limit=20&page=${nextPage}`);
         if (res.success && res.data?.length > 0) {
-          setAppointments(prev => [...prev, ...res.data]);
+          const list = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+          setAppointments(prev => {
+            const existingIds = new Set(prev.map(item => item.id));
+            const newItems = list.filter(item => !existingIds.has(item.id));
+            return [...prev, ...newItems];
+          });
           setApptsPage(nextPage);
-          setHasMoreAppts(res.data.length >= 20);
+          setHasMoreAppts(list.length >= 20);
         } else {
           setHasMoreAppts(false);
         }
@@ -299,9 +304,14 @@ export default function AppointmentBookingScreen({ navigation, route }) {
         const nextPage = visitsPage + 1;
         const res = await api.get(`/visits?limit=20&page=${nextPage}`);
         if (res.success && res.data?.length > 0) {
-          setVisits(prev => [...prev, ...res.data]);
+          const list = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+          setVisits(prev => {
+            const existingIds = new Set(prev.map(item => item.id));
+            const newItems = list.filter(item => !existingIds.has(item.id));
+            return [...prev, ...newItems];
+          });
           setVisitsPage(nextPage);
-          setHasMoreVisits(res.data.length >= 20);
+          setHasMoreVisits(list.length >= 20);
         } else {
           setHasMoreVisits(false);
         }
@@ -1063,7 +1073,11 @@ export default function AppointmentBookingScreen({ navigation, route }) {
               <Text style={[styles.inputLabel, { color: theme.text.secondary, fontFamily: fonts.semiBold }]}>DATE</Text>
               <TouchableOpacity 
                 style={[styles.minimalInputField, { backgroundColor: theme.bg.main, borderColor: errors.date ? '#ef4444' : theme.border }]} 
-                onPress={() => setShowCalendarModal(true)}
+                onPress={() => {
+                  setCalendarTarget('BOOKING');
+                  setCurrentMonth(selectedDate || new Date());
+                  setShowCalendarModal(true);
+                }}
               >
                 <Calendar size={18} color={theme.brand[700]} />
                 <Text style={[styles.minimalInputText, { color: selectedDate ? theme.brand[900] : theme.text.secondary, fontFamily: fonts.medium }]}>
@@ -1207,6 +1221,12 @@ export default function AppointmentBookingScreen({ navigation, route }) {
                 style={[styles.minimalInputField, { backgroundColor: theme.bg.main, borderColor: errors.rescheduleDate ? '#ef4444' : theme.border }]} 
                 onPress={() => {
                   setCalendarTarget('RESCHEDULE');
+                  const today = new Date();
+                  if (rescheduleDate && rescheduleDate > today) {
+                    setCurrentMonth(rescheduleDate);
+                  } else {
+                    setCurrentMonth(today);
+                  }
                   setShowCalendarModal(true);
                 }}
               >
@@ -1299,6 +1319,7 @@ export default function AppointmentBookingScreen({ navigation, route }) {
                 style={[styles.minimalInputField, { backgroundColor: theme.bg.main, borderColor: slotErrors.date ? '#ef4444' : theme.border }]}
                 onPress={() => {
                   setCalendarTarget('SLOT');
+                  setCurrentMonth(slotDate || new Date());
                   setShowCalendarModal(true);
                 }}
                 activeOpacity={0.7}

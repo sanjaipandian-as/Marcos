@@ -330,6 +330,7 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
   }, [initialTab]);
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortByDeliveryDate, setSortByDeliveryDate] = useState(false);
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [apptStatusFilter, setApptStatusFilter] = useState('ALL');
   const [visitStatusFilter, setVisitStatusFilter] = useState('ALL');
@@ -1586,11 +1587,22 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
       (typeFilter === 'OFFLINE' && order.isOfflineSales) || 
       (typeFilter === 'ONLINE' && !order.isOfflineSales);
 
-    return !order.isQuickOrder && matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo && matchesPayment && matchesType;
+    return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo && matchesPayment && matchesType;
+  });
+
+  const sortedOrders = [...filteredOrders].sort((a, b) => {
+    if (sortByDeliveryDate) {
+      const aDate = a.deliveryDate || a.quickOrderExpectedDate;
+      const bDate = b.deliveryDate || b.quickOrderExpectedDate;
+      const aTime = aDate ? new Date(aDate).getTime() : Infinity;
+      const bTime = bDate ? new Date(bDate).getTime() : Infinity;
+      return aTime - bTime;
+    }
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
   const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
-  const paginatedOrders = filteredOrders.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const paginatedOrders = sortedOrders.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
   
   const cancelledAlerts = orders
     .filter(o => o.status === 'CANCELLED' && !dismissedAlerts.includes(o.id))
@@ -1681,9 +1693,14 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
     let daysRemainingText = '';
     let daysColor = 'text-slate-500';
 
-    if (order.deliveryDate) {
-      const deliveryDate = new Date(order.deliveryDate);
+    const targetDeliveryDate = order.deliveryDate || order.quickOrderExpectedDate;
+
+    if (targetDeliveryDate) {
+      const deliveryDate = new Date(targetDeliveryDate);
       deliveryDateStr = deliveryDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      if (!order.deliveryDate && order.quickOrderExpectedDate) {
+        deliveryDateStr += ' (Quick expected)';
+      }
       
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -2453,6 +2470,15 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
                   <option value="DELIVERED">Delivered</option>
                   <option value="CANCELLED">Cancelled</option>
                 </select>
+                <label className="flex items-center gap-2 px-3.5 py-2 border border-slate-200 bg-white rounded-xl text-xs font-bold text-slate-605 hover:bg-slate-50 cursor-pointer select-none transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={sortByDeliveryDate}
+                    onChange={e => setSortByDeliveryDate(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300"
+                  />
+                  <span>Urgent Sort</span>
+                </label>
                 <button 
                   onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
                   className={`flex items-center justify-center gap-2 px-4 py-2 border rounded-xl text-xs font-bold transition-colors ${showAdvancedFilters || dateFrom || dateTo || paymentFilter !== 'ALL' || typeFilter !== 'ALL' ? 'border-brand-500 text-brand-600 bg-brand-50' : 'border-slate-200 text-slate-600 bg-white hover:bg-slate-50'}`}
@@ -2490,7 +2516,14 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
                     paginatedOrders.map((order) => (
                       <tr key={order.id} className={`transition-colors ${order.status === 'CANCELLED' ? 'bg-red-50/70 hover:bg-red-50/90 border-l-2 border-l-red-500' : 'hover:bg-slate-50/20'}`}>
                         <td className={`py-4 px-6 font-extrabold ${order.status === 'CANCELLED' ? 'text-slate-400 line-through decoration-red-300' : 'text-slate-800'}`}>
-                          {order.invoiceNumber}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span>{order.invoiceNumber}</span>
+                            {order.isQuickOrder && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-black bg-orange-105 text-orange-800 border border-orange-200 uppercase tracking-wide">
+                                Quick Order
+                              </span>
+                            )}
+                          </div>
                           {order.status === 'CANCELLED' && order.paymentStatus !== 'REFUNDED' && (
                             <span className="ml-2 flex items-center gap-1.5 inline-flex">
                               <button
@@ -2600,8 +2633,13 @@ export default function OrderManager({ initialTab = 'bookings', isActive }) {
                     </div>
                   )}
                   <div className="flex justify-between items-center relative z-10">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className={`font-extrabold text-sm ${order.status === 'CANCELLED' ? 'text-slate-400 line-through decoration-red-300' : 'text-slate-800'}`}>{order.invoiceNumber}</span>
+                      {order.isQuickOrder && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-black bg-orange-105 text-orange-800 border border-orange-200 uppercase tracking-wide">
+                          Quick
+                        </span>
+                      )}
                       {order.status === 'CANCELLED' && order.paymentStatus !== 'REFUNDED' && (
                         <div className="flex gap-1.5 items-center">
                           <button

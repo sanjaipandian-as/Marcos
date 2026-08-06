@@ -249,7 +249,7 @@ class AdminController {
             const prevWeekEndMs = selectedWeekStartMs;
             const lyWeekStartMs = selectedWeekStartMs - 52 * 7 * 24 * 60 * 60 * 1000;
             const lyWeekEndMs = lyWeekStartMs + 7 * 24 * 60 * 60 * 1000;
-            const [userOrderStats, guestOrderStats, peakHoursRaw, seasonalTrendRaw, weeklyComparisonRaw] = await Promise.all([
+            const [userOrderStats, guestOrderStats, peakHoursRaw, seasonalTrendRaw, weeklyComparisonRaw, categoryRevenueRaw] = await Promise.all([
                 db_js_1.default.order.groupBy({
                     by: ['userId'],
                     where: { status: { not: 'CANCELLED' }, createdAt: { gte: startOfPeriod }, userId: { not: null } },
@@ -293,7 +293,21 @@ class AdminController {
               ("createdAt" >= ${new Date(lyWeekStartMs)} AND "createdAt" < ${new Date(lyWeekEndMs)})
             )
           GROUP BY dow
-        `
+        `,
+                db_js_1.default.orderItem.findMany({
+                    where: { order: { status: { not: 'CANCELLED' } } },
+                    select: {
+                        quantity: true,
+                        price: true,
+                        product: {
+                            select: {
+                                category: {
+                                    select: { name: true }
+                                }
+                            }
+                        }
+                    }
+                })
             ]);
             const userIds = userOrderStats.map(u => u.userId);
             const users = await db_js_1.default.user.findMany({
@@ -432,9 +446,20 @@ class AdminController {
                 include: { user: true },
                 take: 5
             });
+            const categoryRevenueMap = new Map();
+            categoryRevenueRaw.forEach((item) => {
+                const categoryName = item.product?.category?.name || 'Uncategorized';
+                const itemRevenue = Number(item.price) * item.quantity;
+                categoryRevenueMap.set(categoryName, (categoryRevenueMap.get(categoryName) || 0) + itemRevenue);
+            });
+            const topCategories = Array.from(categoryRevenueMap.entries()).map(([name, value]) => ({
+                name,
+                value
+            })).sort((a, b) => b.value - a.value);
             const responsePayload = {
                 success: true,
                 data: {
+                    topCategories,
                     todayStats: {
                         orders: todayOrdersCount,
                         deliveries: todayDeliveriesCount,

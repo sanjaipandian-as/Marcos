@@ -51,7 +51,7 @@ export class VisitController {
       const [visits, total] = await Promise.all([
         prisma.storeVisit.findMany({
           where,
-          orderBy: { preferredDate: 'asc' },
+          orderBy: { preferredDate: 'desc' },
           skip,
           take: safeLimit,
           include: {
@@ -162,8 +162,8 @@ export class VisitController {
       }
 
       const staff = await prisma.user.findUnique({ where: { id: assignedStaffId } });
-      if (!staff || (staff.role !== Role.STAFF && staff.role !== Role.ADMIN)) {
-        return res.status(400).json({ success: false, message: 'Invalid staff assignment: Assigned user must be STAFF or ADMIN' });
+      if (!staff || (staff.role !== Role.STAFF && staff.role !== Role.ADMIN && staff.role !== Role.SUPERADMIN)) {
+        return res.status(400).json({ success: false, message: 'Invalid staff assignment: Assigned user must be STAFF, ADMIN, or SUPERADMIN' });
       }
 
       const updatedVisit = await prisma.storeVisit.update({

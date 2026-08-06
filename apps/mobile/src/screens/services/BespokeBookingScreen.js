@@ -13,6 +13,7 @@ import {
   Dimensions,
   Image
 } from 'react-native';
+import LottieView from 'lottie-react-native';
 import { useTheme } from '../../styles/ThemeContext';
 import api from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -104,6 +105,14 @@ export default function BespokeBookingScreen({ navigation, route }) {
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+  // Quick Order states
+  const [isQuickOrder, setIsQuickOrder] = useState(false);
+  const [quickOrderExpectedDate, setQuickOrderExpectedDate] = useState('');
+  const [quickOrderReason, setQuickOrderReason] = useState('');
+  const [showExpectedDateCalendar, setShowExpectedDateCalendar] = useState(false);
+  const [calendarViewDate, setCalendarViewDate] = useState(new Date());
 
   // Address states
   const [customAddress, setCustomAddress] = useState('');
@@ -257,6 +266,10 @@ export default function BespokeBookingScreen({ navigation, route }) {
     if (!selectedDate) tempErrors.date = 'Please select a date';
     if (fittingMode === 'STUDIO' && !timeSlot) tempErrors.timeSlot = 'Please select a time slot';
     if (fittingMode === 'HOME' && !customAddress) tempErrors.address = 'Please specify a fitting address';
+    if (isQuickOrder) {
+      if (!quickOrderExpectedDate) tempErrors.quickDate = 'Please select expected delivery date';
+      if (!quickOrderReason.trim()) tempErrors.quickReason = 'Please specify reason for quick order';
+    }
     setErrors(tempErrors);
     return Object.keys(tempErrors).length === 0;
   };
@@ -272,6 +285,11 @@ export default function BespokeBookingScreen({ navigation, route }) {
       const dayVal = String(selectedDate.getDate()).padStart(2, '0');
       const formattedDate = `${yearVal}-${monthVal}-${dayVal}T12:00:00.000Z`;
 
+      let quickOrderText = '';
+      if (isQuickOrder) {
+        quickOrderText = `\n[QUICK_ORDER]\nExpected Date: ${quickOrderExpectedDate}\nReason: ${quickOrderReason}\n`;
+      }
+
       let res;
       if (fittingMode === 'STUDIO') {
         res = await api.post('/appointments', {
@@ -279,24 +297,19 @@ export default function BespokeBookingScreen({ navigation, route }) {
           timeSlot,
           productType: prefillProduct,
           type: 'CONSULTATION',
-          notes: `Category: ${prefillCategory}\nProductImage: ${prefillProductImage}\nFitting Address: In-Store\n${notes}`,
+          notes: `Category: ${prefillCategory}\nProductImage: ${prefillProductImage}\nFitting Address: In-Store\n${notes}${quickOrderText}`,
         });
       } else {
         res = await api.post('/visits', {
           preferredDate: formattedDate,
           address: customAddress,
-          requirements: `Product: ${prefillProduct}\nCategory: ${prefillCategory}\nProductImage: ${prefillProductImage}\n${notes}`,
+          requirements: `Product: ${prefillProduct}\nCategory: ${prefillCategory}\nProductImage: ${prefillProductImage}\n${notes}${quickOrderText}`,
         });
       }
 
       if (res.success) {
-        Alert.alert(
-          'Booking Confirmed', 
-          fittingMode === 'STUDIO' 
-            ? 'Your in-store studio consultation has been scheduled successfully!' 
-            : 'Your bespoke home visit measurement request has been scheduled successfully!',
-          [{ text: 'OK', onPress: () => navigation.goBack() }]
-        );
+        setShowSuccessModal(true);
+        resetForm();
       } else {
         Alert.alert('Booking Failed', res.message || 'Unable to schedule booking.');
       }
@@ -307,6 +320,94 @@ export default function BespokeBookingScreen({ navigation, route }) {
         setSubmitting(false);
       }
     });
+  };
+
+  const resetForm = () => {
+    setSelectedDate(null);
+    setTimeSlot('');
+    setNotes('');
+    setCustomAddress('');
+    setIsQuickOrder(false);
+    setQuickOrderExpectedDate('');
+    setQuickOrderReason('');
+    setErrors({});
+  };
+
+  const renderExpectedDateCalendarModal = () => {
+    if (!showExpectedDateCalendar) return null;
+    const daysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
+    const firstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let year = calendarViewDate.getFullYear();
+    let month = calendarViewDate.getMonth();
+
+    const totalDays = daysInMonth(year, month);
+    const startDay = firstDayOfMonth(year, month);
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const days = [];
+    for (let i = 0; i < startDay; i++) days.push(null);
+    for (let i = 1; i <= totalDays; i++) days.push(new Date(year, month, i));
+
+    const handlePrevMonth = () => {
+      const newDate = new Date(year, month - 1, 1);
+      if (newDate.getFullYear() > today.getFullYear() || (newDate.getFullYear() === today.getFullYear() && newDate.getMonth() >= today.getMonth())) {
+        setCalendarViewDate(newDate);
+      }
+    };
+    const handleNextMonth = () => {
+      setCalendarViewDate(new Date(year, month + 1, 1));
+    };
+
+    return (
+      <Modal visible={showExpectedDateCalendar} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ width: '85%', padding: 20, borderRadius: 24, backgroundColor: '#ffffff' }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingHorizontal: 8, marginBottom: 16 }}>
+              <TouchableOpacity onPress={handlePrevMonth} style={{ padding: 8 }}>
+                <Text style={{ fontSize: 20, color: (year === today.getFullYear() && month === today.getMonth()) ? '#cbd5e1' : theme.brand[500], fontFamily: fonts.bold }}>{'<'}</Text>
+              </TouchableOpacity>
+              <Text style={{ fontSize: 15, color: '#1e293b', fontFamily: fonts.bold }}>
+                {monthNames[month]} {year}
+              </Text>
+              <TouchableOpacity onPress={handleNextMonth} style={{ padding: 8 }}>
+                <Text style={{ fontSize: 20, color: theme.brand[500], fontFamily: fonts.bold }}>{'>'}</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: 8 }}>
+              {days.map((date, i) => {
+                if (!date) return <View key={i} style={{ width: '14.28%', height: 36 }} />;
+                const yearVal = date.getFullYear();
+                const monthVal = String(date.getMonth() + 1).padStart(2, '0');
+                const dayVal = String(date.getDate()).padStart(2, '0');
+                const dateStr = `${yearVal}-${monthVal}-${dayVal}`;
+                const isSelected = quickOrderExpectedDate === dateStr;
+                const isPast = date < today;
+                return (
+                  <TouchableOpacity
+                    key={i}
+                    style={[{ width: '14.28%', height: 36, alignItems: 'center', justifyContent: 'center' }, isSelected && { backgroundColor: theme.brand[500], borderRadius: 12 }]}
+                    disabled={isPast}
+                    onPress={() => {
+                      setQuickOrderExpectedDate(dateStr);
+                      setShowExpectedDateCalendar(false);
+                    }}
+                  >
+                    <Text style={[{ fontSize: 13, color: isPast ? '#cbd5e1' : '#1e293b', fontFamily: fonts.bold }, isSelected && { color: '#ffffff' }]}>
+                      {date.getDate()}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <TouchableOpacity style={{ marginTop: 20, padding: 12, alignItems: 'center', justifyContent: 'center' }} onPress={() => setShowExpectedDateCalendar(false)}>
+              <Text style={{ color: theme.brand[500], fontFamily: fonts.bold, fontSize: 14 }}>CLOSE</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    );
   };
 
   const handleAddressSelect = async (addrStr) => {
@@ -526,6 +627,57 @@ export default function BespokeBookingScreen({ navigation, route }) {
           </View>
         )}
 
+        {/* Quick Order */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
+            Quick Order Option
+          </Text>
+          <TouchableOpacity
+            style={[
+              styles.dropdownBtn, 
+              { backgroundColor: theme.bg.card, borderColor: theme.border },
+              isQuickOrder && { backgroundColor: theme.brand[50], borderColor: theme.brand[200] }
+            ]}
+            onPress={() => setIsQuickOrder(!isQuickOrder)}
+            activeOpacity={0.8}
+          >
+            <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 1, borderColor: isQuickOrder ? theme.brand[500] : '#64748b', marginRight: 10, alignItems: 'center', justifyContent: 'center' }}>
+              {isQuickOrder && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: theme.brand[500] }} />}
+            </View>
+            <Text style={{ flex: 1, fontFamily: fonts.bold, color: theme.text.primary, fontSize: 13 }}>
+              Request as Quick Order
+            </Text>
+          </TouchableOpacity>
+
+          {isQuickOrder && (
+            <View style={{ marginTop: 10, padding: 14, borderRadius: 16, borderHeight: 1, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.bg.card }}>
+              <Text style={{ fontFamily: fonts.bold, color: theme.brand[500], fontSize: 12, marginBottom: 5 }}>Expected Delivery Date *</Text>
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: theme.border, paddingVertical: 8, marginBottom: 12 }}
+                onPress={() => setShowExpectedDateCalendar(true)}
+                activeOpacity={0.8}
+              >
+                <CalendarIcon size={16} color={theme.brand[500]} style={{ marginRight: 8 }} />
+                <Text style={{ fontFamily: fonts.bold, color: theme.text.primary, flex: 1, fontSize: 13 }}>
+                  {quickOrderExpectedDate ? quickOrderExpectedDate : 'Select Expected Date'}
+                </Text>
+              </TouchableOpacity>
+              {errors.quickDate && <Text style={{ color: '#ef4444', fontSize: 11, marginBottom: 8 }}>{errors.quickDate}</Text>}
+
+              <Text style={{ fontFamily: fonts.bold, color: theme.brand[500], fontSize: 12, marginBottom: 5 }}>Reason for Quick Order *</Text>
+              <TextInput
+                style={{ fontFamily: fonts.regular, color: theme.text.primary, fontSize: 13, minHeight: 48 }}
+                placeholder="Why do you need this order quick?"
+                placeholderTextColor={theme.text.muted}
+                value={quickOrderReason}
+                onChangeText={setQuickOrderReason}
+                multiline
+              />
+              {errors.quickReason && <Text style={{ color: '#ef4444', fontSize: 11, marginTop: 4 }}>{errors.quickReason}</Text>}
+            </View>
+          )}
+        </View>
+
         {/* Additional Notes */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { fontFamily: fonts.bold, color: theme.text.primary }]}>
@@ -631,6 +783,32 @@ export default function BespokeBookingScreen({ navigation, route }) {
                 <Text style={{ fontFamily: fonts.bold, fontSize: 13, color: theme.brand[500] }}>Add new address via home settings</Text>
               </TouchableOpacity>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+      {renderExpectedDateCalendarModal()}
+
+      <Modal visible={showSuccessModal} transparent animationType="fade">
+        <View style={styles.successModalOverlay}>
+          <View style={[styles.successModalCard, { backgroundColor: theme.bg.card }]}>
+            <LottieView
+              source={require('../../../assets/tick.json')}
+              autoPlay
+              loop={false}
+              style={{ width: 140, height: 140 }}
+              onAnimationFinish={() => {
+                setTimeout(() => {
+                  setShowSuccessModal(false);
+                  navigation.navigate('MainTabs', { screen: 'BookingsTab' });
+                }, 1000);
+              }}
+            />
+            <Text style={{ fontFamily: fonts.bold, color: theme.text.primary, fontSize: 18, marginTop: 15, textAlign: 'center' }}>
+              Booking Completed!
+            </Text>
+            <Text style={{ fontFamily: fonts.medium, color: theme.text.secondary, fontSize: 13, marginTop: 8, textAlign: 'center', paddingHorizontal: 10 }}>
+              Your bespoke appointment has been successfully scheduled.
+            </Text>
           </View>
         </View>
       </Modal>
@@ -864,5 +1042,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 14,
     borderBottomWidth: 1,
+  },
+  successModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  successModalCard: {
+    width: '80%',
+    padding: 30,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 8,
   },
 });

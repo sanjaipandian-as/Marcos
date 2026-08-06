@@ -18,6 +18,7 @@ import {
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Path } from 'react-native-svg';
 import { useTheme } from '../../styles/ThemeContext';
 import api from '../../utils/api';
 import {
@@ -38,6 +39,28 @@ import {
 
 const { width, height } = Dimensions.get('window');
 const MAP_HEIGHT = height * 0.38;
+
+// Custom Location Icon Component matching the user-provided SVG
+function CustomLocationIcon({ size = 18, color = '#18181B' }) {
+  return (
+    <Svg width={size} height={size * 1.64} viewBox="0 0 158.4 260">
+      <Path
+        fill={color}
+        d="m79 8.2c-35.5 0.1-67.5 28.5-67.8 64.6-0.3 31.1 18.2 52.8 33.8 74.2l29.8 42c2.8 4.2 8.6 4.1 11.5 0l29.7-42c15.8-21.7 34.9-43 35.8-72.1-1.7-37.9-35.2-66.8-72.8-66.7zm0 107.6c-21.3 0-38.8-16.3-38.8-40.8s17.6-39.9 38.8-39.9c20.9 0 38.8 16.5 38.8 39.9 0 22.1-17.5 40.8-38.8 40.8z"
+      />
+      <Path
+        fill={color}
+        d="m79 49.7c-13.2 0.1-24.2 10.4-24.8 24.7 0.4 14.7 11.3 25 24.8 26.8 13.8 0 24.9-10.1 25-25.2-0.1-13.3-10.3-26.2-25-26.3z"
+      />
+      <Path
+        fill={color}
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="m146.8 197.3-33.2-20.8-17.7 21.5c-9 11.4-25.4 11.6-33.3 0l-14.9-21.4-34.8 22.4c-5.4 2.9-5.4 9.2-0.6 12.3l63.3 39.8c2.2 1.4 5 1.4 7.2 0.1l63.7-39c2.5-1.6 4.1-2.6 3.5-2.3 4.5-2.9 3.9-9.6-3.2-12.6z"
+      />
+    </Svg>
+  );
+}
 
 // Haversine Formula for distance calculation
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -133,7 +156,7 @@ const LEAFLET_MAP_HTML = `
       
       var icon = L.divIcon({
         className: 'store-marker' + (isSelected ? ' selected' : ''),
-        html: "<div style='background:" + bgColor + "; width:" + markerSize + "px; height:" + markerSize + "px; border-radius:50%; border:2px solid " + borderColor + "; display:flex; align-items:center; justify-content:center; box-shadow:" + shadow + ";'><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='" + iconColor + "' stroke-width='2.5'><path d='M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z'/><circle cx='12' cy='10' r='3'/></svg></div>",
+        html: "<div style='background:" + bgColor + "; width:" + markerSize + "px; height:" + markerSize + "px; border-radius:50%; border:2px solid " + borderColor + "; display:flex; align-items:center; justify-content:center; box-shadow:" + shadow + ";'><svg width='13' height='21' viewBox='0 0 158.4 260' fill='" + iconColor + "'><path d='m79 8.2c-35.5 0.1-67.5 28.5-67.8 64.6-0.3 31.1 18.2 52.8 33.8 74.2l29.8 42c2.8 4.2 8.6 4.1 11.5 0l29.7-42c15.8-21.7 34.9-43 35.8-72.1-1.7-37.9-35.2-66.8-72.8-66.7zm0 107.6c-21.3 0-38.8-16.3-38.8-40.8s17.6-39.9 38.8-39.9c20.9 0 38.8 16.5 38.8 39.9 0 22.1-17.5 40.8-38.8 40.8z'/><path d='m79 49.7c-13.2 0.1-24.2 10.4-24.8 24.7 0.4 14.7 11.3 25 24.8 26.8 13.8 0 24.9-10.1 25-25.2-0.1-13.3-10.3-26.2-25-26.3z'/><path style='fill-rule:evenodd;clip-rule:evenodd;' d='m146.8 197.3-33.2-20.8-17.7 21.5c-9 11.4-25.4 11.6-33.3 0l-14.9-21.4-34.8 22.4c-5.4 2.9-5.4 9.2-0.6 12.3l63.3 39.8c2.2 1.4 5 1.4 7.2 0.1l63.7-39c2.5-1.6 4.1-2.6 3.5-2.3 4.5-2.9 3.9-9.6-3.2-12.6z'/></svg></div>",
         iconSize: [markerSize, markerSize],
         iconAnchor: [markerSize / 2, markerSize / 2]
       });
@@ -366,7 +389,7 @@ export default function StoreLocatorScreen() {
               styles.storeIconWrap,
               { backgroundColor: isSelected ? 'rgba(255,255,255,0.15)' : '#F4F4F5' }
             ]}>
-              <Store size={18} color={isSelected ? '#FFFFFF' : '#18181B'} />
+              <CustomLocationIcon size={16} color={isSelected ? '#FFFFFF' : '#18181B'} />
             </View>
             <View style={{ flex: 1 }}>
               <Text

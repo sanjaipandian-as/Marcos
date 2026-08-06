@@ -277,7 +277,7 @@ export class AdminController {
       const lyWeekStartMs = selectedWeekStartMs - 52 * 7 * 24 * 60 * 60 * 1000;
       const lyWeekEndMs = lyWeekStartMs + 7 * 24 * 60 * 60 * 1000;
 
-      const [userOrderStats, guestOrderStats, peakHoursRaw, seasonalTrendRaw, weeklyComparisonRaw] = await Promise.all([
+      const [userOrderStats, guestOrderStats, peakHoursRaw, seasonalTrendRaw, weeklyComparisonRaw, categoryRevenueRaw] = await Promise.all([
         prisma.order.groupBy({
           by: ['userId'],
           where: { status: { not: 'CANCELLED' }, createdAt: { gte: startOfPeriod }, userId: { not: null } },
@@ -321,7 +321,21 @@ export class AdminController {
               ("createdAt" >= ${new Date(lyWeekStartMs)} AND "createdAt" < ${new Date(lyWeekEndMs)})
             )
           GROUP BY dow
-        ` as Promise<any[]>
+        ` as Promise<any[]>,
+        prisma.orderItem.findMany({
+          where: { order: { status: { not: 'CANCELLED' } } },
+          select: {
+            quantity: true,
+            price: true,
+            product: {
+              select: {
+                category: {
+                  select: { name: true }
+                }
+              }
+            }
+          }
+        })
       ]);
 
       const userIds = userOrderStats.map(u => u.userId as string);
@@ -465,9 +479,22 @@ export class AdminController {
         take: 5
       });
 
+      const categoryRevenueMap = new Map<string, number>();
+      categoryRevenueRaw.forEach((item: any) => {
+        const categoryName = item.product?.category?.name || 'Uncategorized';
+        const itemRevenue = Number(item.price) * item.quantity;
+        categoryRevenueMap.set(categoryName, (categoryRevenueMap.get(categoryName) || 0) + itemRevenue);
+      });
+
+      const topCategories = Array.from(categoryRevenueMap.entries()).map(([name, value]) => ({
+        name,
+        value
+      })).sort((a, b) => b.value - a.value);
+
       const responsePayload = {
         success: true,
         data: {
+          topCategories,
           todayStats: {
             orders: todayOrdersCount,
             deliveries: todayDeliveriesCount,
