@@ -452,7 +452,13 @@ export default function AppointmentBookingScreen({ navigation, route }) {
     const bDate = new Date(dateStr);
     const localDate = new Date(bDate.getUTCFullYear(), bDate.getUTCMonth(), bDate.getUTCDate());
     
-    setRescheduleDate(localDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (localDate < today) {
+      setRescheduleDate(new Date());
+    } else {
+      setRescheduleDate(localDate);
+    }
     setRescheduleTimeSlot(isVisit ? '' : (item.timeSlot || ''));
     
     let initialNotes = '';
