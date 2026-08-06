@@ -76,27 +76,52 @@ export default function ManualCheckout() {
   const [staffMembers, setStaffMembers] = useState([]);
   const [timeSlots, setTimeSlots] = useState([]);
   const [checkoutApptId, setCheckoutApptId] = useState(null);
+  const [checkoutVisitId, setCheckoutVisitId] = useState(null);
 
   const runPrefill = () => {
     const query = new URLSearchParams(window.location.search);
     const apptId = query.get('appointmentId') || sessionStorage.getItem('checkout_appointment_id');
+    const visitId = query.get('visitId') || sessionStorage.getItem('checkout_visit_id');
     const userId = query.get('userId') || sessionStorage.getItem('checkout_user_id');
     const productName = query.get('productName') || sessionStorage.getItem('checkout_product_name');
     const deliveryDateVal = query.get('deliveryDate') || sessionStorage.getItem('checkout_delivery_date');
+    const isQuickOrderPrefill = query.get('isQuickOrder') === 'true' || sessionStorage.getItem('checkout_is_quick_order') === 'true';
+    const quickOrderExpectedDatePrefill = query.get('quickOrderExpectedDate') || sessionStorage.getItem('checkout_quick_order_expected_date');
+    const quickOrderReasonPrefill = query.get('quickOrderReason') || sessionStorage.getItem('checkout_quick_order_reason');
 
-    if (!apptId) return;
+    if (!apptId && !visitId) return;
 
-    setCheckoutApptId(apptId);
+    setCheckoutApptId(apptId || null);
+    setCheckoutVisitId(visitId || null);
     setOrderStatus('PENDING');
     setPaymentStatus('PENDING');
+    
+    if (isQuickOrderPrefill) {
+      setIsQuickOrder(true);
+      if (quickOrderExpectedDatePrefill) {
+        setQuickOrderExpectedDate(quickOrderExpectedDatePrefill);
+      }
+      if (quickOrderReasonPrefill) {
+        setQuickOrderReason(quickOrderReasonPrefill);
+      }
+    } else {
+      setIsQuickOrder(false);
+      setQuickOrderExpectedDate('');
+      setQuickOrderReason('');
+    }
+
     // Reset cart + customer so stale data doesn't persist across re-triggers
     setCart([]);
     setSelectedCustomer(null);
     setCustomerSearchTerm('');
     sessionStorage.removeItem('checkout_appointment_id');
+    sessionStorage.removeItem('checkout_visit_id');
     sessionStorage.removeItem('checkout_user_id');
     sessionStorage.removeItem('checkout_product_name');
     sessionStorage.removeItem('checkout_delivery_date');
+    sessionStorage.removeItem('checkout_is_quick_order');
+    sessionStorage.removeItem('checkout_quick_order_expected_date');
+    sessionStorage.removeItem('checkout_quick_order_reason');
 
     if (userId) {
       api.getCustomerDetails(userId).then(res => {
@@ -126,9 +151,10 @@ export default function ManualCheckout() {
       setPrefillProductToCart('');
     }
 
-    if (deliveryDateVal) {
+    const finalDateVal = deliveryDateVal || quickOrderExpectedDatePrefill;
+    if (finalDateVal) {
       try {
-        const d = new Date(deliveryDateVal);
+        const d = new Date(finalDateVal);
         const y = d.getFullYear();
         const m = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
@@ -513,6 +539,13 @@ export default function ManualCheckout() {
         setCheckoutApptId(null);
       }
 
+      if (checkoutVisitId) {
+        await api.updateStoreVisit(checkoutVisitId, { orderId: order.id, status: 'COMPLETED' }).catch(err => {
+          console.error('Failed to link order to visit:', err);
+        });
+        setCheckoutVisitId(null);
+      }
+
       if (orderStatus === 'PAID' && appointmentTimeSlot) {
         const appt = await api.createAppointment({
           userId: selectedCustomer ? selectedCustomer.id : undefined,
@@ -571,11 +604,14 @@ export default function ManualCheckout() {
         <p className="text-xs text-slate-500 font-medium">Record in-store customer sales, check stock, and compile invoices</p>
       </div>
 
-      {checkoutApptId && (
+      {(checkoutApptId || checkoutVisitId) && (
         <div className="p-4 bg-brand-50 border border-brand-200 text-brand-800 rounded-2xl text-xs font-bold flex justify-between items-center">
-          <span>Checkout mode enabled for Booking Consultation ID: {checkoutApptId.slice(0, 8).toUpperCase()}</span>
+          <span>Checkout mode enabled for {checkoutApptId ? 'Booking Consultation' : 'Completed Home Visit'} ID: {(checkoutApptId || checkoutVisitId).slice(0, 8).toUpperCase()}</span>
           <button
-            onClick={() => setCheckoutApptId(null)}
+            onClick={() => {
+              setCheckoutApptId(null);
+              setCheckoutVisitId(null);
+            }}
             className="p-1 hover:bg-brand-100 rounded-lg text-brand-700 font-extrabold text-[10px]"
           >
             Clear

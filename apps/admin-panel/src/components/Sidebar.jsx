@@ -65,9 +65,9 @@ export default function Sidebar({
         p => p.stockStatus === 'LOW_STOCK' || p.stockStatus === 'OUT_OF_STOCK' || p.inventoryQty <= 10
       ).length;
 
-      // Count pending/processing orders (exclude quick orders)
+      // Count pending/processing orders (include quick orders)
       const normalPendingOrdersCount = (orders || []).filter(
-        o => !o.isQuickOrder && (o.status === 'PENDING' || o.status === 'PROCESSING')
+        o => o.status === 'PENDING' || o.status === 'PROCESSING'
       ).length;
 
       // Count quick orders
@@ -86,10 +86,8 @@ export default function Sidebar({
 
       setCounts({
         products: lowStockCount,
-        orders: normalPendingOrdersCount + quickOrdersCount + pendingAppts + activeVisits,
+        orders: normalPendingOrdersCount + pendingAppts + activeVisits,
         'orders-bookings': normalPendingOrdersCount,
-        'orders-fittings': pendingAppts,
-        'orders-visits': activeVisits,
         'orders-quick': quickOrdersCount,
         'bookings': pendingAppts + activeVisits,
         support: pendingSupport
@@ -147,8 +145,6 @@ export default function Sidebar({
           icon: ShoppingBag,
           subItems: [
             { id: 'orders-bookings', label: 'Product Bookings', icon: ShoppingBag },
-            { id: 'orders-fittings', label: 'Studio Fittings', icon: Calendar },
-            { id: 'orders-visits', label: 'Home Visits', icon: Briefcase },
             { id: 'orders-quick', label: 'Quick Orders', icon: Clock },
             { id: 'orders-print', label: 'Print Schedule', icon: Printer }
           ]

@@ -20,9 +20,9 @@ import {
   ShoppingBag,
   Sparkles,
   ExternalLink,
-  ChevronLeft
+  ChevronLeft,
+  Heart
 } from 'lucide-react-native';
-import { CustomCartAddIcon, CustomCartAddedIcon } from '../../components/CartIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
@@ -30,7 +30,7 @@ const { width, height } = Dimensions.get('window');
 import { useCachedVideoUrl } from '../../utils/useCachedVideoUrl';
 
 // Individual Full Screen Reel Item
-function FullScreenReelItem({ promo, isActive, inCart, onAddToCart, onShopPress, theme, fonts, insets }) {
+function FullScreenReelItem({ promo, isActive, isFavorite, onToggleFavorite, onShopPress, theme, fonts, insets }) {
   const isMounted = useRef(false);
   const [isReady, setIsReady] = useState(false);
   const [hasError, setHasError] = useState(false);
@@ -40,6 +40,8 @@ function FullScreenReelItem({ promo, isActive, inCart, onAddToCart, onShopPress,
 
   const player = useVideoPlayer(cachedVideoUrl || promo.videoUrl, (p) => {
     p.loop = true;
+    p.muted = false;
+    p.volume = 1.0;
     if (isActive) {
       p.play();
     }
@@ -51,6 +53,8 @@ function FullScreenReelItem({ promo, isActive, inCart, onAddToCart, onShopPress,
       setIsReady(true);
       setHasError(false);
       if (isActive) {
+        player.muted = false;
+        player.volume = 1.0;
         player.play();
       }
     } else if (status === 'error') {
@@ -67,6 +71,8 @@ function FullScreenReelItem({ promo, isActive, inCart, onAddToCart, onShopPress,
       try {
         if (isActive) {
           if (player.status === 'readyToPlay') {
+            player.muted = false;
+            player.volume = 1.0;
             player.play();
           }
         } else {
@@ -85,6 +91,8 @@ function FullScreenReelItem({ promo, isActive, inCart, onAddToCart, onShopPress,
       try {
         player.replaceAsync(cachedVideoUrl);
         if (isActive) {
+          player.muted = false;
+          player.volume = 1.0;
           player.play();
         }
       } catch (e) {
@@ -163,18 +171,18 @@ function FullScreenReelItem({ promo, isActive, inCart, onAddToCart, onShopPress,
           )}
         </TouchableOpacity>
 
-        {/* Add to Cart Button */}
+        {/* Wishlist Button */}
         {(promo.linkType === 'PRODUCT' || promo.linkType === 'BOTH') && promo.productId && (
           <TouchableOpacity
             style={[styles.actionBtn, { backgroundColor: '#ffffff' }]}
             activeOpacity={0.8}
-            onPress={onAddToCart}
+            onPress={onToggleFavorite}
           >
-            {inCart ? (
-              <CustomCartAddedIcon color={theme.brand[500]} size={24} />
-            ) : (
-              <CustomCartAddIcon color={theme.brand[500]} size={24} />
-            )}
+            <Heart 
+              size={24} 
+              color={isFavorite ? '#E11D48' : theme.text.secondary} 
+              fill={isFavorite ? '#E11D48' : 'transparent'} 
+            />
           </TouchableOpacity>
         )}
 
@@ -200,49 +208,55 @@ export default function ReelsScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
   
   const [activeIndex, setActiveIndex] = useState(initialIndex);
-  const [cartItems, setCartItems] = useState(new Set());
+  const [favorites, setFavorites] = useState(new Set());
   const flatListRef = useRef(null);
 
   useEffect(() => {
     // Hide status bar when Reels screen opens for full immersion
     StatusBar.setHidden(true, 'fade');
-    fetchCart();
+    fetchFavorites();
     return () => {
       // Restore status bar on exit
       StatusBar.setHidden(false, 'fade');
     };
   }, []);
 
-  const fetchCart = async () => {
+  const fetchFavorites = async () => {
     try {
-      const res = await api.get('/products/cart');
+      const res = await api.get('/products/favorites');
       if (res.success) {
-        const cartSet = new Set((res.data || []).map(item => item.productId));
-        setCartItems(cartSet);
+        const favSet = new Set((res.data || []).map(item => item.productId));
+        setFavorites(favSet);
       }
     } catch (err) {
-      console.log('Error fetching cart:', err);
+      console.log('Error fetching favorites:', err);
     }
   };
 
-  const handleAddToCart = async (productId) => {
+  const handleToggleFavorite = async (productId) => {
     try {
-      const inCart = cartItems.has(productId);
-      if (inCart) {
-        navigation.navigate('Cart');
-        return;
-      }
-      
-      const res = await api.post('/products/cart', { productId, quantity: 1 });
-      if (res.success) {
-        setCartItems(prev => {
-          const next = new Set(prev);
-          next.add(productId);
-          return next;
-        });
+      const isFav = favorites.has(productId);
+      if (isFav) {
+        const res = await api.delete(`/products/favorites/${productId}`);
+        if (res.success) {
+          setFavorites(prev => {
+            const next = new Set(prev);
+            next.delete(productId);
+            return next;
+          });
+        }
+      } else {
+        const res = await api.post('/products/favorites', { productId });
+        if (res.success) {
+          setFavorites(prev => {
+            const next = new Set(prev);
+            next.add(productId);
+            return next;
+          });
+        }
       }
     } catch (err) {
-      console.error('Error adding to cart:', err);
+      console.error('Error toggling favorite:', err);
     }
   };
 
@@ -275,8 +289,8 @@ export default function ReelsScreen({ route, navigation }) {
             <FullScreenReelItem
               promo={item}
               isActive={index === activeIndex}
-              inCart={cartItems.has(item.productId)}
-              onAddToCart={() => handleAddToCart(item.productId)}
+              isFavorite={favorites.has(item.productId)}
+              onToggleFavorite={() => handleToggleFavorite(item.productId)}
               onShopPress={handleShopPress}
               theme={theme}
               fonts={fonts}

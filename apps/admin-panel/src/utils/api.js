@@ -1010,18 +1010,7 @@ class APIClient {
       { month: 'Jun 26', revenue: totalRevenue }
     ];
 
-    const topCategories = (realDashboard.productSales?.topSelling || []).map(p => ({
-      name: p.name,
-      value: p.unitsSold * 1000
-    }));
-
-    if (topCategories.length === 0) {
-      topCategories.push(
-        { name: 'Sarees', value: 85000 },
-        { name: 'Lehengas', value: 65000 },
-        { name: 'Kurtas', value: 45000 }
-      );
-    }
+    const topCategories = realDashboard.topCategories || [];
 
     return {
       totalRevenue,

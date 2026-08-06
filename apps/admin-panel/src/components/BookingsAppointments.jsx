@@ -292,6 +292,39 @@ function MeasurementGrid({ meas, editing, onChange }) {
   );
 }
 
+const parseRequirements = (reqs) => {
+  if (!reqs) return { product: '', category: '', image: '', isQuickOrder: false, quickOrderExpectedDate: '', quickOrderReason: '', notes: '' };
+  
+  const productMatch = reqs.match(/Product:\s*([\s\S]*?)(?=\s*Category:|\s*ProductImage:|\s*Notes:|\s*\[QUICK_ORDER\]|$)/i);
+  const categoryMatch = reqs.match(/Category:\s*([\s\S]*?)(?=\s*Product:|\s*ProductImage:|\s*Notes:|\s*\[QUICK_ORDER\]|$)/i);
+  const imageMatch = reqs.match(/ProductImage:\s*(https?:\/\/[^\s]+)/i);
+  
+  const isQuick = reqs.includes('[QUICK_ORDER]');
+  const expectedDateMatch = reqs.match(/Expected Date:\s*([^\n]*)/i);
+  const reasonMatch = reqs.match(/Reason:\s*([^\n]*)/i);
+
+  let cleanNotes = reqs;
+  if (productMatch) cleanNotes = cleanNotes.replace(productMatch[0], '');
+  if (categoryMatch) cleanNotes = cleanNotes.replace(categoryMatch[0], '');
+  if (imageMatch) cleanNotes = cleanNotes.replace(imageMatch[0], '');
+  if (isQuick) {
+    cleanNotes = cleanNotes.replace('[QUICK_ORDER]', '');
+    if (expectedDateMatch) cleanNotes = cleanNotes.replace(expectedDateMatch[0], '');
+    if (reasonMatch) cleanNotes = cleanNotes.replace(reasonMatch[0], '');
+  }
+  cleanNotes = cleanNotes.replace(/ProductImage:\s*/i, '').trim();
+  
+  return {
+    product: productMatch ? productMatch[1].trim() : '',
+    category: categoryMatch ? categoryMatch[1].trim() : '',
+    image: imageMatch ? imageMatch[1].trim() : '',
+    isQuickOrder: isQuick,
+    quickOrderExpectedDate: expectedDateMatch ? expectedDateMatch[1].trim() : '',
+    quickOrderReason: reasonMatch ? reasonMatch[1].trim() : '',
+    notes: cleanNotes
+  };
+};
+
 // ─── Full Detail Drawer (right-side slide-over) ───────────────────────────────
 function DetailDrawer({ appt, visit, orders, staffList, onClose, onRefresh, setActiveTab }) {
   const isAppt = !!appt;
@@ -463,10 +496,15 @@ function DetailDrawer({ appt, visit, orders, staffList, onClose, onRefresh, setA
     if (isAppt && item.type === 'CONSULTATION' && item.status === 'PENDING') {
       return [{ id: 'overview', label: 'Overview', icon: Eye }];
     }
-    return [
+    const list = [
       { id: 'overview', label: 'Overview', icon: Eye },
       { id: 'sizing', label: 'Sizing', icon: Ruler },
     ];
+    if (isAppt || item.orderId) {
+      list.push({ id: 'orders', label: 'Orders', icon: ShoppingBag });
+      list.push({ id: 'pipeline', label: 'Pipeline', icon: Truck });
+    }
+    return list;
   };
 
   const PANELS = getPanels();
@@ -596,22 +634,79 @@ function DetailDrawer({ appt, visit, orders, staffList, onClose, onRefresh, setA
               )}
 
               {/* Product info */}
-              <div className="bg-slate-50 rounded-2xl p-4 space-y-3 border border-slate-100">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Appointment Details</p>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { label: 'Product Type', value: isAppt ? item.productType : item.requirements },
-                    { label: 'Date', value: fmtDate(isAppt ? item.date : item.preferredDate) },
-                    { label: isAppt ? 'Time Slot' : 'Assigned Staff', value: isAppt ? item.timeSlot : (item.assignedStaffName || 'Unassigned') },
-                    { label: 'Type', value: isAppt ? item.type?.replace(/_/g, ' ') : 'Home Visit' },
-                  ].map(({ label, value }) => (
-                    <div key={label} className="bg-white rounded-xl p-3 border border-slate-100">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">{label}</p>
-                      <p className="text-sm font-bold text-slate-700 mt-0.5">{value || '—'}</p>
+              {(() => {
+                const parsedReqs = !isAppt ? parseRequirements(item.requirements) : null;
+                const isQuickOrder = isAppt 
+                  ? (item.notes && item.notes.includes('[QUICK_ORDER]')) 
+                  : (item.requirements && item.requirements.includes('[QUICK_ORDER]'));
+                const parsedQuickOrder = isQuickOrder 
+                  ? (isAppt ? parseRequirements(item.notes) : parsedReqs)
+                  : null;
+
+                return (
+                  <>
+                    {isQuickOrder && (
+                      <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black bg-orange-100 text-orange-850 border border-orange-200 uppercase tracking-wide">
+                            Quick Order Request
+                          </span>
+                        </div>
+                        {parsedQuickOrder?.quickOrderExpectedDate && (
+                          <p className="text-xs text-slate-700">
+                            <span className="font-bold text-slate-605">Expected Delivery:</span> {parsedQuickOrder.quickOrderExpectedDate}
+                          </p>
+                        )}
+                        {parsedQuickOrder?.quickOrderReason && (
+                          <p className="text-xs text-slate-700">
+                            <span className="font-bold text-slate-605">Reason:</span> {parsedQuickOrder.quickOrderReason}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="bg-slate-50 rounded-2xl p-4 space-y-3 border border-slate-100">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Appointment Details</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        {[
+                          { label: 'Product Type', value: isAppt ? item.productType : (parsedReqs?.product || parsedReqs?.category || item.requirements) },
+                          { label: 'Date', value: fmtDate(isAppt ? item.date : item.preferredDate) },
+                          { label: isAppt ? 'Time Slot' : 'Assigned Staff', value: isAppt ? item.timeSlot : (item.assignedStaffName || 'Unassigned') },
+                          { label: 'Type', value: isAppt ? item.type?.replace(/_/g, ' ') : 'Home Visit' },
+                        ].map(({ label, value }) => (
+                          <div key={label} className="bg-white rounded-xl p-3 border border-slate-100">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">{label}</p>
+                            <p className="text-sm font-bold text-slate-700 mt-0.5">{value || '—'}</p>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  ))}
-                </div>
-              </div>
+
+                    {!isAppt && parsedReqs && (parsedReqs.image || parsedReqs.notes || parsedReqs.category) && (
+                      <div className="bg-slate-50 rounded-2xl p-4 space-y-3 border border-slate-100">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Design Details</p>
+                        {parsedReqs.category && (
+                          <div className="bg-white p-3 rounded-xl border border-slate-100">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase block">Category</span>
+                            <span className="text-sm font-bold text-slate-755 block mt-0.5">{parsedReqs.category}</span>
+                          </div>
+                        )}
+                        {parsedReqs.image && (
+                          <div className="w-full h-44 rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+                            <img src={parsedReqs.image} alt="Design Requirement" className="w-full h-full object-cover" />
+                          </div>
+                        )}
+                        {parsedReqs.notes && (
+                          <div className="bg-white p-3 rounded-xl border border-slate-100">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Design Notes</span>
+                            <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">{parsedReqs.notes}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
 
               {isAppt && item.type === 'CONSULTATION' && !item.orderId && !['CANCELLED', 'ORDERED', 'CONSULTED'].includes(item.status) && (
                 <div className="bg-brand-50 border border-brand-200 rounded-2xl p-4 space-y-3">
@@ -716,6 +811,77 @@ function DetailDrawer({ appt, visit, orders, staffList, onClose, onRefresh, setA
                       Assign
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* Home visit: file completion report */}
+              {!isAppt && item.status === 'ASSIGNED' && (
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                  <p className="text-[10px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
+                    <CheckCircle className="w-3.5 h-3.5 text-blue-500" />File Completion Report
+                  </p>
+                  <textarea
+                    id="drawer-completion-notes"
+                    placeholder="Describe details of the completed visit — measurements taken, items chosen, customizations..."
+                    rows={3}
+                    className="w-full text-xs border border-slate-200 rounded-xl p-3 focus:outline-none focus:border-indigo-400 resize-none bg-white font-semibold"
+                  />
+                  <button
+                    onClick={async () => {
+                      const notesVal = document.getElementById('drawer-completion-notes')?.value;
+                      if (!notesVal?.trim()) {
+                        alert('Please fill in completion notes.');
+                        return;
+                      }
+                      try {
+                        await api.completeStoreVisit(item.id, notesVal.trim(), []);
+                        await onRefresh();
+                      } catch (e) {
+                        alert(e.message);
+                      }
+                    }}
+                    className="w-full py-2 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold shadow-sm transition-all"
+                  >
+                    Complete Visit & Save Report
+                  </button>
+                </div>
+              )}
+
+              {/* Home visit: Completed report summary */}
+              {!isAppt && item.status === 'COMPLETED' && item.completionNotes && (
+                <div className="bg-emerald-50/40 border border-emerald-100 rounded-2xl p-4 space-y-2">
+                  <p className="font-extrabold text-slate-750 text-xs flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Completion Report Summary</span>
+                  </p>
+                  <p className="text-xs text-slate-600 italic font-semibold leading-relaxed">"{item.completionNotes}"</p>
+                </div>
+              )}
+
+              {/* Home visit: Manual Checkout flow for completed visits */}
+              {!isAppt && item.status === 'COMPLETED' && !item.orderId && (
+                <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 space-y-3">
+                  <p className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider">Manual Checkout Flow</p>
+                  <p className="text-xs text-indigo-800">Generate a customer order for this completed home visit.</p>
+                  <button
+                    onClick={() => {
+                      const parsed = parseRequirements(item.requirements);
+                      sessionStorage.setItem('checkout_visit_id', item.id);
+                      sessionStorage.setItem('checkout_user_id', item.customerId || '');
+                      sessionStorage.setItem('checkout_product_name', parsed?.product || '');
+                      if (setActiveTab) {
+                        setActiveTab('checkout');
+                        window.dispatchEvent(new CustomEvent('checkout-prefill'));
+                      } else {
+                        window.location.href = `/manual-checkout?visitId=${item.id}&userId=${item.customerId || ''}&productName=${encodeURIComponent(parsed?.product || '')}`;
+                      }
+                      onClose();
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-2"
+                  >
+                    <ShoppingBag className="w-4 h-4" />
+                    Move to Manual Checkout
+                  </button>
                 </div>
               )}
             </div>
@@ -1036,6 +1202,9 @@ function ApptCard({ appt, onQuickStatus, onOpen, setActiveTab }) {
     try { await onQuickStatus(appt.id, status); } finally { setUpdating(false); }
   };
 
+  const isQuickOrder = appt.notes && appt.notes.includes('[QUICK_ORDER]');
+  const parsedQuickOrder = isQuickOrder ? parseRequirements(appt.notes) : null;
+
   return (
     <div className={`rounded-2xl border transition-all duration-200 overflow-hidden bg-white hover:shadow-md group ${
       appt.status === 'CONFIRMED' ? 'border-emerald-200' :
@@ -1055,6 +1224,11 @@ function ApptCard({ appt, onQuickStatus, onOpen, setActiveTab }) {
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-sm font-extrabold text-slate-800 truncate">{appt.userName || 'Walk-In Customer'}</p>
             <Badge status={appt.status} small />
+            {isQuickOrder && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-black bg-orange-100 text-orange-850 border border-orange-200 uppercase tracking-wide">
+                Quick Order
+              </span>
+            )}
           </div>
           <div className="flex flex-wrap gap-2 mt-1.5">
             {appt.type && <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-lg">{appt.type.replace(/_/g, ' ')}</span>}
@@ -1091,11 +1265,24 @@ function ApptCard({ appt, onQuickStatus, onOpen, setActiveTab }) {
               sessionStorage.setItem('checkout_user_id', appt.userId || '');
               sessionStorage.setItem('checkout_product_name', appt.productType || '');
               sessionStorage.setItem('checkout_delivery_date', appt.date || '');
+              if (isQuickOrder && parsedQuickOrder) {
+                sessionStorage.setItem('checkout_is_quick_order', 'true');
+                sessionStorage.setItem('checkout_quick_order_expected_date', parsedQuickOrder.quickOrderExpectedDate || '');
+                sessionStorage.setItem('checkout_quick_order_reason', parsedQuickOrder.quickOrderReason || '');
+              } else {
+                sessionStorage.removeItem('checkout_is_quick_order');
+                sessionStorage.removeItem('checkout_quick_order_expected_date');
+                sessionStorage.removeItem('checkout_quick_order_reason');
+              }
               if (setActiveTab) {
                 setActiveTab('checkout');
                 window.dispatchEvent(new CustomEvent('checkout-prefill'));
               } else {
-                window.location.href = `/manual-checkout?appointmentId=${appt.id}&userId=${appt.userId || ''}&productName=${encodeURIComponent(appt.productType || '')}&deliveryDate=${encodeURIComponent(appt.date || '')}`;
+                let url = `/manual-checkout?appointmentId=${appt.id}&userId=${appt.userId || ''}&productName=${encodeURIComponent(appt.productType || '')}&deliveryDate=${encodeURIComponent(appt.date || '')}`;
+                if (isQuickOrder && parsedQuickOrder) {
+                  url += `&isQuickOrder=true&quickOrderExpectedDate=${encodeURIComponent(parsedQuickOrder.quickOrderExpectedDate || '')}&quickOrderReason=${encodeURIComponent(parsedQuickOrder.quickOrderReason || '')}`;
+                }
+                window.location.href = url;
               }
             }}
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-[#3D2E3D] text-xs font-bold shadow-sm transition-all"
@@ -1187,11 +1374,12 @@ function ApptCard({ appt, onQuickStatus, onOpen, setActiveTab }) {
 }
 
 // ─── Home Visit Card ───────────────────────────────────────────────────────────
-function VisitCard({ visit, staffList, onRefresh, onOpen }) {
+function VisitCard({ visit, staffList, onRefresh, onOpen, setActiveTab }) {
   const [saving, setSaving] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState(staffList[0]?.id || '');
   const [showComplete, setShowComplete] = useState(false);
   const [notes, setNotes] = useState('');
+  const parsed = parseRequirements(visit.requirements);
 
   const assign = async () => {
     if (!selectedStaff) return;
@@ -1217,6 +1405,11 @@ function VisitCard({ visit, staffList, onRefresh, onOpen }) {
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-sm font-extrabold text-slate-800">{visit.customerName || 'Customer'}</p>
             <Badge status={visit.status} small />
+            {parsed?.isQuickOrder && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-black bg-orange-100 text-orange-850 border border-orange-200 uppercase tracking-wide">
+                Quick Order
+              </span>
+            )}
           </div>
           <div className="flex items-start gap-1 mt-1.5">
             <MapPin className="w-3 h-3 text-slate-400 shrink-0 mt-0.5" />
@@ -1241,8 +1434,8 @@ function VisitCard({ visit, staffList, onRefresh, onOpen }) {
 
       {visit.requirements && (
         <div className="px-4 pb-2">
-          <p className="text-xs text-slate-600 bg-slate-50 border border-slate-100 rounded-xl p-2.5 leading-relaxed">
-            <span className="font-bold text-slate-700">Requirements: </span>{visit.requirements}
+          <p className="text-xs text-slate-605 bg-slate-50 border border-slate-100 rounded-xl p-2.5 leading-relaxed">
+            <span className="font-bold text-slate-700">Requirements: </span>{parsed?.notes || visit.requirements}
           </p>
         </div>
       )}
@@ -1280,10 +1473,49 @@ function VisitCard({ visit, staffList, onRefresh, onOpen }) {
             </div>
           </div>
         )}
-        <button onClick={() => onOpen(visit)}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 text-xs font-bold transition-all">
-          <Eye className="w-3.5 h-3.5" />View Details
-        </button>
+        {visit.status === 'COMPLETED' && !visit.orderId ? (
+          <div className="flex gap-2 w-full">
+            <button onClick={() => onOpen(visit)}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 text-xs font-bold transition-all">
+              <Eye className="w-3.5 h-3.5" />View Details
+            </button>
+            <button
+              onClick={() => {
+                const p = parseRequirements(visit.requirements);
+                sessionStorage.setItem('checkout_visit_id', visit.id);
+                sessionStorage.setItem('checkout_user_id', visit.customerId || '');
+                sessionStorage.setItem('checkout_product_name', p?.product || '');
+                if (p?.isQuickOrder) {
+                  sessionStorage.setItem('checkout_is_quick_order', 'true');
+                  sessionStorage.setItem('checkout_quick_order_expected_date', p.quickOrderExpectedDate || '');
+                  sessionStorage.setItem('checkout_quick_order_reason', p.quickOrderReason || '');
+                } else {
+                  sessionStorage.removeItem('checkout_is_quick_order');
+                  sessionStorage.removeItem('checkout_quick_order_expected_date');
+                  sessionStorage.removeItem('checkout_quick_order_reason');
+                }
+                if (setActiveTab) {
+                  setActiveTab('checkout');
+                  window.dispatchEvent(new CustomEvent('checkout-prefill'));
+                } else {
+                  let url = `/manual-checkout?visitId=${visit.id}&userId=${visit.customerId || ''}&productName=${encodeURIComponent(p?.product || '')}`;
+                  if (p?.isQuickOrder) {
+                    url += `&isQuickOrder=true&quickOrderExpectedDate=${encodeURIComponent(p.quickOrderExpectedDate || '')}&quickOrderReason=${encodeURIComponent(p.quickOrderReason || '')}`;
+                  }
+                  window.location.href = url;
+                }
+              }}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-sm shadow-indigo-600/10"
+            >
+              <ShoppingBag className="w-3.5 h-3.5" />Checkout Order
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => onOpen(visit)}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 text-xs font-bold transition-all">
+            <Eye className="w-3.5 h-3.5" />View Details
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1820,17 +2052,6 @@ export default function BookingsAppointments({ setActiveTab, isActive }) {
             {todayVisits.length > 0 && (
               <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${section === 'home' ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-700'}`}>
                 {todayVisits.length}
-              </span>
-            )}
-          </button>
-
-          <button onClick={() => { setSection('quick_orders'); setFilter('ALL'); }}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${section === 'quick_orders' ? 'bg-orange-500 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'
-              }`}>
-            <ShoppingCart className="w-4 h-4" />Quick Delivery
-            {todayQuickOrders.length > 0 && (
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${section === 'quick_orders' ? 'bg-white/20 text-white' : 'bg-orange-100 text-orange-700'}`}>
-                {todayQuickOrders.length}
               </span>
             )}
           </button>

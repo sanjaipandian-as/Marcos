@@ -289,9 +289,14 @@ export default function AppointmentBookingScreen({ navigation, route }) {
         const nextPage = apptsPage + 1;
         const res = await api.get(`/appointments?limit=20&page=${nextPage}`);
         if (res.success && res.data?.length > 0) {
-          setAppointments(prev => [...prev, ...res.data]);
+          const list = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+          setAppointments(prev => {
+            const existingIds = new Set(prev.map(item => item.id));
+            const newItems = list.filter(item => !existingIds.has(item.id));
+            return [...prev, ...newItems];
+          });
           setApptsPage(nextPage);
-          setHasMoreAppts(res.data.length >= 20);
+          setHasMoreAppts(list.length >= 20);
         } else {
           setHasMoreAppts(false);
         }
@@ -299,9 +304,14 @@ export default function AppointmentBookingScreen({ navigation, route }) {
         const nextPage = visitsPage + 1;
         const res = await api.get(`/visits?limit=20&page=${nextPage}`);
         if (res.success && res.data?.length > 0) {
-          setVisits(prev => [...prev, ...res.data]);
+          const list = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+          setVisits(prev => {
+            const existingIds = new Set(prev.map(item => item.id));
+            const newItems = list.filter(item => !existingIds.has(item.id));
+            return [...prev, ...newItems];
+          });
           setVisitsPage(nextPage);
-          setHasMoreVisits(res.data.length >= 20);
+          setHasMoreVisits(list.length >= 20);
         } else {
           setHasMoreVisits(false);
         }
@@ -442,7 +452,13 @@ export default function AppointmentBookingScreen({ navigation, route }) {
     const bDate = new Date(dateStr);
     const localDate = new Date(bDate.getUTCFullYear(), bDate.getUTCMonth(), bDate.getUTCDate());
     
-    setRescheduleDate(localDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (localDate < today) {
+      setRescheduleDate(new Date());
+    } else {
+      setRescheduleDate(localDate);
+    }
     setRescheduleTimeSlot(isVisit ? '' : (item.timeSlot || ''));
     
     let initialNotes = '';
@@ -627,6 +643,19 @@ export default function AppointmentBookingScreen({ navigation, route }) {
     return `${day} ${month} ${year}`;
   };
 
+  const cleanNotes = (text) => {
+    if (!text) return '';
+    return text
+      .replace(/\[QUICK_ORDER\]/gi, '')
+      .replace(/Expected Date:[^\n]*/gi, '')
+      .replace(/Reason:[^\n]*/gi, '')
+      .replace(/ProductImage:[^\n]*/gi, '')
+      .replace(/Product:[^\n]*/gi, '')
+      .replace(/Category:[^\n]*/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
   const renderBookingItem = ({ item }) => {
     const isVisit = !!item.address;
     const dateFormatted = formatBookingDate(isVisit ? item.preferredDate : item.date);
@@ -690,7 +719,7 @@ export default function AppointmentBookingScreen({ navigation, route }) {
           <View style={styles.minimalDetailsCol}>
             {/* Title / Product Type */}
             <Text style={[styles.minimalTitleText, { color: theme.brand[900], fontFamily: fonts.bold }]} numberOfLines={1}>
-              {isVisit ? (item.requirements || 'Bespoke Home Visit') : (item.productType || 'Consultation Session')}
+              {isVisit ? (cleanNotes(item.requirements) || 'Bespoke Home Visit') : (item.productType || 'Consultation Session')}
             </Text>
 
             {/* Location */}
@@ -706,7 +735,7 @@ export default function AppointmentBookingScreen({ navigation, route }) {
               <View style={styles.minimalMetaRow}>
                 <Sparkles size={13} color={theme.brand[500]} />
                 <Text style={[styles.minimalMetaText, { color: theme.text.secondary, fontFamily: fonts.regular }]} numberOfLines={1}>
-                  {item.notes.replace(/ProductImage:[^\n]+/, '').trim() || 'Custom tailoring notes'}
+                  {cleanNotes(item.notes) || 'Custom tailoring notes'}
                 </Text>
               </View>
             )}
@@ -1063,7 +1092,11 @@ export default function AppointmentBookingScreen({ navigation, route }) {
               <Text style={[styles.inputLabel, { color: theme.text.secondary, fontFamily: fonts.semiBold }]}>DATE</Text>
               <TouchableOpacity 
                 style={[styles.minimalInputField, { backgroundColor: theme.bg.main, borderColor: errors.date ? '#ef4444' : theme.border }]} 
-                onPress={() => setShowCalendarModal(true)}
+                onPress={() => {
+                  setCalendarTarget('BOOKING');
+                  setCurrentMonth(selectedDate || new Date());
+                  setShowCalendarModal(true);
+                }}
               >
                 <Calendar size={18} color={theme.brand[700]} />
                 <Text style={[styles.minimalInputText, { color: selectedDate ? theme.brand[900] : theme.text.secondary, fontFamily: fonts.medium }]}>
@@ -1207,6 +1240,12 @@ export default function AppointmentBookingScreen({ navigation, route }) {
                 style={[styles.minimalInputField, { backgroundColor: theme.bg.main, borderColor: errors.rescheduleDate ? '#ef4444' : theme.border }]} 
                 onPress={() => {
                   setCalendarTarget('RESCHEDULE');
+                  const today = new Date();
+                  if (rescheduleDate && rescheduleDate > today) {
+                    setCurrentMonth(rescheduleDate);
+                  } else {
+                    setCurrentMonth(today);
+                  }
                   setShowCalendarModal(true);
                 }}
               >
@@ -1299,6 +1338,7 @@ export default function AppointmentBookingScreen({ navigation, route }) {
                 style={[styles.minimalInputField, { backgroundColor: theme.bg.main, borderColor: slotErrors.date ? '#ef4444' : theme.border }]}
                 onPress={() => {
                   setCalendarTarget('SLOT');
+                  setCurrentMonth(slotDate || new Date());
                   setShowCalendarModal(true);
                 }}
                 activeOpacity={0.7}

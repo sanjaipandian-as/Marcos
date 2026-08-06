@@ -153,8 +153,8 @@ class VisitController {
                 return res.status(404).json({ success: false, message: 'Store visit request not found' });
             }
             const staff = await db_js_1.default.user.findUnique({ where: { id: assignedStaffId } });
-            if (!staff || (staff.role !== client_1.Role.STAFF && staff.role !== client_1.Role.ADMIN)) {
-                return res.status(400).json({ success: false, message: 'Invalid staff assignment: Assigned user must be STAFF or ADMIN' });
+            if (!staff || (staff.role !== client_1.Role.STAFF && staff.role !== client_1.Role.ADMIN && staff.role !== client_1.Role.SUPERADMIN)) {
+                return res.status(400).json({ success: false, message: 'Invalid staff assignment: Assigned user must be STAFF, ADMIN, or SUPERADMIN' });
             }
             const updatedVisit = await db_js_1.default.storeVisit.update({
                 where: { id },

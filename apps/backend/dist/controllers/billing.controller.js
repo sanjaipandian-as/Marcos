@@ -133,7 +133,7 @@ class BillingController {
                         isQuickOrder: isQuickOrder || false,
                         quickOrderReason: isQuickOrder ? quickOrderReason : null,
                         quickOrderExpectedDate: isQuickOrder && quickOrderExpectedDate ? new Date(quickOrderExpectedDate) : null,
-                        quickOrderStatus: isQuickOrder ? 'PENDING' : null,
+                        quickOrderStatus: isQuickOrder ? (isOfflineSales ? 'APPROVED' : 'PENDING') : null,
                         measurementProfileIds: measurementProfileIds && measurementProfileIds.length > 0 ? measurementProfileIds : undefined,
                         deliveryDate: deliveryDate ? new Date(deliveryDate) : undefined,
                     },

@@ -1082,7 +1082,7 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-4 bg-white rounded-3xl p-6 shadow-premium">
           <SH title="Top Categories" sub="Revenue share by category" />
-          {topCats.length > 0 ? (
+          {topCats.length > 0 && topCats.some(c => c.value > 0) ? (
             <>
               <div className="h-36">
                 <ResponsiveContainer width="100%" height="100%">
@@ -1107,7 +1107,11 @@ export default function MasterDashboard({ setActiveTab, isActive }) {
               </div>
             </>
           ) : (
-            <p className="text-xs text-slate-400 text-center py-8">No category data yet</p>
+            <div className="flex flex-col items-center justify-center py-8 text-center text-slate-400 space-y-2">
+              <Package className="w-8 h-8 text-slate-200" />
+              <p className="text-xs font-semibold">No category data yet</p>
+              <p className="text-[10px] text-slate-400 leading-normal max-w-[200px]">Once orders are created, category revenue share data will be updated here.</p>
+            </div>
           )}
         </div>
         <div className="lg:col-span-8 bg-white rounded-3xl p-6 shadow-premium">
