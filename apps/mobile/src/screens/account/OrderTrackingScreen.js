@@ -914,7 +914,7 @@ export default function OrderTrackingScreen({ route, navigation }) {
                 Instructions & Preferences:
               </Text>
               <Text style={[styles.instructionsText, { fontFamily: fonts.regular, color: theme.text.primary }]}>
-                {isStudio ? booking.notes : booking.requirements}
+                {isStudio ? cleanNotes(booking.notes) : cleanNotes(booking.requirements)}
               </Text>
             </View>
           )}
@@ -1638,6 +1638,19 @@ function getNext7Days() {
     days.push(d);
   }
   return days;
+}
+
+function cleanNotes(text) {
+  if (!text) return '';
+  return text
+    .replace(/\[QUICK_ORDER\]/gi, '')
+    .replace(/Expected Date:[^\n]*/gi, '')
+    .replace(/Reason:[^\n]*/gi, '')
+    .replace(/ProductImage:[^\n]*/gi, '')
+    .replace(/Product:[^\n]*/gi, '')
+    .replace(/Category:[^\n]*/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 const styles = StyleSheet.create({

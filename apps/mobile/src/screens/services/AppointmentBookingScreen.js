@@ -643,6 +643,19 @@ export default function AppointmentBookingScreen({ navigation, route }) {
     return `${day} ${month} ${year}`;
   };
 
+  const cleanNotes = (text) => {
+    if (!text) return '';
+    return text
+      .replace(/\[QUICK_ORDER\]/gi, '')
+      .replace(/Expected Date:[^\n]*/gi, '')
+      .replace(/Reason:[^\n]*/gi, '')
+      .replace(/ProductImage:[^\n]*/gi, '')
+      .replace(/Product:[^\n]*/gi, '')
+      .replace(/Category:[^\n]*/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
   const renderBookingItem = ({ item }) => {
     const isVisit = !!item.address;
     const dateFormatted = formatBookingDate(isVisit ? item.preferredDate : item.date);
@@ -706,7 +719,7 @@ export default function AppointmentBookingScreen({ navigation, route }) {
           <View style={styles.minimalDetailsCol}>
             {/* Title / Product Type */}
             <Text style={[styles.minimalTitleText, { color: theme.brand[900], fontFamily: fonts.bold }]} numberOfLines={1}>
-              {isVisit ? (item.requirements || 'Bespoke Home Visit') : (item.productType || 'Consultation Session')}
+              {isVisit ? (cleanNotes(item.requirements) || 'Bespoke Home Visit') : (item.productType || 'Consultation Session')}
             </Text>
 
             {/* Location */}
@@ -722,7 +735,7 @@ export default function AppointmentBookingScreen({ navigation, route }) {
               <View style={styles.minimalMetaRow}>
                 <Sparkles size={13} color={theme.brand[500]} />
                 <Text style={[styles.minimalMetaText, { color: theme.text.secondary, fontFamily: fonts.regular }]} numberOfLines={1}>
-                  {item.notes.replace(/ProductImage:[^\n]+/, '').trim() || 'Custom tailoring notes'}
+                  {cleanNotes(item.notes) || 'Custom tailoring notes'}
                 </Text>
               </View>
             )}
