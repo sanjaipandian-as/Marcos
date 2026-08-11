@@ -51,7 +51,7 @@ class VisitController {
             const [visits, total] = await Promise.all([
                 db_js_1.default.storeVisit.findMany({
                     where,
-                    orderBy: { preferredDate: 'asc' },
+                    orderBy: { preferredDate: 'desc' },
                     skip,
                     take: safeLimit,
                     include: {

@@ -64,7 +64,7 @@ class AppointmentController {
             const [appointments, total] = await Promise.all([
                 db_js_1.default.appointment.findMany({
                     where,
-                    orderBy: { date: 'asc' },
+                    orderBy: { date: 'desc' },
                     skip,
                     take: Number(limit),
                     include: { user: { select: { fullName: true, email: true, phoneNumber: true } } },
