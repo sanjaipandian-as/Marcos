@@ -1,8 +1,6 @@
 
 // API Configuration
-const BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-  ? 'http://localhost:5000/api/v1'
-  : 'https://marcos-xxza.onrender.com/api/v1';
+const BASE_URL = 'https://marcos-xxza.onrender.com/api/v1';
 
 class APIClient {
   constructor() {
